@@ -2,6 +2,7 @@ package com.example.demo.controller;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -34,65 +35,61 @@ public class LineController {
     private final UserBookHistoryRepository historyRepository;
     private final PasswordEncoder passwordEncoder;
 
-    // --- 1. アカウント連携API ---
-    // n8nから「WebのID/PASS」と「LINE ID」を受け取り、紐付ける
+    // --- 1. アカウント連携API (修正版: JSONを返す) ---
     @PostMapping("/link")
     @Transactional
-    public Mono<ResponseEntity<String>> linkAccount(@RequestBody LinkRequest request) {
+    public Mono<ResponseEntity<Map<String, String>>> linkAccount(@RequestBody LinkRequest request) {
         return userRepository.findByUsername(request.getUsername())
                 .filter(user -> passwordEncoder.matches(request.getPassword(), user.getPassword()))
                 .flatMap(user -> {
                     // LINE ID を保存
                     user.setLineUserId(request.getLineUserId());
                     return userRepository.save(user)
-                            .map(saved -> ResponseEntity.ok("連携に成功しました！\nこれでWebの課金状況がLINEにも反映されます。"));
+                            // ★修正: JSON形式で返す
+                            .map(saved -> ResponseEntity.ok(Map.of("message", "連携に成功しました！\nWebの課金状況がLINEに反映されます。")));
                 })
-                .defaultIfEmpty(ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("IDまたはパスワードが間違っています。"));
+                // ★修正: エラー時もJSON形式で返す
+                .defaultIfEmpty(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("message", "IDまたはパスワードが間違っています。")));
     }
 
     // --- 2. 閲覧API (LINE用) ---
-    // LINE ID と 作品ID を受け取り、要約を返す（回数制限チェック付き）
     @PostMapping("/read")
     @Transactional
     public Mono<ResponseEntity<Object>> readBook(@RequestBody ReadRequest request) {
-        // LINE ID からユーザーを特定
         return userRepository.findByLineUserId(request.getLineUserId())
-                .switchIfEmpty(Mono.error(new RuntimeException("NOT_LINKED"))) // 未連携の場合
+                .switchIfEmpty(Mono.error(new RuntimeException("NOT_LINKED")))
                 .flatMap(user -> {
-                    // 作品を取得
                     return workRepository.findById(request.getBookId())
                         .flatMap(work -> {
-                            // プレミアム判定
                             boolean isPremium = "PREMIUM".equalsIgnoreCase(user.getPlanType());
 
                             if (isPremium) {
-                                // プレミアムなら無条件OK
                                 return recordHistoryAndResponse(user, work);
                             } else {
-                                // 無料会員: 今日の回数チェック
                                 LocalDateTime todayStart = LocalDate.now().atStartOfDay();
                                 return historyRepository.countByUserIdAndViewedAtAfter(user.getId(), todayStart)
                                     .flatMap(count -> {
                                         if (count >= 3) {
+                                            // ★修正: メッセージをJSONで返す
                                             return Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN)
-                                                    .body((Object)"無料プランの1日の閲覧制限（3回）に達しました。\nWebでプレミアムプランに登録すると無制限で読めます！"));
+                                                    .body((Object)Map.of("message", "無料プランの1日の閲覧制限（3回）に達しました。\nWebでプレミアムプランに登録すると無制限で読めます！")));
                                         }
                                         return recordHistoryAndResponse(user, work);
                                     });
                             }
                         });
                 })
-                // エラーハンドリング
                 .onErrorResume(e -> {
                     if ("NOT_LINKED".equals(e.getMessage())) {
                         return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                                .body("アカウントが連携されていません。\nメニューの「連携する」から設定してください。"));
+                                .body(Map.of("message", "アカウントが連携されていません。\nメニューの「連携する」から設定してください。")));
                     }
-                    return Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND).body("作品が見つかりません。"));
+                    return Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND)
+                            .body(Map.of("message", "作品が見つかりません。")));
                 });
     }
 
-    // 履歴保存＆レスポンス生成
     private Mono<ResponseEntity<Object>> recordHistoryAndResponse(User user, Work work) {
         UserBookHistory history = new UserBookHistory();
         history.setUserId(user.getId());
@@ -105,7 +102,6 @@ public class LineController {
                 .thenReturn(ResponseEntity.ok(BookResponse.from(work)));
     }
 
-    // --- DTO ---
     @Data
     static class LinkRequest {
         private String username;
