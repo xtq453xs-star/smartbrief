@@ -20,7 +20,7 @@ public class UserBookHistory {
     private Long userId;
 
     @Column("book_id")
-    private String bookId; // WorkのIDを保存
+    private Integer bookId; // WorkのIDを保存
 
     @Column("book_title")
     private String bookTitle;

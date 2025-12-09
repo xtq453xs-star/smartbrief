@@ -7,13 +7,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestHeader; // ★追加
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import com.example.demo.repository.UserRepository; // ★追加
-import com.example.demo.util.JwtUtil; // ★追加
+import com.example.demo.repository.UserRepository;
+import com.example.demo.util.JwtUtil;
 import com.stripe.Stripe;
 import com.stripe.model.checkout.Session;
 import com.stripe.param.checkout.SessionCreateParams;
@@ -28,17 +28,15 @@ import reactor.core.scheduler.Schedulers;
 @RestController
 @RequestMapping("/api/v1/checkout")
 @RequiredArgsConstructor
-// フロントエンド(5173)からのアクセスを許可
 @CrossOrigin(origins = {"http://localhost:5173", "http://localhost:3000", "https://smartbrief.jp"}) 
 public class CheckoutController {
 
-    private final UserRepository userRepository; // ★ユーザー特定のために必要
-    private final JwtUtil jwtUtil;             // ★トークン解析のために必要
+    private final UserRepository userRepository;
+    private final JwtUtil jwtUtil;
 
     @Value("${stripe.api-key}")
     private String stripeApiKey;
 
-    // あなたの作成した正しいPrice ID
     private static final String PREMIUM_PRICE_ID = "price_1SbMi91XIhlvdbUYQHehYanJ"; 
 
     @PostConstruct
@@ -52,7 +50,6 @@ public class CheckoutController {
 
     @PostMapping("/create-session")
     public Mono<ResponseEntity<Map<String, String>>> createCheckoutSession(
-            // ★変更点: SecurityContextではなく、ヘッダーから直接受け取る
             @RequestHeader(value = "Authorization", required = false) String authHeader) { 
         
         // 1. トークンがあるかチェック
@@ -78,8 +75,10 @@ public class CheckoutController {
                 log.info("★ [Checkout] Request for User: {} (ID: {})", user.getUsername(), user.getId());
 
                 return Mono.fromCallable(() -> {
-                    String successUrl = "http://localhost:5173/payment/success?session_id={CHECKOUT_SESSION_ID}";
-                    String cancelUrl = "http://localhost:5173/payment/cancel";
+                    // ★修正: 本番ドメインに戻す (トークン維持のため)
+                    // (必要に応じて /payment/success などを作るか、トップに戻す)
+                	String successUrl = "https://smartbrief.jp/payment/success?session_id={CHECKOUT_SESSION_ID}";
+                    String cancelUrl = "https://smartbrief.jp?canceled=true";
                     
                     SessionCreateParams params = SessionCreateParams.builder()
                             .addPaymentMethodType(SessionCreateParams.PaymentMethodType.CARD)
@@ -91,6 +90,7 @@ public class CheckoutController {
                             .setSuccessUrl(successUrl)
                             .setCancelUrl(cancelUrl)
                             // ★重要: Webhookで「誰が払ったか」を知るためにユーザーIDを入れる
+                            // (userIdはLong型かもしれないのでString変換)
                             .putMetadata("userId", String.valueOf(user.getId())) 
                             .build();
 

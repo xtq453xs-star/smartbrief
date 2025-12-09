@@ -15,7 +15,7 @@ const PaymentSuccess = () => {
         </p>
         <button 
           style={styles.button}
-          onClick={() => navigate('/search')} // 検索画面へ遷移
+          onClick={() => navigate('/')} 
         >
           さっそく本を探す
         </button>

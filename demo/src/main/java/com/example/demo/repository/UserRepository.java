@@ -11,4 +11,6 @@ import reactor.core.publisher.Mono;
 public interface UserRepository extends ReactiveCrudRepository<User, Long> {
     // ユーザー名での検索（ログイン認証用）
     Mono<User> findByUsername(String username);
+    // LINE ID でユーザーを探すメソッド
+    Mono<User> findByLineUserId(String lineUserId);
 }

@@ -5,6 +5,7 @@
 *.pem
 id_rsa
 
+
 # --- Docker 設定 ---
 # 自分用の絶対パス設定などは隠す
 docker-compose.override.yml
@@ -51,3 +52,6 @@ npm/
 config
 app/
 nodes/
+
+# 自分用スクリプト
+watch_docker_compose.ps1

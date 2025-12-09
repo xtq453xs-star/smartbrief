@@ -2,7 +2,7 @@ package com.example.demo.controller;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Comparator; // 追加
+import java.util.Comparator;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,17 +33,15 @@ import reactor.core.publisher.Mono;
 public class BookController {
 
     private final WorkRepository workRepository;
-    private final UserBookHistoryRepository historyRepository; // repository名はこれのままいきます
+    private final UserBookHistoryRepository historyRepository;
     private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
 
     // --- ★追加: 人気ランキングAPI ---
-    // UserBookHistoryRepository に findTopBookIds() が追加されている前提です
     @GetMapping("/ranking")
     public Flux<BookResponse> getRanking() {
-        return historyRepository.findTopBookIds() // Flux<Long> でIDが返ってくると仮定
-            // IDをLongからIntegerに変換 (WorkのIDがIntegerのため)
-            .map(Long::intValue)
+        // 閲覧数が多い順に book_id を取得
+        return historyRepository.findTopBookIds()
             .collectList()
             .flatMapMany(ids -> {
                 if (ids.isEmpty()) {
@@ -54,13 +52,11 @@ public class BookController {
                 return workRepository.findAllById(ids)
                     .collectList()
                     .flatMapMany(works -> {
-                        // DBから取得した順序はバラバラになる可能性があるため、
-                        // 元のランキング(ids)の順序通りに並べ直す
+                        // DB取得順は保証されないため、ランキングID順に並べ直す
                         works.sort(Comparator.comparingInt(w -> ids.indexOf(w.getId())));
                         return Flux.fromIterable(works);
                     });
             })
-            // BookResponse(DTO)に変換して返す
             .map(BookResponse::from);
     }
 
@@ -101,7 +97,11 @@ public class BookController {
         String token = authHeader.substring(7);
         String username;
         try {
-            username = jwtUtil.extractUsername(token);
+            if (jwtUtil.validateToken(token)) {
+                username = jwtUtil.extractUsername(token);
+            } else {
+                throw new RuntimeException("Invalid token");
+            }
         } catch (Exception e) {
             return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "無効なトークンです"));
         }
@@ -111,6 +111,7 @@ public class BookController {
             .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found")))
             .flatMap(user -> {
                 boolean isPremium = Boolean.TRUE.equals(user.getPremium());
+                
                 if (isPremium) {
                     return fetchAndSaveHistory(workId, user.getId());
                 } else {
@@ -133,8 +134,8 @@ public class BookController {
                 UserBookHistory history = new UserBookHistory();
                 history.setUserId(userId);
                 
-                // DB(UserBookHistory)はString、WorkはIntegerなので変換する
-                history.setBookId(String.valueOf(work.getId())); 
+                // ★修正: 前回 String -> Integer に変更したので、そのままセットする
+                history.setBookId(work.getId()); 
                 
                 history.setBookTitle(work.getTitle());
                 history.setAuthorName(work.getAuthorName());

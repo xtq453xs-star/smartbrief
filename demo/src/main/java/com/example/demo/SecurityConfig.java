@@ -55,6 +55,9 @@ public class SecurityConfig {
                 // ★★★ 追加: これがないと会員ステータスが見れません！ ★★★
                 .pathMatchers("/api/v1/billing/**").permitAll()
                 
+                // ★★★ これを追加！ n8nからのアクセスを許可 ★★★
+                .pathMatchers("/api/v1/line/**").permitAll()
+                
                 // それ以外は認証必要（念の為の蓋）
                 .anyExchange().authenticated()
             )
