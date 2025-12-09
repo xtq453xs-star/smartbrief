@@ -10,7 +10,9 @@
 ## 📸 スクリーンショット
 | トップページ（ランキング） | 詳細ページ（雑誌風UI） |
 | --- | --- |
-| (画像) | (画像) |
+| <img width="1907" height="1486" alt="image" src="https://github.com/user-attachments/assets/5e33c07d-1c07-4df2-90ec-e99d48cb73c6" />
+ |<img width="1889" height="1660" alt="image" src="https://github.com/user-attachments/assets/2dc648a1-52d6-421f-bf75-73c8e662a00f" />
+  |
 
 ## 🔥 アーキテクチャのこだわり
 * **事前生成型データパイプライン**:
