@@ -80,7 +80,7 @@ SaaSビジネスモデルを実装しています。
 | **Backend** | Java 17, Spring Boot 3 (WebFlux), Spring Security |
 | **Database** | MySQL 8.0 (Docker Container, Multi-Schema) |
 | **Infra** | Docker, Docker Compose, Cloudflare Tunnel |
-| **AI / Batch** | n8n, OpenAI API (GPT-4o mini) |
+| **AI / Batch** | n8n, OpenAI API (GPT-5 nano) |
 | **Payment** | Stripe API (Webhook Integration) |
 
 ### 📐 システム構成図
