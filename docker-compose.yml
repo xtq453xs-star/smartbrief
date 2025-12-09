@@ -1,0 +1,148 @@
+version: '3'
+
+services:
+  # -----------------------------------
+  # 1. データベース
+  # -----------------------------------
+  mysql:
+    image: mysql:8.0
+    container_name: mysql_server
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    command:
+      - '--log_bin_trust_function_creators=1'
+      - '--character-set-server=utf8mb4'
+      - '--collation-server=utf8mb4_unicode_ci'
+    ports:
+      - "3306:3306"
+    networks:
+      n8n_data_ai_net:
+        ipv4_address: 10.10.0.100
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # -----------------------------------
+  # 2. n8n 本体
+  # -----------------------------------
+  n8n:
+    image: n8nio/n8n:1.120.4
+    container_name: n8n_server
+    restart: always
+    user: root
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
+      - N8N_USER_MANAGEMENT_ID=1000
+      - N8N_USER_MANAGEMENT_GID=1000
+      - HOME=/home/node
+      - N8N_CUSTOM_NODE_PATHS=/home/node/.n8n/nodes
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+      - GENERIC_TIMEZONE=Asia/Tokyo
+      - TZ=Asia/Tokyo
+      - WEBHOOK_URL=${DOMAIN_NAME}
+      - N8N_EDITOR_BASE_URL=${DOMAIN_NAME}
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - DB_TYPE=mysqldb
+      - DB_MYSQLDB_DATABASE=${MYSQL_DATABASE}
+      - DB_MYSQLDB_HOST=${N8N_DB_HOST}
+      - DB_MYSQLDB_PORT=${N8N_DB_PORT}
+      - DB_MYSQLDB_USER=${MYSQL_USER}
+      - DB_MYSQLDB_PASSWORD=${MYSQL_PASSWORD}
+      - NODE_OPTIONS=--max-old-space-size=16384
+    
+    volumes:
+      - ./n8n_data/.n8n:/home/node/.n8n
+      - ./n8n_data/aozora_data/aozorabunko_text-master:/aozora
+      - ./n8n_data/aozora_data:/n8n_files
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - n8n_data_ai_net
+
+  # -----------------------------------
+  # 3. Cloudflare Tunnel
+  # -----------------------------------
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: always
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    networks:
+      - n8n_data_ai_net
+
+  # -----------------------------------
+  # 4. Billing API (Java)
+  # -----------------------------------
+  billing-api:
+    build: 
+      context: ./demo
+      dockerfile: Dockerfile
+    container_name: billing-api
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_R2DBC_URL=${BILLING_DB_URL}
+      - SPRING_R2DBC_USERNAME=${BILLING_DB_USER}
+      - SPRING_R2DBC_PASSWORD=${BILLING_DB_PASSWORD}
+      - AOZORA_R2DBC_URL=${AOZORA_DB_URL}
+      - AOZORA_R2DBC_USERNAME=${AOZORA_DB_USER}
+      - AOZORA_R2DBC_PASSWORD=${AOZORA_DB_PASSWORD}
+      - STRIPE_API_KEY=${STRIPE_API_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_EXPIRATION=${JWT_EXPIRATION}
+    depends_on:
+      mysql:
+        condition: service_healthy 
+    networks:
+      - n8n_data_ai_net
+
+  # -----------------------------------
+  # 5. フロントエンド (React/Vite)
+  # -----------------------------------
+  react-app:
+    build:
+      context: ./frontend 
+      dockerfile: Dockerfile 
+    container_name: react_frontend
+    restart: always
+    volumes:
+      - ./frontend:/app 
+      - /app/node_modules 
+    ports:
+      - "5173:5173"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - WDS_SOCKET_PORT=0
+    depends_on:
+      - billing-api
+    networks:
+      - n8n_data_ai_net
+
+networks:
+  n8n_data_ai_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.10.0.0/16
+
+volumes:
+  mysql_data:
+    external: true

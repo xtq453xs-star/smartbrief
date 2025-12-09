@@ -1,0 +1,53 @@
+# --- セキュリティ（最重要） ---
+.env
+.env.*
+*.key
+*.pem
+id_rsa
+
+# --- Docker 設定 ---
+# 自分用の絶対パス設定などは隠す
+docker-compose.override.yml
+docker-compose.local.yml
+
+# --- データベース・バックアップ ---
+# init.sql (初期化用) 以外は基本的に除外する
+*.sql
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+!init.sql
+
+# ※もし init.sql も含めたくなければ上の「!init.sql」を消してください。
+# 公開用のスキーマ定義なら init.sql は公開してOKです。
+
+# --- ログファイル ---
+*.log
+n8nEventLog*.log
+npm-debug.log*
+
+# --- n8n / Node.js データ ---
+node_modules/
+n8n_data/
+.n8n/
+
+# --- Java / Maven (Backend) ---
+target/
+*.class
+.mvn/
+mvnw
+mvnw.cmd
+
+# --- IDE / OS設定 ---
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# --- 追加で除外するもの ---
+aozora_data/
+npm/
+config
+app/
+nodes/

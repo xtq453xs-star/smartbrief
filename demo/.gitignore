@@ -1,0 +1,66 @@
+HELP.md
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
+
+### --- SECRETS & ENVIRONMENT ---
+# 機密情報、APIキー、パスワードを含むファイル
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.staging
+
+### --- JAVA/GRADLE BUILD OUTPUT & LOGS ---
+# Maven Output
+target/
+# Gradle Output
+.gradle/
+# Log Files
+*.log
+# Dependency Caching
+# *.jar, *.war, *.zip は既存のセクションと重複する可能性があるため、ここでは省略
+
+### --- FRONTEND ARTIFACTS (VITE/REACT) ---
+# Node.jsパッケージ
+node_modules/
+# Vite/Reactなどのビルド成果物
+dist/
+# キャッシュフォルダ
+.vite/
+npm-debug.log*
+yarn-debug.log*

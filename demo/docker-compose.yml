@@ -1,0 +1,17 @@
+version: '3'
+services:
+  billing-api:
+    build: .
+    container_name: billing-api
+    ports:
+      - "8080:8080"
+    environment:
+      # ここで「コンテナ名」での接続を固定します
+      - SPRING_R2DBC_URL=r2dbc:mysql://mysql_server:3306/smartbrief_user_db
+    networks:
+      - n8n_data_ai_net
+
+# すでに存在するネットワークを使う設定
+networks:
+  n8n_data_ai_net:
+    external: true
