@@ -2,8 +2,12 @@ import React, { useState, useEffect } from 'react';
 
 const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
   const [book, setBook] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // 初期値false (親で制御済み)
   const [error, setError] = useState(null);
+
+  // ★追加: お気に入り状態管理
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [favLoading, setFavLoading] = useState(false);
 
   const getAccentColor = (id) => {
     const colors = ['#FF9A9E', '#FECFEF', '#A18CD1', '#FBC2EB', '#8FD3F4', '#84FAB0', '#E0C3FC'];
@@ -11,56 +15,92 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
   };
 
   useEffect(() => {
+    let isMounted = true;
+
     const fetchDetail = async () => {
+      if (isMounted) setLoading(true);
       try {
         const response = await fetch(`/api/v1/books/${bookId}`, {
           headers: { 'Authorization': `Bearer ${token}` },
         });
 
-        if (response.status === 403) {
-          onLimitReached();
-          return;
-        }
-        if (!response.ok) {
-          throw new Error('詳細データの取得に失敗しました');
-        }
+        if (isMounted) {
+            if (response.status === 403) {
+              onLimitReached();
+              return;
+            }
+            if (!response.ok) {
+              throw new Error('詳細データの取得に失敗しました');
+            }
 
-        const data = await response.json();
-        setBook(data);
+            const data = await response.json();
+            setBook(data);
+            
+            // ★追加: お気に入り状態のチェック
+            checkFavoriteStatus();
+        }
       } catch (err) {
-        setError(err.message);
+        if (isMounted) setError(err.message);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
+    // ★追加: お気に入り確認API
+    const checkFavoriteStatus = async () => {
+      try {
+        const res = await fetch(`/api/v1/books/${bookId}/favorite`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            if (isMounted) setIsFavorite(data.isFavorite);
+        }
+      } catch (e) { console.error(e); }
+    };
+
     fetchDetail();
+
+    return () => { isMounted = false; };
   }, [bookId, token, onLimitReached]);
 
-  // --- 文字列操作ロジック ---
+  // ★追加: お気に入りトグル処理
+  const toggleFavorite = async () => {
+      if (favLoading) return;
+      setFavLoading(true);
+      try {
+          const res = await fetch(`/api/v1/books/${bookId}/favorite`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (res.ok) {
+              const data = await res.json();
+              setIsFavorite(data.isFavorite);
+          }
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setFavLoading(false);
+      }
+  };
 
-  // 1. リード文（グレーの箱に入れるやつ）を抽出
+  // --- 文字列操作ロジック (デザイン用) ---
+
   const extractLead = (text) => {
     if (!text) return null;
-
-    // パターンA: HQ版 (【1分要約】タグがある)
     const matchHQ = text.match(/【1分要約】([\s\S]*?)(?=\n【|$)/);
     if (matchHQ) return { type: 'HQ', text: matchHQ[1].trim() };
 
-    // パターンB: 標準版 (タグがない) -> 冒頭の3文くらいを抜き出す
     const sentences = text.split('。');
     if (sentences.length > 0) {
-      // 3文だけ繋げて、末尾に「。」がなければつける
       let lead = sentences.slice(0, 3).join('。');
       if (lead.length > 200) lead = lead.substring(0, 200) + '...';
       if (!lead.endsWith('。') && !lead.endsWith('...')) lead += '。';
       return { type: 'STD', text: lead };
     }
-
     return { type: 'STD', text: text.substring(0, 150) + '...' };
   };
 
-  // 2. 本文を抽出
   const extractBody = (text) => {
     if (!text) return "";
     const match = text.match(/【詳細あらすじ】([\s\S]*)/);
@@ -68,11 +108,8 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
     return text; 
   };
 
-  // 3. ★魔法の整形関数: テキストを「箇条書きリスト」に変換して表示
   const renderLeadContent = (leadData) => {
     if (!leadData) return null;
-
-    // HQ版はそのまま表示 (改行は反映)
     if (leadData.type === 'HQ') {
       return (
         <div style={styles.pointText}>
@@ -80,14 +117,8 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
         </div>
       );
     }
-
-    // ★変更点: 標準版（STD）の場合
-    // 無理に「。」で区切ってリストにするのをやめ、
-    // 「リード文」として美しくそのまま表示する。
-    // これにより、エッセイなどの短い文章でも「物足りなさ」より「雰囲気」が勝つ。
     return (
       <div style={styles.leadTextContainer}>
-         {/* 先頭に大きな引用符などを装飾でつけるとさらに雑誌っぽくなります */}
          <span style={styles.leadIcon}>❝</span>
          <p style={styles.leadText}>
            {leadData.text}
@@ -95,7 +126,6 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
       </div>
     );
   };
-
 
   if (loading) return (
     <div style={styles.loadingContainer}>
@@ -108,9 +138,8 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
   if (!book) return null;
 
   const accentColor = getAccentColor(bookId);
-  const rawText = book.summaryText || book.summaryHq || book.summary300 || book.summary || "";
+  const rawText = book.summaryText || "";
   
-  // 抽出実行
   const leadData = extractLead(rawText);
   const bodyText = extractBody(rawText);
 
@@ -127,7 +156,23 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
         <header style={{...styles.header, background: `linear-gradient(135deg, ${accentColor}20 0%, #fff 100%)`, borderTop: `6px solid ${accentColor}`}}>
           <div style={styles.headerContent}>
             <div style={styles.metaLabel}>CLASSIC LITERATURE</div>
-            <h1 style={styles.title}>{book.title}</h1>
+            
+            {/* ★修正: タイトルの横にお気に入りボタンを追加 */}
+            <h1 style={styles.title}>
+                {book.title}
+                <button 
+                    onClick={toggleFavorite} 
+                    style={{
+                        background: 'none', border: 'none', cursor: 'pointer', 
+                        fontSize: '24px', marginLeft: '15px', color: isFavorite ? '#e74c3c' : '#ccc',
+                        verticalAlign: 'middle'
+                    }}
+                    title={isFavorite ? "お気に入り解除" : "お気に入り登録"}
+                >
+                    {isFavorite ? '❤️' : '🤍'}
+                </button>
+            </h1>
+            
             <div style={styles.author}>
               <span style={styles.authorLabel}>著</span> {book.authorName}
             </div>
@@ -144,7 +189,6 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
             <section style={styles.section}>
               <h2 style={styles.sectionTitle}>
                 <span style={{...styles.marker, background: accentColor}}></span>
-                {/* データの種類によってタイトルを変える */}
                 {leadData.type === 'HQ' ? '要約のポイント（1分で読む）' : 'ハイライト'}
               </h2>
               <div style={styles.pointBox}>
@@ -185,14 +229,14 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
           </footer>
 
           <div style={styles.actionArea}>
-             <a 
-               href={`https://www.amazon.co.jp/s?k=${encodeURIComponent(book.title + ' ' + book.authorName)}`} 
-               target="_blank" 
-               rel="noopener noreferrer"
-               style={styles.amazonButton}
-             >
-               Amazonで原作を探す
-             </a>
+              <a 
+                href={`https://www.amazon.co.jp/s?k=${encodeURIComponent(book.title + ' ' + book.authorName)}`} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                style={styles.amazonButton}
+              >
+                Amazonで原作を探す
+              </a>
           </div>
 
         </div>
@@ -228,6 +272,7 @@ const styles = {
   metaLabel: { fontSize: '12px', letterSpacing: '0.1em', color: '#718096', marginBottom: '10px', fontWeight: 'bold' },
   title: {
     fontFamily: '"Shippori Mincho", serif', fontSize: '32px', fontWeight: 'bold', color: '#1a202c', marginBottom: '15px', lineHeight: '1.4',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', // ハートを中央寄せにするため
   },
   author: {
     fontFamily: '"Shippori Mincho", serif', fontSize: '18px', color: '#4a5568', marginBottom: '30px',
@@ -245,14 +290,12 @@ const styles = {
   },
   marker: { width: '6px', height: '24px', marginRight: '12px', borderRadius: '2px', display: 'inline-block' },
   
-  // ポイントボックス
   pointBox: {
     backgroundColor: '#f9f9f9', padding: '25px', borderRadius: '8px', borderLeft: '4px solid #ccc',
   },
   pointText: {
     lineHeight: '1.8', color: '#4a5568', fontWeight: 'bold', whiteSpace: 'pre-wrap',
   },
-  // ★追加: 標準版用のリード文スタイル（雑誌の導入部風）
   leadTextContainer: {
     position: 'relative',
     padding: '0 10px',
@@ -268,14 +311,32 @@ const styles = {
   },
   leadText: {
     fontSize: '16px',
-    lineHeight: '2.2', // 行間を広めに取って「読ませる」
+    lineHeight: '2.2',
     color: '#4a5568',
     fontWeight: '500',
-    fontFamily: '"Shippori Mincho", serif', // ここだけ明朝体にすると雰囲気爆上がり
+    fontFamily: '"Shippori Mincho", serif',
     margin: 0,
     zIndex: 1,
     position: 'relative',
   },
+  textBody: { marginBottom: '40px' }, // 追加
+  paragraph: { marginBottom: '1.5em', lineHeight: '1.8', fontSize: '16px' }, // 追加
+
+  bookFooter: {
+      borderTop: '1px solid #eee', paddingTop: '30px', marginTop: '50px',
+      display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', textAlign: 'center'
+  },
+  footerRow: { display: 'flex', flexDirection: 'column', gap: '5px' },
+  footerLabel: { fontSize: '11px', color: '#a0aec0', textTransform: 'uppercase', letterSpacing: '1px' },
+  footerValue: { fontSize: '14px', fontWeight: 'bold' },
+
+  actionArea: { marginTop: '40px', textAlign: 'center' },
+  amazonButton: {
+      display: 'inline-block', backgroundColor: '#FF9900', color: '#fff',
+      padding: '12px 30px', borderRadius: '50px', textDecoration: 'none',
+      fontWeight: 'bold', boxShadow: '0 4px 10px rgba(255, 153, 0, 0.3)',
+      transition: 'transform 0.2s',
+  }
 };
 
 export default BookDetail;

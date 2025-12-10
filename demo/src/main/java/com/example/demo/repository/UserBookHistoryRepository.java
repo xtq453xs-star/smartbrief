@@ -19,4 +19,9 @@ public interface UserBookHistoryRepository extends ReactiveCrudRepository<UserBo
     // book_id ごとにグループ化してカウントし、多い順に並べる
     @Query("SELECT book_id FROM user_book_history GROUP BY book_id ORDER BY COUNT(book_id) DESC LIMIT 10")
     Flux<Integer> findTopBookIds();
+    
+    // ★追加: 特定ユーザーの閲覧履歴を新しい順に取得 (LIMIT 10)
+    // R2DBCなので @Query で書くのが確実です
+    @Query("SELECT * FROM user_book_history WHERE user_id = :userId ORDER BY viewed_at DESC LIMIT 10")
+    Flux<UserBookHistory> findHistoryByUserId(Long userId);
 }

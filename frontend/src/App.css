@@ -1,0 +1,13 @@
+/* ローディングアニメーション */
+@keyframes pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+/* ついでに全体のフォントも綺麗にしておくとベターです */
+body {
+  margin: 0;
+  font-family: "Shippori Mincho", "Hiragino Mincho ProN", serif;
+  background-color: #f7f6f2;
+}
