@@ -18,4 +18,11 @@ public interface WorkRepository extends ReactiveCrudRepository<Work, Integer> {
     // ★修正: aozora_db.works と明示する
     @Query("SELECT * FROM aozora_db.works WHERE title LIKE :keyword OR author_name LIKE :keyword LIMIT 10")
     Flux<Work> suggestByKeyword(String keyword);
+    // ★追加: 作家一覧を取得 (作品数が多い順にトップ20)
+    // GROUP BY で作家をまとめ、COUNT で数を数えて並べ替えます
+    @Query("SELECT author_name FROM works GROUP BY author_name ORDER BY COUNT(*) DESC LIMIT 20")
+    Flux<String> findTopAuthors();
+    // ★追加: 全作家リスト取得 (作品数が多い順)
+    @Query("SELECT author_name FROM works GROUP BY author_name ORDER BY COUNT(*) DESC")
+    Flux<String> findAllAuthors();
 }

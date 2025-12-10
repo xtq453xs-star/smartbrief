@@ -3,14 +3,17 @@ package com.example.demo.controller;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Comparator;
-import java.util.Map; // ★追加
+import java.util.List; // ★追加
+import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping; // ★追加
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -18,10 +21,10 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.example.demo.domain.UserBookHistory;
-import com.example.demo.domain.UserFavorite; // ★追加
+import com.example.demo.domain.UserFavorite;
 import com.example.demo.dto.BookResponse;
 import com.example.demo.repository.UserBookHistoryRepository;
-import com.example.demo.repository.UserFavoriteRepository; // ★追加
+import com.example.demo.repository.UserFavoriteRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.repository.WorkRepository;
 import com.example.demo.util.JwtUtil;
@@ -58,7 +61,20 @@ public class BookController {
             })
             .map(BookResponse::from);
     }
+
+    // --- ★修正: 人気作家一覧API (リストにまとめてJSON配列にする) ---
+    @GetMapping("/authors")
+    public Mono<List<String>> getAuthors() { // Flux<String> -> Mono<List<String>>
+        return workRepository.findTopAuthors()
+                .collectList(); // ★ここが重要！リストに変換してJSON配列 ["A", "B"] を保証する
+    }
     
+    // --- ★追加: 全作家一覧取得API ---
+    @GetMapping("/authors/all")
+    public Mono<List<String>> getAllAuthors() {
+        return workRepository.findAllAuthors()
+                .collectList();
+    }
     // --- 閲覧履歴取得API ---
     @GetMapping("/history")
     public Flux<BookResponse> getHistory(@RequestHeader(value = "Authorization", required = false) String authHeader) {
@@ -83,7 +99,7 @@ public class BookController {
             );
     }
 
-    // --- ★追加: お気に入り一覧取得API ---
+    // --- お気に入り一覧取得API ---
     @GetMapping("/favorites")
     public Flux<BookResponse> getFavorites(@RequestHeader(value = "Authorization", required = false) String authHeader) {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -107,7 +123,7 @@ public class BookController {
             );
     }
 
-    // --- 検索API (通常検索) ---
+    // --- 検索API ---
     @GetMapping("/search")
     public Flux<BookResponse> search(@RequestParam("q") String query) {
         if (query == null || query.trim().isEmpty()) return Flux.empty();
@@ -123,29 +139,17 @@ public class BookController {
         return workRepository.suggestByKeyword(searchPattern).map(BookResponse::from);
     }
 
-    // --- 詳細API (回数制限あり) ---
+    // --- 詳細API ---
     @GetMapping("/{workId}")
     public Mono<ResponseEntity<BookResponse>> getBookDetail(
             @PathVariable Integer workId,
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
-        
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "ログインしてください"));
-        }
-        
-        String token = authHeader.substring(7);
-        String username;
-        try {
-            if (jwtUtil.validateToken(token)) {
-                username = jwtUtil.extractUsername(token);
-            } else {
-                throw new RuntimeException("Invalid token");
-            }
-        } catch (Exception e) {
-            return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "無効なトークンです"));
+            @AuthenticationPrincipal UserDetails userDetails) {
+
+        if (userDetails == null) {
+            return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "ログイン情報が見つかりません"));
         }
 
-        return userRepository.findByUsername(username)
+        return userRepository.findByUsername(userDetails.getUsername())
             .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found")))
             .flatMap(user -> {
                 boolean isPremium = Boolean.TRUE.equals(user.getPremium());
@@ -164,7 +168,7 @@ public class BookController {
             });
     }
 
-    // --- ★追加: お気に入り登録状態チェック ---
+    // --- お気に入り登録状態チェック ---
     @GetMapping("/{workId}/favorite")
     public Mono<ResponseEntity<Map<String, Boolean>>> checkFavorite(
             @PathVariable Integer workId,
@@ -178,7 +182,7 @@ public class BookController {
             .map(exists -> ResponseEntity.ok(Map.of("isFavorite", exists)));
     }
 
-    // --- ★追加: お気に入り登録/解除 (トグル) ---
+    // --- お気に入り登録/解除 ---
     @PostMapping("/{workId}/favorite")
     public Mono<ResponseEntity<Map<String, Boolean>>> toggleFavorite(
             @PathVariable Integer workId,
@@ -192,11 +196,9 @@ public class BookController {
                 favoriteRepository.existsByUserIdAndBookId(user.getId(), workId)
                     .flatMap(exists -> {
                         if (exists) {
-                            // 既に登録済み -> 削除
                             return favoriteRepository.deleteByUserIdAndBookId(user.getId(), workId)
                                     .thenReturn(ResponseEntity.ok(Map.of("isFavorite", false)));
                         } else {
-                            // 未登録 -> 追加 (Work情報を取得してから保存)
                             return workRepository.findById(workId)
                                 .flatMap(work -> {
                                     UserFavorite fav = UserFavorite.builder()
@@ -214,7 +216,7 @@ public class BookController {
             );
     }
 
-    // 共通処理 (履歴保存)
+    // 共通処理
     private Mono<ResponseEntity<BookResponse>> fetchAndSaveHistory(Integer workId, Long userId) {
         return workRepository.findById(workId)
             .flatMap(work -> {

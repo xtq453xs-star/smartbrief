@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom'; // ★追加
 
 const BookSearch = ({ token, onBookSelect }) => {
   const [query, setQuery] = useState('');
@@ -9,28 +10,76 @@ const BookSearch = ({ token, onBookSelect }) => {
   const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // ★追加: ランキングデータを格納するstate
-  const [rankingBooks, setRankingBooks] = useState([]);
+  // URLパラメータ取得フック
+  const [searchParams] = useSearchParams(); // ★追加
 
-  // ★追加: 画面を開いた瞬間にランキングAPIを叩く
+  // ランキングデータ
+  const [rankingBooks, setRankingBooks] = useState([]);
+  // 人気作家リスト
+  const [authors, setAuthors] = useState([]);
+
+  // --- 初期データ取得 (ランキング & 人気作家) ---
   useEffect(() => {
-    const fetchRanking = async () => {
-      try {
-        const res = await fetch('/api/v1/books/ranking', {
-            headers: { 'Authorization': `Bearer ${token}` } 
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setRankingBooks(data);
-        }
-      } catch (err) {
-        console.error("Ranking fetch error", err);
-      }
-    };
-    fetchRanking();
+    // ランキング取得
+    fetch('/api/v1/books/ranking', {
+      headers: { 'Authorization': `Bearer ${token}` } 
+    })
+    .then(res => res.ok ? res.json() : [])
+    .then(data => setRankingBooks(data))
+    .catch(err => console.error("Ranking fetch error", err));
+
+    // 人気作家取得
+    fetch('/api/v1/books/authors', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    .then(res => res.ok ? res.json() : [])
+    .then(data => setAuthors(data))
+    .catch(err => console.error("Authors fetch error", err));
   }, [token]);
 
-  // --- デバウンス処理 ---
+  // --- 検索実行ロジック (共通化) ---
+  const executeSearch = async (searchWord) => {
+    if (!searchWord || !searchWord.trim()) return;
+
+    setLoading(true);
+    setListLoading(true);
+    setError(null);
+    setSuggestions([]);     
+    setShowSuggestions(false);
+    setBooks([]);
+    setQuery(searchWord); // 入力欄にも反映
+
+    try {
+      const response = await fetch(`/api/v1/books/search?q=${encodeURIComponent(searchWord)}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error('検索に失敗しました');
+      const data = await response.json();
+      setBooks(data);
+    } catch (err) {
+      setError('検索中にエラーが発生しました。');
+    } finally {
+      setLoading(false);
+      setListLoading(false);
+    }
+  };
+
+  // --- ★追加: URLパラメータ(?q=...)があれば自動検索 ---
+  useEffect(() => {
+    const initialQuery = searchParams.get('q');
+    if (initialQuery) {
+      executeSearch(initialQuery);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // フォーム送信時のハンドラ
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    executeSearch(query);
+  };
+
+  // --- デバウンス処理 (サジェスト) ---
   useEffect(() => {
     if (!query.trim()) {
       setSuggestions([]);
@@ -51,40 +100,13 @@ const BookSearch = ({ token, onBookSelect }) => {
     return () => clearTimeout(delayDebounceFn);
   }, [query, token]);
 
-  // --- 検索実行 ---
-  const handleSearch = async (e) => {
-    if (e) e.preventDefault();
-    if (!query.trim()) return;
-
-    setLoading(true);
-    setListLoading(true);
-    setError(null);
-    setSuggestions([]);     
-    setShowSuggestions(false);
-    setBooks([]);
-
-    try {
-      const response = await fetch(`/api/v1/books/search?q=${encodeURIComponent(query)}`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (!response.ok) throw new Error('検索に失敗しました');
-      const data = await response.json();
-      setBooks(data);
-    } catch (err) {
-      setError('検索中にエラーが発生しました。');
-    } finally {
-      setLoading(false);
-      setListLoading(false);
-    }
-  };
-
   const handleSuggestionClick = (book) => {
     setQuery(book.title);
     setSuggestions([]);
     onBookSelect(book.id);
   };
 
-  // --- ランダムな表紙色を決める関数 ---
+  // ランダムな表紙色を決める関数
   const getCoverColor = (id) => {
     const colors = ['#FF9A9E', '#FECFEF', '#A18CD1', '#FBC2EB', '#8FD3F4', '#84FAB0', '#E0C3FC'];
     return colors[id % colors.length];
@@ -95,7 +117,6 @@ const BookSearch = ({ token, onBookSelect }) => {
       <style>{`
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .book-card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
-        /* 横スクロールバーを隠す (Chrome/Safari) */
         .ranking-scroll::-webkit-scrollbar { display: none; }
         .ranking-scroll { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
@@ -105,7 +126,7 @@ const BookSearch = ({ token, onBookSelect }) => {
         <p style={styles.subText}>AIが要約した名作文学の世界へ</p>
       </div>
 
-      {/* ★★★ 追加: 人気ランキングセクション ★★★ */}
+      {/* 人気ランキングセクション */}
       {rankingBooks.length > 0 && (
         <div style={{marginBottom: '40px'}}>
           <h3 style={{fontSize: '18px', color: '#4a5568', marginBottom: '15px', display:'flex', alignItems:'center', gap:'8px'}}>
@@ -114,13 +135,11 @@ const BookSearch = ({ token, onBookSelect }) => {
           <div className="ranking-scroll" style={styles.rankingGrid}>
             {rankingBooks.map((book, index) => (
               <div 
-                key={`rank-${book.id || index}`} // ★修正: workIdではなくidを使う
+                key={`rank-${book.id || index}`}
                 style={styles.rankingCard}
-                onClick={() => onBookSelect(book.id)} // ★修正: workIdではなくidを使う
+                onClick={() => onBookSelect(book.id)}
               >
-                {/* 順位バッジ */}
                 <div style={styles.rankBadge}>{index + 1}</div>
-                
                 <div style={{...styles.coverImage, height: '100px', background: `linear-gradient(135deg, ${getCoverColor(book.id || index)} 0%, #fff 100%)`}}>
                   <span style={{...styles.coverTitle, fontSize: '10px'}}>{book.title}</span>
                 </div>
@@ -135,7 +154,7 @@ const BookSearch = ({ token, onBookSelect }) => {
       )}
       
       {/* 検索フォーム */}
-      <form onSubmit={handleSearch} style={styles.form}>
+      <form onSubmit={handleSearchSubmit} style={styles.form}>
         <div style={styles.inputWrapper}>
           <input
             type="text"
@@ -168,6 +187,24 @@ const BookSearch = ({ token, onBookSelect }) => {
         </button>
       </form>
 
+      {/* 人気作家チップス */}
+      {authors.length > 0 && (
+        <div style={styles.authorSection}>
+          <p style={styles.authorLabel}>👩‍🏫 人気の作家から探す:</p>
+          <div style={styles.chipContainer}>
+            {authors.map((author, index) => (
+              <button 
+                key={index} 
+                style={styles.authorChip}
+                onClick={() => executeSearch(author)}
+              >
+                {author}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {error && <p style={styles.error}>{error}</p>}
 
       {/* グリッド表示 (通常検索結果) */}
@@ -182,11 +219,10 @@ const BookSearch = ({ token, onBookSelect }) => {
             {books.map((book, index) => (
               <div 
                 key={book.id || index}
-                className="book-card" // CSSアニメーション用クラス
+                className="book-card"
                 style={styles.card}
                 onClick={() => onBookSelect(book.id)}
               >
-                {/* 擬似的な表紙画像エリア */}
                 <div style={{...styles.coverImage, background: `linear-gradient(135deg, ${getCoverColor(book.id || index)} 0%, #fff 100%)`}}>
                   <span style={styles.coverTitle}>{book.title}</span>
                 </div>
@@ -212,10 +248,10 @@ const BookSearch = ({ token, onBookSelect }) => {
   );
 };
 
-// --- スタイル定義 (Grid Layout導入 + ランキング追加) ---
+// --- スタイル定義 ---
 const styles = {
   container: {
-    maxWidth: '900px', // 幅を広げてグリッドを見やすく
+    maxWidth: '900px',
     margin: '0 auto',
     padding: '20px',
   },
@@ -235,9 +271,9 @@ const styles = {
   form: {
     display: 'flex',
     gap: '10px',
-    marginBottom: '40px',
+    marginBottom: '20px', 
     maxWidth: '600px',
-    margin: '0 auto 40px auto', // 中央寄せ
+    margin: '0 auto 20px auto',
     position: 'relative',
   },
   inputWrapper: {
@@ -249,7 +285,7 @@ const styles = {
     padding: '15px 20px',
     fontSize: '16px',
     border: '2px solid #edf2f7',
-    borderRadius: '50px', // 丸くしてモダンに
+    borderRadius: '50px',
     outline: 'none',
     boxSizing: 'border-box',
     transition: 'all 0.2s',
@@ -260,7 +296,7 @@ const styles = {
     backgroundColor: '#3182ce',
     color: 'white',
     border: 'none',
-    borderRadius: '50px', // ボタンも丸く
+    borderRadius: '50px',
     cursor: 'pointer',
     fontWeight: 'bold',
     fontSize: '16px',
@@ -302,10 +338,25 @@ const styles = {
   emptyState: { textAlign: 'center', padding: '50px', color: '#718096' },
   noResult: { fontSize: '18px', fontWeight: 'bold', marginBottom: '10px' },
 
-  // --- Grid System & Card UI ---
+  // 作家チップス
+  authorSection: { 
+    marginBottom: '40px', 
+    maxWidth: '800px', 
+    margin: '0 auto 40px auto', 
+    textAlign: 'center' 
+  },
+  authorLabel: { fontSize: '13px', color: '#7f8c8d', marginBottom: '10px', fontWeight: 'bold' },
+  chipContainer: { display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' },
+  authorChip: {
+    padding: '8px 16px', borderRadius: '20px', border: '1px solid #e2e8f0',
+    backgroundColor: '#fff', color: '#4a5568', fontSize: '13px', cursor: 'pointer',
+    transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+  },
+
+  // Grid & Card
   grid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', // レスポンシブなグリッド
+    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
     gap: '24px',
   },
   card: {
@@ -320,7 +371,7 @@ const styles = {
     flexDirection: 'column',
   },
   coverImage: {
-    height: '140px', // 表紙エリアの高さ
+    height: '140px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -362,15 +413,15 @@ const styles = {
     padding: '2px 8px',
     borderRadius: '10px',
     border: '1px solid #FCD34D',
-    alignSelf: 'flex-start', // 左寄せ
+    alignSelf: 'flex-start',
     fontWeight: 'bold',
   },
   
-  // --- ★追加: ランキング用スタイル ---
+  // ランキング用
   rankingGrid: {
     display: 'flex',
     gap: '15px',
-    overflowX: 'auto', // 横スクロール可能に
+    overflowX: 'auto',
     paddingBottom: '10px',
     scrollSnapType: 'x mandatory',
   },
@@ -393,7 +444,7 @@ const styles = {
     left: '5px',
     width: '24px',
     height: '24px',
-    backgroundColor: '#FFD700', // 金色
+    backgroundColor: '#FFD700',
     color: 'white',
     borderRadius: '50%',
     display: 'flex',

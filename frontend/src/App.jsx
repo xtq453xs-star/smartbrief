@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+// useParams もここでまとめてインポートするのが一般的です
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom'; 
+
 import BookSearch from './components/BookSearch';
 import BookDetail from './components/BookDetail';
 import Login from './Login';
 import PaymentSuccess from './components/PaymentSuccess';
-import Dashboard from './components/Dashboard'; // ★追加
+import Dashboard from './components/Dashboard'; // ★重要: ダッシュボードのインポート
+import AuthorList from './components/AuthorList'; // ★追加: 作家一覧のインポート
 
 function AppWrapper() {
   const [token, setToken] = useState(localStorage.getItem('authToken'));
@@ -58,23 +61,35 @@ function AppContent({ token, setToken }) {
       {/* 3. 検索画面 (独立) */}
       <Route path="/search" element={
         token ? (
-          <div style={{padding: '20px', maxWidth: '800px', margin: '0 auto'}}>
-             <button onClick={() => navigate('/')} style={{marginBottom: '20px'}}>← ダッシュボードへ</button>
+          <div style={{padding: '20px', maxWidth: '900px', margin: '0 auto'}}>
+             <button 
+                onClick={() => navigate('/')} 
+                style={styles.backLink}
+             >
+                ← ダッシュボードへ
+             </button>
              <BookSearch token={token} onBookSelect={handleBookSelect} />
           </div>
         ) : <Navigate to="/login" />
       } />
 
-      {/* 4. 詳細画面 */}
+      {/* 4. ★追加: 作家一覧画面 */}
+      <Route path="/authors" element={
+        token ? (
+          <AuthorList token={token} onBack={() => navigate('/')} />
+        ) : <Navigate to="/login" />
+      } />
+
+      {/* 5. 詳細画面 */}
       <Route path="/book/:bookId" element={
         token ? (
-          <div style={{padding: '20px', maxWidth: '800px', margin: '0 auto'}}>
+          <div style={{padding: '20px', maxWidth: '900px', margin: '0 auto'}}>
             <BookDetailWrapper token={token} navigate={navigate} />
           </div>
         ) : <Navigate to="/login" />
       } />
 
-      {/* 5. 決済成功 */}
+      {/* 6. 決済成功 */}
       <Route path="/payment/success" element={<PaymentSuccess />} />
       
       <Route path="*" element={<Navigate to="/" />} />
@@ -83,13 +98,11 @@ function AppContent({ token, setToken }) {
 }
 
 // URLパラメータからIDを取得するためのラッパー
-import { useParams } from 'react-router-dom';
 const BookDetailWrapper = ({ token, navigate }) => {
   const { bookId } = useParams();
   
   // 制限到達時の処理
   const handleLimitReached = () => {
-      // 簡易的にアラートを出してトップへ (本来は課金モーダルなどがベスト)
       alert("無料枠の上限に達しました。ダッシュボードからアップグレードしてください。");
       navigate('/');
   };
@@ -102,6 +115,14 @@ const BookDetailWrapper = ({ token, navigate }) => {
       onLimitReached={handleLimitReached}
     />
   );
+};
+
+// 簡易スタイル
+const styles = {
+  backLink: {
+    background: 'none', border: 'none', color: '#666', cursor: 'pointer',
+    fontSize: '14px', marginBottom: '10px', padding: 0, textDecoration: 'underline'
+  }
 };
 
 export default AppWrapper;
