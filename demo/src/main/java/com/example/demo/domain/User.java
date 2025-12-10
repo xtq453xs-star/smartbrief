@@ -48,6 +48,10 @@ public class User implements UserDetails {
 
     @Column("created_at")
     private LocalDateTime createdAt;
+    
+    // ★★★ 追加: Stripe顧客ID ★★★
+    @Column("stripe_customer_id")
+    private String stripeCustomerId;
 
     // --- Enum定義 ---
     public enum Plan {

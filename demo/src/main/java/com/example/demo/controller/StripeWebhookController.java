@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.example.demo.domain.User;
 import com.example.demo.service.BillingService;
-import com.stripe.exception.EventDataObjectDeserializationException; // ★追加
+import com.stripe.exception.EventDataObjectDeserializationException;
 import com.stripe.model.Event;
 import com.stripe.model.checkout.Session;
 import com.stripe.net.Webhook;
@@ -68,10 +68,8 @@ public class StripeWebhookController {
                         
                         Session session = null;
                         try {
-                            // ★修正ポイント: try-catch で囲みました！
                             session = (Session) event.getDataObjectDeserializer().deserializeUnsafe();
                         } catch (EventDataObjectDeserializationException e) {
-                            // 万が一失敗したらログを出して終了
                             log.error("★ [Webhook] Deserialization Exception!", e);
                             return Mono.just(ResponseEntity.ok("Deserialization Error"));
                         }
@@ -84,8 +82,13 @@ public class StripeWebhookController {
                                 log.warn("★ [Webhook] Username is NULL in metadata!");
                                 return Mono.just(ResponseEntity.ok("Username missing"));
                             }
-                            // .name() を削除し、Enum型をそのまま渡します
-                            return billingService.updateSubscriptionFromWebhook(username, User.Plan.PREMIUM)
+
+                            // ★★★ 修正箇所: Customer ID を取得して Service に渡す ★★★
+                            String customerId = session.getCustomer();
+                            log.info("★ [Webhook] Extracted Customer ID: {}", customerId);
+
+                            // 引数に customerId を追加
+                            return billingService.updateSubscriptionFromWebhook(username, User.Plan.PREMIUM, customerId)
                                     .map(user -> {
                                         log.info("★ [Webhook] DB Updated for user: {}", user.getUsername());
                                         return ResponseEntity.ok("Success");

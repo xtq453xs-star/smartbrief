@@ -61,6 +61,35 @@ function MainLayout({ token, setToken }) {
     } catch (err) { alert(`通信エラー: ${err.message}`); }
   };
 
+  // ★追加: カスタマーポータル（解約・変更）へ移動
+  const handleManageSubscription = async () => {
+    try {
+      const response = await fetch('/api/v1/billing/portal', {
+        method: 'POST',
+        headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({}) // POSTなので空のボディが必要
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Stripeのポータル画面へ移動
+        if (data.portalUrl) {
+            window.location.href = data.portalUrl;
+        } else {
+            alert('ポータルURLの取得に失敗しました');
+        }
+      } else {
+        const errText = await response.text();
+        alert(`エラー: ${errText}`);
+      }
+    } catch (err) {
+      alert(`通信エラー: ${err.message}`);
+    }
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return '---';
     const date = new Date(dateString);
@@ -157,14 +186,19 @@ function MainLayout({ token, setToken }) {
             </div>
           </div>
 
-          {!status?.premium && (
-            <button onClick={handleCheckout} style={styles.upgradeButton}>
-              プレミアムにアップグレード
+{!status?.premium ? (
+            // フリープランの場合：アップグレードボタン
+           <button onClick={handleCheckout} style={styles.upgradeButton}>
+           💎 プレミアムにアップグレード
+           </button>
+          ) : (
+            // プレミアムの場合：解約・変更ボタン
+            <button onClick={handleManageSubscription} style={styles.portalButton}>
+              ⚙️ 契約の管理（解約・変更）
             </button>
           )}
         </div>
       </div>
-
     </div>
   );
 }
@@ -301,6 +335,20 @@ const styles = {
     cursor: 'pointer',
     transition: 'all 0.2s',
     boxShadow: '0 4px 6px rgba(40, 167, 69, 0.2)',
+    // ★追加: ポータルボタン (少し落ち着いた色味で)
+  portalButton: {
+    marginTop: '25px',
+    width: '100%',
+    padding: '12px',
+    backgroundColor: '#6c757d', // グレー
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    boxShadow: '0 4px 6px rgba(108, 117, 125, 0.2)',
+  },
   }
 };
 
