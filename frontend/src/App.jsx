@@ -8,6 +8,7 @@ import Login from './Login';
 import PaymentSuccess from './components/PaymentSuccess';
 import Dashboard from './components/Dashboard'; // ★重要: ダッシュボードのインポート
 import AuthorList from './components/AuthorList'; // ★追加: 作家一覧のインポート
+import GenreList from './components/GenreList'; // ★追加
 
 function AppWrapper() {
   const [token, setToken] = useState(localStorage.getItem('authToken'));
@@ -77,6 +78,13 @@ function AppContent({ token, setToken }) {
       <Route path="/authors" element={
         token ? (
           <AuthorList token={token} onBack={() => navigate('/')} />
+        ) : <Navigate to="/login" />
+      } />
+
+      {/* ★追加: ジャンル一覧画面 */}
+      <Route path="/genres" element={
+        token ? (
+          <GenreList token={token} onBack={() => navigate('/')} />
         ) : <Navigate to="/login" />
       } />
 

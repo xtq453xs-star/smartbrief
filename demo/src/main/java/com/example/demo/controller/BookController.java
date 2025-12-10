@@ -2,9 +2,12 @@ package com.example.demo.controller;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Arrays; // ★追加
 import java.util.Comparator;
-import java.util.List; // ★追加
+import java.util.List;
 import java.util.Map;
+import java.util.function.Function; // ★追加
+import java.util.stream.Collectors; // ★追加
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -62,19 +65,43 @@ public class BookController {
             .map(BookResponse::from);
     }
 
-    // --- ★修正: 人気作家一覧API (リストにまとめてJSON配列にする) ---
+    // --- 人気作家一覧API (トップ20) ---
     @GetMapping("/authors")
-    public Mono<List<String>> getAuthors() { // Flux<String> -> Mono<List<String>>
+    public Mono<List<String>> getAuthors() { 
         return workRepository.findTopAuthors()
-                .collectList(); // ★ここが重要！リストに変換してJSON配列 ["A", "B"] を保証する
+                .collectList(); 
     }
     
-    // --- ★追加: 全作家一覧取得API ---
+    // --- 全作家一覧取得API ---
     @GetMapping("/authors/all")
     public Mono<List<String>> getAllAuthors() {
         return workRepository.findAllAuthors()
                 .collectList();
     }
+    
+    // --- ★修正: ジャンル一覧API (人気順 TOP 40) ---
+    @GetMapping("/genres")
+    public Mono<List<String>> getAllGenres() {
+        return workRepository.findAllGenreTags()
+            .collectList()
+            .map(allTagsList -> {
+                // 1. 全データをメモリ上で分解・集計
+                Map<String, Long> tagCounts = allTagsList.stream()
+                    .filter(str -> str != null) // null除け
+                    .flatMap(str -> Arrays.stream(str.split(","))) // カンマで分割
+                    .map(String::trim) // 前後の空白削除
+                    .filter(s -> !s.isEmpty()) // 空文字削除
+                    .collect(Collectors.groupingBy(Function.identity(), Collectors.counting())); // 集計
+
+                // 2. 多い順にソートしてトップ40を抽出
+                return tagCounts.entrySet().stream()
+                    .sorted(Map.Entry.<String, Long>comparingByValue().reversed()) // カウント降順
+                    .limit(40) // ★ここで表示数を制限！
+                    .map(Map.Entry::getKey) // 名前だけ取り出す
+                    .collect(Collectors.toList());
+            });
+    }
+
     // --- 閲覧履歴取得API ---
     @GetMapping("/history")
     public Flux<BookResponse> getHistory(@RequestHeader(value = "Authorization", required = false) String authHeader) {
@@ -123,12 +150,20 @@ public class BookController {
             );
     }
 
-    // --- 検索API ---
+    // --- 検索API (通常検索) ---
     @GetMapping("/search")
     public Flux<BookResponse> search(@RequestParam("q") String query) {
         if (query == null || query.trim().isEmpty()) return Flux.empty();
         String searchPattern = "%" + query.trim() + "%";
         return workRepository.searchByKeyword(searchPattern).map(BookResponse::from);
+    }
+    
+    // --- ジャンル検索API ---
+    @GetMapping("/search/genre")
+    public Flux<BookResponse> searchByGenre(@RequestParam("q") String genre) {
+        if (genre == null || genre.trim().isEmpty()) return Flux.empty();
+        String searchPattern = "%" + genre.trim() + "%";
+        return workRepository.findByGenreTagContaining(searchPattern).map(BookResponse::from);
     }
 
     // --- サジェスト検索API ---
@@ -139,7 +174,7 @@ public class BookController {
         return workRepository.suggestByKeyword(searchPattern).map(BookResponse::from);
     }
 
-    // --- 詳細API ---
+    // --- 詳細API (回数制限あり) ---
     @GetMapping("/{workId}")
     public Mono<ResponseEntity<BookResponse>> getBookDetail(
             @PathVariable Integer workId,

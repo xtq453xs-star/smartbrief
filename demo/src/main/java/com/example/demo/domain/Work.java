@@ -28,16 +28,21 @@ public class Work {
     @Column("aozora_url")
     private String aozoraUrl;
 
-    // ★修正: 実在するカラム名 'summary_300' に合わせる
+    // 通常要約
     @Column("summary_300")
     private String summary300;
 
-    // ★修正: 実在するカラム名 'summary_hq' に合わせる
+    // HQ要約
     @Column("summary_hq")
     private String summaryHq;
 
     @Column("is_hq")
     private Boolean isHq;
+
+    // ★★★ ここに追加！ ★★★
+    // DBの genre_tag カラム ("エッセイ, 日本文学" など) を読み込む
+    @Column("genre_tag")
+    private String genreTag;
 
     private String catchphrase;
 

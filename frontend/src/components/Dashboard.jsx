@@ -121,7 +121,7 @@ const Dashboard = ({ token, onLogout, onBookSelect }) => {
              style={activeView === 'history' ? styles.navItemActive : styles.navItem}
              onClick={() => setActiveView('history')}
           >
-            🕰️ 閲覧履歴 (ホーム)
+            🕰️ 閲覧履歴 
           </button>
           
           <button 
@@ -144,6 +144,11 @@ const Dashboard = ({ token, onLogout, onBookSelect }) => {
             🔍 蔵書検索
           </button>
           
+          {/* ★追加: ジャンル一覧ボタン */}
+          <button onClick={() => navigate('/genres')} style={styles.navItem}>
+            🎨 ジャンル一覧
+          </button>
+
           {/* ★追加: 作家一覧ボタン */}
           <button onClick={() => navigate('/authors')} style={styles.navItem}>
             👥 作家一覧

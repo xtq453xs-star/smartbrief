@@ -17,6 +17,7 @@ public class BookResponse {
     private String catchphrase;
     private String insight;
     private boolean isHighQuality;
+    private String genreTag;
 
     public static BookResponse from(Work work) {
         BookResponse dto = new BookResponse();
@@ -25,6 +26,8 @@ public class BookResponse {
         dto.setTitle(work.getTitle());
         dto.setAuthorName(work.getAuthorName());
         dto.setAozoraUrl(work.getAozoraUrl());
+        // ★追加
+        dto.setGenreTag(cleanText(work.getGenreTag()));
 
         // HQフラグ
         boolean isHq = Boolean.TRUE.equals(work.getIsHq());

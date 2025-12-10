@@ -25,4 +25,11 @@ public interface WorkRepository extends ReactiveCrudRepository<Work, Integer> {
     // ★追加: 全作家リスト取得 (作品数が多い順)
     @Query("SELECT author_name FROM works GROUP BY author_name ORDER BY COUNT(*) DESC")
     Flux<String> findAllAuthors();
+    // ★追加: 特定のジャンルを含む作品を検索 (部分一致)
+    @Query("SELECT * FROM works WHERE genre_tag LIKE :genre LIMIT 20")
+    Flux<Work> findByGenreTagContaining(String genre);
+
+    // ★追加: すべてのジャンルタグを取得 (あとでJava側で分解・整理します)
+    @Query("SELECT genre_tag FROM works WHERE genre_tag IS NOT NULL")
+    Flux<String> findAllGenreTags();
 }

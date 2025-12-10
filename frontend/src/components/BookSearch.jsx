@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom'; // ★追加
+import { useSearchParams } from 'react-router-dom'; // ★必須
 
 const BookSearch = ({ token, onBookSelect }) => {
   const [query, setQuery] = useState('');
@@ -10,17 +10,17 @@ const BookSearch = ({ token, onBookSelect }) => {
   const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // URLパラメータ取得フック
-  const [searchParams] = useSearchParams(); // ★追加
+  // URLパラメータ取得用
+  const [searchParams] = useSearchParams(); 
 
   // ランキングデータ
   const [rankingBooks, setRankingBooks] = useState([]);
   // 人気作家リスト
   const [authors, setAuthors] = useState([]);
 
-  // --- 初期データ取得 (ランキング & 人気作家) ---
+  // --- 初期データ取得 ---
   useEffect(() => {
-    // ランキング取得
+    // ランキング
     fetch('/api/v1/books/ranking', {
       headers: { 'Authorization': `Bearer ${token}` } 
     })
@@ -28,7 +28,7 @@ const BookSearch = ({ token, onBookSelect }) => {
     .then(data => setRankingBooks(data))
     .catch(err => console.error("Ranking fetch error", err));
 
-    // 人気作家取得
+    // 人気作家
     fetch('/api/v1/books/authors', {
       headers: { 'Authorization': `Bearer ${token}` }
     })
@@ -37,7 +37,7 @@ const BookSearch = ({ token, onBookSelect }) => {
     .catch(err => console.error("Authors fetch error", err));
   }, [token]);
 
-  // --- 検索実行ロジック (共通化) ---
+  // --- 通常検索実行ロジック ---
   const executeSearch = async (searchWord) => {
     if (!searchWord || !searchWord.trim()) return;
 
@@ -47,7 +47,7 @@ const BookSearch = ({ token, onBookSelect }) => {
     setSuggestions([]);     
     setShowSuggestions(false);
     setBooks([]);
-    setQuery(searchWord); // 入力欄にも反映
+    setQuery(searchWord);
 
     try {
       const response = await fetch(`/api/v1/books/search?q=${encodeURIComponent(searchWord)}`, {
@@ -64,14 +64,49 @@ const BookSearch = ({ token, onBookSelect }) => {
     }
   };
 
-  // --- ★追加: URLパラメータ(?q=...)があれば自動検索 ---
+  // --- ★追加: ジャンル検索実行ロジック ---
+  const executeGenreSearch = async (genreWord) => {
+    if (!genreWord) return;
+
+    setLoading(true);
+    setListLoading(true);
+    setError(null);
+    setSuggestions([]);     
+    setShowSuggestions(false);
+    setBooks([]);
+    setQuery(`ジャンル: ${genreWord}`); // 検索窓にジャンル名を表示
+
+    try {
+      // ジャンル検索APIを叩く
+      const response = await fetch(`/api/v1/books/search/genre?q=${encodeURIComponent(genreWord)}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error('ジャンル検索に失敗しました');
+      const data = await response.json();
+      setBooks(data);
+    } catch (err) {
+      setError('検索中にエラーが発生しました。');
+    } finally {
+      setLoading(false);
+      setListLoading(false);
+    }
+  };
+
+  // --- ★追加: URLパラメータ監視 (画面遷移時に実行) ---
   useEffect(() => {
-    const initialQuery = searchParams.get('q');
-    if (initialQuery) {
-      executeSearch(initialQuery);
+    const genreQuery = searchParams.get('genre'); // ?genre=...
+    const textQuery = searchParams.get('q');      // ?q=...
+
+    if (genreQuery) {
+      // ジャンル指定があればジャンル検索
+      executeGenreSearch(genreQuery);
+    } else if (textQuery) {
+      // キーワード指定があれば通常検索
+      executeSearch(textQuery);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  }, [searchParams]); // URLが変わるたびに実行
+
 
   // フォーム送信時のハンドラ
   const handleSearchSubmit = (e) => {
@@ -81,7 +116,8 @@ const BookSearch = ({ token, onBookSelect }) => {
 
   // --- デバウンス処理 (サジェスト) ---
   useEffect(() => {
-    if (!query.trim()) {
+    // "ジャンル:" で始まる場合はサジェストしない
+    if (!query.trim() || query.startsWith('ジャンル:')) {
       setSuggestions([]);
       return;
     }
@@ -106,7 +142,6 @@ const BookSearch = ({ token, onBookSelect }) => {
     onBookSelect(book.id);
   };
 
-  // ランダムな表紙色を決める関数
   const getCoverColor = (id) => {
     const colors = ['#FF9A9E', '#FECFEF', '#A18CD1', '#FBC2EB', '#8FD3F4', '#84FAB0', '#E0C3FC'];
     return colors[id % colors.length];
@@ -126,7 +161,7 @@ const BookSearch = ({ token, onBookSelect }) => {
         <p style={styles.subText}>AIが要約した名作文学の世界へ</p>
       </div>
 
-      {/* 人気ランキングセクション */}
+      {/* 人気ランキング */}
       {rankingBooks.length > 0 && (
         <div style={{marginBottom: '40px'}}>
           <h3 style={{fontSize: '18px', color: '#4a5568', marginBottom: '15px', display:'flex', alignItems:'center', gap:'8px'}}>
@@ -160,7 +195,7 @@ const BookSearch = ({ token, onBookSelect }) => {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onFocus={() => query && setShowSuggestions(true)}
+            onFocus={() => query && !query.startsWith('ジャンル:') && setShowSuggestions(true)}
             onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
             placeholder="作品名・作家名で検索..."
             style={styles.input}
@@ -207,7 +242,7 @@ const BookSearch = ({ token, onBookSelect }) => {
 
       {error && <p style={styles.error}>{error}</p>}
 
-      {/* グリッド表示 (通常検索結果) */}
+      {/* 検索結果 (グリッド) */}
       <div className="book-grid-container">
         {listLoading ? (
           <div style={styles.loadingContainer}>
@@ -248,214 +283,40 @@ const BookSearch = ({ token, onBookSelect }) => {
   );
 };
 
-// --- スタイル定義 ---
+// スタイル定義
 const styles = {
-  container: {
-    maxWidth: '900px',
-    margin: '0 auto',
-    padding: '20px',
-  },
-  headerArea: {
-    textAlign: 'center',
-    marginBottom: '30px',
-  },
-  heading: {
-    fontSize: '28px',
-    color: '#1a202c',
-    marginBottom: '10px',
-  },
-  subText: {
-    color: '#718096',
-    fontSize: '16px',
-  },
-  form: {
-    display: 'flex',
-    gap: '10px',
-    marginBottom: '20px', 
-    maxWidth: '600px',
-    margin: '0 auto 20px auto',
-    position: 'relative',
-  },
-  inputWrapper: {
-    flex: 1,
-    position: 'relative',
-  },
-  input: {
-    width: '100%',
-    padding: '15px 20px',
-    fontSize: '16px',
-    border: '2px solid #edf2f7',
-    borderRadius: '50px',
-    outline: 'none',
-    boxSizing: 'border-box',
-    transition: 'all 0.2s',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
-  },
-  button: {
-    padding: '0 30px',
-    backgroundColor: '#3182ce',
-    color: 'white',
-    border: 'none',
-    borderRadius: '50px',
-    cursor: 'pointer',
-    fontWeight: 'bold',
-    fontSize: '16px',
-    minWidth: '80px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: '0 4px 6px rgba(49, 130, 206, 0.2)',
-  },
-  suggestionList: {
-    position: 'absolute',
-    top: '100%',
-    left: '10px',
-    right: '10px',
-    backgroundColor: 'white',
-    border: '1px solid #e2e8f0',
-    borderRadius: '12px',
-    listStyle: 'none',
-    padding: '5px 0',
-    margin: '5px 0 0 0',
-    zIndex: 1000,
-    boxShadow: '0 10px 15px rgba(0,0,0,0.1)',
-  },
-  suggestionItem: {
-    padding: '12px 20px',
-    cursor: 'pointer',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+  container: { maxWidth: '900px', margin: '0 auto', padding: '20px' },
+  headerArea: { textAlign: 'center', marginBottom: '30px' },
+  heading: { fontSize: '28px', color: '#1a202c', marginBottom: '10px' },
+  subText: { color: '#718096', fontSize: '16px' },
+  form: { display: 'flex', gap: '10px', marginBottom: '20px', maxWidth: '600px', margin: '0 auto 20px auto', position: 'relative' },
+  inputWrapper: { flex: 1, position: 'relative' },
+  input: { width: '100%', padding: '15px 20px', fontSize: '16px', border: '2px solid #edf2f7', borderRadius: '50px', outline: 'none', boxSizing: 'border-box', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' },
+  button: { padding: '0 30px', backgroundColor: '#3182ce', color: 'white', border: 'none', borderRadius: '50px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', minWidth: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(49, 130, 206, 0.2)' },
+  suggestionList: { position: 'absolute', top: '100%', left: '10px', right: '10px', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '12px', listStyle: 'none', padding: '5px 0', margin: '5px 0 0 0', zIndex: 1000, boxShadow: '0 10px 15px rgba(0,0,0,0.1)' },
+  suggestionItem: { padding: '12px 20px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   suggestionTitle: { fontWeight: 'bold', color: '#2d3748' },
   suggestionAuthor: { fontSize: '12px', color: '#718096' },
-  spinner: {
-    width: '20px', height: '20px', border: '3px solid rgba(255,255,255,0.3)',
-    borderRadius: '50%', borderTopColor: '#fff', animation: 'spin 0.8s linear infinite',
-  },
+  spinner: { width: '20px', height: '20px', border: '3px solid rgba(255,255,255,0.3)', borderRadius: '50%', borderTopColor: '#fff', animation: 'spin 0.8s linear infinite' },
   error: { color: '#e53e3e', textAlign: 'center' },
   loadingContainer: { textAlign: 'center', padding: '50px' },
   emptyState: { textAlign: 'center', padding: '50px', color: '#718096' },
   noResult: { fontSize: '18px', fontWeight: 'bold', marginBottom: '10px' },
-
-  // 作家チップス
-  authorSection: { 
-    marginBottom: '40px', 
-    maxWidth: '800px', 
-    margin: '0 auto 40px auto', 
-    textAlign: 'center' 
-  },
+  authorSection: { marginBottom: '40px', maxWidth: '800px', margin: '0 auto 40px auto', textAlign: 'center' },
   authorLabel: { fontSize: '13px', color: '#7f8c8d', marginBottom: '10px', fontWeight: 'bold' },
   chipContainer: { display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' },
-  authorChip: {
-    padding: '8px 16px', borderRadius: '20px', border: '1px solid #e2e8f0',
-    backgroundColor: '#fff', color: '#4a5568', fontSize: '13px', cursor: 'pointer',
-    transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-  },
-
-  // Grid & Card
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-    gap: '24px',
-  },
-  card: {
-    backgroundColor: 'white',
-    borderRadius: '12px',
-    overflow: 'hidden',
-    boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
-    cursor: 'pointer',
-    transition: 'all 0.3s ease',
-    border: '1px solid #f0f0f0',
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  coverImage: {
-    height: '140px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '20px',
-    textAlign: 'center',
-    color: '#1a202c',
-    position: 'relative',
-  },
-  coverTitle: {
-    fontSize: '14px',
-    fontWeight: 'bold',
-    opacity: 0.7,
-    maxHeight: '100%',
-    overflow: 'hidden',
-  },
-  cardContent: {
-    padding: '15px',
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'space-between',
-  },
-  bookTitle: {
-    fontWeight: 'bold',
-    fontSize: '15px',
-    color: '#2d3748',
-    marginBottom: '5px',
-    lineHeight: '1.4',
-  },
-  bookAuthor: {
-    color: '#718096',
-    fontSize: '13px',
-    marginBottom: '10px',
-  },
-  hqBadge: {
-    fontSize: '11px',
-    backgroundColor: '#FFFBEB',
-    color: '#D97706',
-    padding: '2px 8px',
-    borderRadius: '10px',
-    border: '1px solid #FCD34D',
-    alignSelf: 'flex-start',
-    fontWeight: 'bold',
-  },
-  
-  // ランキング用
-  rankingGrid: {
-    display: 'flex',
-    gap: '15px',
-    overflowX: 'auto',
-    paddingBottom: '10px',
-    scrollSnapType: 'x mandatory',
-  },
-  rankingCard: {
-    minWidth: '120px',
-    maxWidth: '120px',
-    backgroundColor: 'white',
-    borderRadius: '8px',
-    overflow: 'hidden',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-    cursor: 'pointer',
-    border: '1px solid #f0f0f0',
-    position: 'relative',
-    flexShrink: 0,
-    scrollSnapAlign: 'start',
-  },
-  rankBadge: {
-    position: 'absolute',
-    top: '5px',
-    left: '5px',
-    width: '24px',
-    height: '24px',
-    backgroundColor: '#FFD700',
-    color: 'white',
-    borderRadius: '50%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 'bold',
-    fontSize: '12px',
-    zIndex: 10,
-    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-    textShadow: '0 1px 1px rgba(0,0,0,0.3)',
-  }
+  authorChip: { padding: '8px 16px', borderRadius: '20px', border: '1px solid #e2e8f0', backgroundColor: '#fff', color: '#4a5568', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' },
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '24px' },
+  card: { backgroundColor: 'white', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', cursor: 'pointer', transition: 'all 0.3s ease', border: '1px solid #f0f0f0', display: 'flex', flexDirection: 'column' },
+  coverImage: { height: '140px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', textAlign: 'center', color: '#1a202c', position: 'relative' },
+  coverTitle: { fontSize: '14px', fontWeight: 'bold', opacity: 0.7, maxHeight: '100%', overflow: 'hidden' },
+  cardContent: { padding: '15px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' },
+  bookTitle: { fontWeight: 'bold', fontSize: '15px', color: '#2d3748', marginBottom: '5px', lineHeight: '1.4' },
+  bookAuthor: { color: '#718096', fontSize: '13px', marginBottom: '10px' },
+  hqBadge: { fontSize: '11px', backgroundColor: '#FFFBEB', color: '#D97706', padding: '2px 8px', borderRadius: '10px', border: '1px solid #FCD34D', alignSelf: 'flex-start', fontWeight: 'bold' },
+  rankingGrid: { display: 'flex', gap: '15px', overflowX: 'auto', paddingBottom: '10px', scrollSnapType: 'x mandatory' },
+  rankingCard: { minWidth: '120px', maxWidth: '120px', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', cursor: 'pointer', border: '1px solid #f0f0f0', position: 'relative', flexShrink: 0, scrollSnapAlign: 'start' },
+  rankBadge: { position: 'absolute', top: '5px', left: '5px', width: '24px', height: '24px', backgroundColor: '#FFD700', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px', zIndex: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.2)', textShadow: '0 1px 1px rgba(0,0,0,0.3)' }
 };
 
 export default BookSearch;
