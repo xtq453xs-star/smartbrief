@@ -84,8 +84,7 @@ graph TD
     classDef external fill:#fff3e0,stroke:#ff6f00,stroke-width:2px;
     class FE,BE,n8n_bot,n8n_mail,n8n_batch,DB container;
     class User,Stripe,Aozora,OpenAI,LINE external;
-```mermaid
-class User,Stripe,Aozora,OpenAI,LINE external;
+```
 
 ## 3. Backend Design（Java / Spring WebFlux）
 
