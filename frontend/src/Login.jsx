@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const Login = ({ onLogin }) => {
-  const [viewMode, setViewMode] = useState('login');
+  const navigate = useNavigate();
+  const [viewMode, setViewMode] = useState('login'); // 'login' or 'register'
+  
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState(''); // ★追加
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -17,17 +21,20 @@ const Login = ({ onLogin }) => {
     setMessage('');
 
     try {
+      // ユーザー名は ID または Email として扱われる
       const response = await fetch('/api/v1/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password }), 
       });
 
       if (response.ok) {
         const data = await response.json();
+        // ★修正: 親コンポーネント(App.js)のonLoginを呼び出す
+        // App.js側でlocalStorageへの保存とsetTokenを行う
         onLogin(data.token);
       } else {
-        setMessage('ログインに失敗しました。ユーザー名かパスワードが違います。');
+        setMessage('ログインに失敗しました。ID/メールまたはパスワードが違います。');
       }
     } catch (error) {
       setMessage('通信エラーが発生しました。');
@@ -36,18 +43,24 @@ const Login = ({ onLogin }) => {
     }
   };
 
-  // --- 新規会員登録処理 ---
+  // --- 新規会員登録処理 (3点セット必須) ---
   const handleRegister = async (e) => {
     e.preventDefault();
     setMessage('');
 
+    // バリデーション
     if (username === password) {
       setMessage('IDと同じパスワードは使用できません。');
       return;
     }
     const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*]).{8,}$/;
     if (!strongPasswordRegex.test(password)) {
-      setMessage('パスワードは8文字以上で、大文字・小文字・数字・記号(!@#$%^&*)を全て含めてください。');
+      setMessage('パスワードは8文字以上で、大文字・小文字・数字・記号を含めてください。');
+      return;
+    }
+    // ★追加: 簡易メールチェック
+    if (!email || !email.includes('@')) {
+      setMessage('有効なメールアドレスを入力してください。');
       return;
     }
 
@@ -56,11 +69,13 @@ const Login = ({ onLogin }) => {
       const response = await fetch('/api/v1/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        // ★修正: email も送信する
+        body: JSON.stringify({ username, email, password }),
       });
       if (response.ok) {
         alert('登録が完了しました！ログインしてください。');
         setViewMode('login');
+        setPassword(''); // パスワードだけクリア
       } else {
         const errText = await response.text();
         setMessage(`登録エラー: ${errText}`);
@@ -72,41 +87,19 @@ const Login = ({ onLogin }) => {
     }
   };
 
-  // --- パスワードリセット処理 ---
-  const handleReset = (e) => {
-    e.preventDefault();
-    alert('管理者にお問い合わせください。(info@smartbrief.jp)');
-  };
-
-  // --- 共通フォーム ---
-  const renderForm = (title, buttonText, onSubmit) => (
-    <form onSubmit={onSubmit} style={styles.form}>
-      <h2 style={styles.title}>{title}</h2>
-      <div style={styles.inputGroup}>
-        <label style={styles.label}>Username</label>
-        <input 
-          type="text" 
-          value={username} 
-          onChange={(e) => setUsername(e.target.value)} 
-          style={styles.input} 
-          required 
-        />
-      </div>
-      <div style={styles.inputGroup}>
-        <label style={styles.label}>Password</label>
-        <input 
-          type="password" 
-          value={password} 
-          onChange={(e) => setPassword(e.target.value)} 
-          style={styles.input} 
-          required 
-        />
-      </div>
-      {message && <p style={styles.error}>{message}</p>}
-      <button type="submit" style={styles.button} disabled={isLoading}>
-        {isLoading ? '処理中...' : buttonText}
-      </button>
-    </form>
+  // --- 共通フォーム部品 ---
+  const renderInput = (label, type, value, setter, placeholder) => (
+    <div style={styles.inputGroup}>
+      <label style={styles.label}>{label}</label>
+      <input 
+        type={type} 
+        value={value} 
+        onChange={(e) => setter(e.target.value)} 
+        style={styles.input} 
+        placeholder={placeholder}
+        required 
+      />
+    </div>
   );
 
   // --- 法的表記：特定商取引法 ---
@@ -142,9 +135,9 @@ const Login = ({ onLogin }) => {
       <div style={{textAlign: 'left', fontSize: '14px', lineHeight: '1.6'}}>
         <p>SmartBrief（以下「当サービス」）は、ユーザーの個人情報を適切に保護します。</p>
         <h4>1. 収集する情報</h4>
-        <p>ユーザー名、パスワード、閲覧履歴、決済情報（Stripe経由）。</p>
+        <p>ユーザー名、パスワード、メールアドレス、閲覧履歴、決済情報（Stripe経由）。</p>
         <h4>2. 利用目的</h4>
-        <p>サービスの提供、本人確認、利用料金の請求、サービス改善のため。</p>
+        <p>サービスの提供、本人確認、パスワードリセット、利用料金の請求、サービス改善のため。</p>
         <h4>3. 第三者への提供</h4>
         <p>法令に基づく場合を除き、同意なく第三者に提供しません。</p>
       </div>
@@ -152,45 +145,66 @@ const Login = ({ onLogin }) => {
     </div>
   );
 
-  // --- ★修正箇所: 表示コンテンツの切り替えロジックを分離 ---
+  // --- コンテンツ切り替え ---
   const renderContent = () => {
     // 1. 法的表記モードならそれを表示
     if (legalMode === 'tokusho') return renderTokusho();
     if (legalMode === 'privacy') return renderPrivacy();
 
     // 2. 通常のログイン/登録モード
-    switch (viewMode) {
-      case 'register':
-        return (
-          <>
-            {renderForm('新規会員登録', '登録する', handleRegister)}
-            <div style={styles.footer}>
-              <button onClick={() => setViewMode('login')} style={styles.linkButton}>ログイン画面に戻る</button>
-            </div>
-          </>
-        );
-      case 'reset':
-        return (
-          <div style={styles.form}>
-            <h2 style={styles.title}>パスワード再設定</h2>
-            <p style={{marginBottom: '20px'}}>管理者にお問い合わせください。(info@smartbrief.jp)</p>
-            <button onClick={() => setViewMode('login')} style={styles.linkButton}>戻る</button>
+    if (viewMode === 'register') {
+      return (
+        <form onSubmit={handleRegister} style={styles.form}>
+          <h2 style={styles.title}>新規会員登録</h2>
+          
+          {renderInput('ユーザーID', 'text', username, setUsername, '半角英数')}
+          {/* ★追加: メールアドレス入力欄 */}
+          {renderInput('メールアドレス', 'email', email, setEmail, 'example@email.com')}
+          {renderInput('パスワード', 'password', password, setPassword, '8文字以上(英数記号混在)')}
+
+          {message && <p style={styles.error}>{message}</p>}
+
+          <button type="submit" style={styles.button} disabled={isLoading}>
+            {isLoading ? '登録中...' : 'アカウント作成'}
+          </button>
+
+          <div style={styles.footer}>
+            <button type="button" onClick={() => setViewMode('login')} style={styles.linkButton}>
+              ログイン画面に戻る
+            </button>
           </div>
-        );
-      case 'login':
-      default:
-        return (
-          <>
-            {renderForm('ログイン', 'ログイン', handleLogin)}
-            <div style={styles.footer}>
-              <p>アカウントをお持ちでないですか？</p>
-              <button onClick={() => setViewMode('register')} style={styles.linkButton}>新規会員登録</button>
-              <br />
-              <button onClick={() => setViewMode('reset')} style={styles.linkButtonSmall}>パスワードを忘れましたか？</button>
-            </div>
-          </>
-        );
+        </form>
+      );
     }
+
+    // Default: Login
+    return (
+      <form onSubmit={handleLogin} style={styles.form}>
+        <h2 style={styles.title}>ログイン</h2>
+        
+        {/* ★修正: ラベル変更 */}
+        {renderInput('ユーザーID / メールアドレス', 'text', username, setUsername, '')}
+        {renderInput('パスワード', 'password', password, setPassword, '')}
+
+        {message && <p style={styles.error}>{message}</p>}
+
+        <button type="submit" style={styles.button} disabled={isLoading}>
+          {isLoading ? '認証中...' : 'ログイン'}
+        </button>
+
+        <div style={styles.footer}>
+          <p>アカウントをお持ちでないですか？</p>
+          <button type="button" onClick={() => setViewMode('register')} style={styles.linkButton}>
+            新規会員登録
+          </button>
+          <br />
+          {/* ★修正: パスワードリセット画面へ遷移 */}
+          <button type="button" onClick={() => navigate('/forgot-password')} style={styles.linkButtonSmall}>
+            パスワードを忘れましたか？
+          </button>
+        </div>
+      </form>
+    );
   };
 
   return (
@@ -200,13 +214,10 @@ const Login = ({ onLogin }) => {
         {/* サービスロゴ・説明エリア */}
         <div style={{textAlign: 'center', marginBottom: '40px'}}>
            <h1 style={{color: '#333', fontSize: '3rem', margin: '0 0 10px 0'}}>SmartBrief</h1>
-           
-           {/* ★修正: 改行(<br />)を入れ、lineHeightで行間を調整 */}
            <p style={{color: '#666', fontSize: '1.2rem', lineHeight: '1.8', margin: '0 0 20px 0'}}>
              青空文庫をAIで超要約。<br />
              忙しいあなたのための読書体験。
            </p>
-
            <p style={{color: '#28a745', fontWeight: 'bold', fontSize: '1.1rem'}}>
              月額 ¥1,000 で読み放題
            </p>
@@ -230,17 +241,11 @@ const Login = ({ onLogin }) => {
   );
 };
 
-// スタイル定義
+// スタイル (変更なし)
 const styles = {
-  container: {
-    display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh',
-    backgroundColor: '#f0f2f5', fontFamily: 'sans-serif', padding: '20px'
-  },
+  container: { display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#f0f2f5', fontFamily: 'sans-serif', padding: '20px' },
   wrapper: { width: '100%', maxWidth: '400px' },
-  card: {
-    padding: '40px', backgroundColor: '#fff', borderRadius: '8px',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.1)', textAlign: 'center', marginBottom: '40px'
-  },
+  card: { padding: '40px', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', textAlign: 'center', marginBottom: '40px' },
   title: { marginBottom: '24px', color: '#333', fontSize: '24px', fontWeight: 'bold' },
   form: { display: 'flex', flexDirection: 'column' },
   inputGroup: { marginBottom: '16px', textAlign: 'left' },
@@ -251,7 +256,6 @@ const styles = {
   footer: { marginTop: '24px', borderTop: '1px solid #eee', paddingTop: '16px', fontSize: '14px', color: '#666' },
   linkButton: { background: 'none', border: 'none', color: '#007bff', cursor: 'pointer', textDecoration: 'underline', fontSize: '14px', padding: '5px' },
   linkButtonSmall: { background: 'none', border: 'none', color: '#6c757d', cursor: 'pointer', fontSize: '12px', marginTop: '10px' },
-  
   siteFooter: { textAlign: 'center', fontSize: '12px', color: '#666' },
   footerLink: { background: 'none', border: 'none', color: '#666', cursor: 'pointer', textDecoration: 'underline', fontSize: '12px' },
   legalContainer: { textAlign: 'left' },

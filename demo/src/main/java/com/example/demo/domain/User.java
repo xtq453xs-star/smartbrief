@@ -30,6 +30,10 @@ public class User implements UserDetails {
     private Long id;
 
     private String username;
+    
+    // ★追加: メールアドレス
+    private String email;
+    
     private String password;
 
     // 認証用ロール (カンマ区切り文字列: "ROLE_USER,ROLE_ADMIN")
@@ -39,9 +43,13 @@ public class User implements UserDetails {
     @Column("plan_type")
     private String planType;
 
-    // ★復活: LINE連携用ID (これが無いとLINE機能が動きません)
+    // LINE連携用ID
     @Column("line_user_id")
     private String lineUserId;
+
+    // Stripe顧客ID
+    @Column("stripe_customer_id")
+    private String stripeCustomerId;
 
     @Column("subscription_expires_at")
     private LocalDateTime subscriptionExpiresAt;
@@ -49,9 +57,12 @@ public class User implements UserDetails {
     @Column("created_at")
     private LocalDateTime createdAt;
     
-    // ★★★ 追加: Stripe顧客ID ★★★
-    @Column("stripe_customer_id")
-    private String stripeCustomerId;
+    // ★★★ 追加: パスワードリセット用 ★★★
+    @Column("reset_password_token")
+    private String resetPasswordToken;
+
+    @Column("reset_password_expires_at")
+    private LocalDateTime resetPasswordExpiresAt;
 
     // --- Enum定義 ---
     public enum Plan {
@@ -60,14 +71,11 @@ public class User implements UserDetails {
 
     // --- 便利なロジックメソッド ---
 
-    // Controllerが要求するプラン取得メソッド
     public String getCurrentPlan() {
         return this.planType;
     }
 
-    // プレミアム会員かどうかの判定ロジック
     public Boolean getPremium() {
-        // プランがPREMIUM かつ 期限が切れていないこと
         return Plan.PREMIUM.name().equalsIgnoreCase(this.planType)
                 && this.subscriptionExpiresAt != null
                 && this.subscriptionExpiresAt.isAfter(LocalDateTime.now());
@@ -94,9 +102,7 @@ public class User implements UserDetails {
     @Override
     public boolean isEnabled() { return true; }
     
-    // --- 手動Setter (Lombokと共存させるための特殊処理) ---
-    
-    // リストでロールをセットしたい場合のヘルパー
+    // 手動Setter (Lombokと共存させるためのヘルパー)
     public void setRolesList(List<String> rolesList) {
         if (rolesList != null && !rolesList.isEmpty()) {
             this.roles = String.join(",", rolesList);

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const Dashboard = ({ token, onLogout, onBookSelect }) => {
+// ★修正: onUpgrade, onManage を受け取る
+const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
   const navigate = useNavigate();
   // 初期表示は 'history' (ホーム)
   const [activeView, setActiveView] = useState('history');
@@ -18,6 +19,7 @@ const Dashboard = ({ token, onLogout, onBookSelect }) => {
     return colors[id % colors.length];
   };
 
+  // データ取得 (一括)
   useEffect(() => {
     setLoading(true);
     const headers = { 'Authorization': `Bearer ${token}` };
@@ -36,6 +38,7 @@ const Dashboard = ({ token, onLogout, onBookSelect }) => {
     });
   }, [token]);
 
+  // 画面ごとのタイトルと説明文
   const getViewInfo = () => {
     switch (activeView) {
       case 'history':
@@ -51,6 +54,7 @@ const Dashboard = ({ token, onLogout, onBookSelect }) => {
 
   const viewInfo = getViewInfo();
 
+  // 本のリストを表示するコンポーネント
   const BookList = ({ books, emptyMessage, isLoading }) => {
     if (isLoading) {
       return (
@@ -144,12 +148,10 @@ const Dashboard = ({ token, onLogout, onBookSelect }) => {
             🔍 蔵書検索
           </button>
           
-          {/* ★追加: ジャンル一覧ボタン */}
+          {/* ★追加: ジャンル・作家一覧へのリンク */}
           <button onClick={() => navigate('/genres')} style={styles.navItem}>
             🎨 ジャンル一覧
           </button>
-
-          {/* ★追加: 作家一覧ボタン */}
           <button onClick={() => navigate('/authors')} style={styles.navItem}>
             👥 作家一覧
           </button>
@@ -161,6 +163,18 @@ const Dashboard = ({ token, onLogout, onBookSelect }) => {
             <p style={styles.userPlan}>
               {userData?.premium ? '💎 Premium' : '🌱 Free Plan'}
             </p>
+
+            {/* ★追加: プランに応じたボタン表示 */}
+            {!userData?.premium ? (
+              <button onClick={onUpgrade} style={styles.upgradeBtnSmall}>
+                💎 Premiumに登録
+              </button>
+            ) : (
+              <button onClick={onManage} style={styles.manageBtnSmall}>
+                ⚙️ 契約の管理
+              </button>
+            )}
+
           </div>
           <button onClick={onLogout} style={styles.logoutBtn}>ログアウト</button>
         </div>
@@ -194,15 +208,22 @@ const styles = {
   logoArea: { marginBottom: '40px', textAlign: 'center' },
   logoText: { margin: 0, fontSize: '24px', letterSpacing: '2px', fontWeight: 'bold', fontFamily: 'sans-serif' },
   logoSub: { margin: 0, fontSize: '12px', opacity: 0.7, letterSpacing: '4px' },
+  
   nav: { flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' },
   navItem: { background: 'transparent', border: 'none', color: '#b0c4de', padding: '12px 15px', textAlign: 'left', fontSize: '15px', cursor: 'pointer', transition: '0.2s', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '10px' },
   navItemActive: { background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '12px 15px', textAlign: 'left', fontSize: '15px', cursor: 'default', borderRadius: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' },
   separator: { height: '1px', backgroundColor: 'rgba(255,255,255,0.1)', margin: '10px 0' },
+  
   userArea: { marginTop: 'auto', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)' },
   userCard: { marginBottom: '15px', padding: '15px', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '8px' },
   userName: { margin: '0 0 5px 0', fontSize: '14px', fontWeight: 'bold' },
   userPlan: { margin: 0, fontSize: '12px', color: '#ffd700' },
   logoutBtn: { background: 'transparent', border: '1px solid #b0c4de', color: '#b0c4de', width: '100%', padding: '8px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', transition: '0.2s' },
+
+  // ★追加: ボタンのスタイル
+  upgradeBtnSmall: { marginTop: '10px', width: '100%', padding: '8px', fontSize: '12px', backgroundColor: '#28a745', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' },
+  manageBtnSmall: { marginTop: '10px', width: '100%', padding: '8px', fontSize: '12px', backgroundColor: '#6c757d', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' },
+
   main: { flex: 1, padding: '40px 60px', overflowY: 'auto' },
   header: { marginBottom: '40px', borderBottom: '1px solid #ddd', paddingBottom: '20px' },
   pageTitle: { fontSize: '28px', margin: '0 0 10px 0', color: '#2c3e50', fontWeight: 'bold' },

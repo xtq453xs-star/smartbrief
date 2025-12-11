@@ -2,17 +2,15 @@ package com.example.demo.controller;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Arrays; // ★追加
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function; // ★追加
-import java.util.stream.Collectors; // ★追加
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -68,36 +66,31 @@ public class BookController {
     // --- 人気作家一覧API (トップ20) ---
     @GetMapping("/authors")
     public Mono<List<String>> getAuthors() { 
-        return workRepository.findTopAuthors()
-                .collectList(); 
+        return workRepository.findTopAuthors().collectList(); 
     }
     
     // --- 全作家一覧取得API ---
     @GetMapping("/authors/all")
     public Mono<List<String>> getAllAuthors() {
-        return workRepository.findAllAuthors()
-                .collectList();
+        return workRepository.findAllAuthors().collectList();
     }
     
-    // --- ★修正: ジャンル一覧API (人気順 TOP 40) ---
+    // --- ジャンル一覧API ---
     @GetMapping("/genres")
     public Mono<List<String>> getAllGenres() {
         return workRepository.findAllGenreTags()
             .collectList()
             .map(allTagsList -> {
-                // 1. 全データをメモリ上で分解・集計
                 Map<String, Long> tagCounts = allTagsList.stream()
-                    .filter(str -> str != null) // null除け
-                    .flatMap(str -> Arrays.stream(str.split(","))) // カンマで分割
-                    .map(String::trim) // 前後の空白削除
-                    .filter(s -> !s.isEmpty()) // 空文字削除
-                    .collect(Collectors.groupingBy(Function.identity(), Collectors.counting())); // 集計
-
-                // 2. 多い順にソートしてトップ40を抽出
+                    .filter(str -> str != null)
+                    .flatMap(str -> Arrays.stream(str.split(",")))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
                 return tagCounts.entrySet().stream()
-                    .sorted(Map.Entry.<String, Long>comparingByValue().reversed()) // カウント降順
-                    .limit(40) // ★ここで表示数を制限！
-                    .map(Map.Entry::getKey) // 名前だけ取り出す
+                    .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                    .limit(40)
+                    .map(Map.Entry::getKey)
                     .collect(Collectors.toList());
             });
     }
@@ -105,16 +98,8 @@ public class BookController {
     // --- 閲覧履歴取得API ---
     @GetMapping("/history")
     public Flux<BookResponse> getHistory(@RequestHeader(value = "Authorization", required = false) String authHeader) {
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return Flux.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
-        }
-        String token = authHeader.substring(7);
-        String username;
-        try {
-            username = jwtUtil.extractUsername(token);
-        } catch (Exception e) {
-            return Flux.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
-        }
+        String username = extractUser(authHeader);
+        if (username == null) return Flux.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
         
         return userRepository.findByUsername(username)
             .flatMapMany(user -> 
@@ -129,16 +114,8 @@ public class BookController {
     // --- お気に入り一覧取得API ---
     @GetMapping("/favorites")
     public Flux<BookResponse> getFavorites(@RequestHeader(value = "Authorization", required = false) String authHeader) {
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return Flux.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
-        }
-        String token = authHeader.substring(7);
-        String username;
-        try {
-            username = jwtUtil.extractUsername(token);
-        } catch (Exception e) {
-            return Flux.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
-        }
+        String username = extractUser(authHeader);
+        if (username == null) return Flux.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
 
         return userRepository.findByUsername(username)
             .flatMapMany(user -> 
@@ -150,7 +127,7 @@ public class BookController {
             );
     }
 
-    // --- 検索API (通常検索) ---
+    // --- 検索API ---
     @GetMapping("/search")
     public Flux<BookResponse> search(@RequestParam("q") String query) {
         if (query == null || query.trim().isEmpty()) return Flux.empty();
@@ -174,17 +151,18 @@ public class BookController {
         return workRepository.suggestByKeyword(searchPattern).map(BookResponse::from);
     }
 
-    // --- 詳細API (回数制限あり) ---
+    // --- ★修正: 詳細API (ここを他と同じ手動認証方式に変更！) ---
     @GetMapping("/{workId}")
     public Mono<ResponseEntity<BookResponse>> getBookDetail(
             @PathVariable Integer workId,
-            @AuthenticationPrincipal UserDetails userDetails) {
-
-        if (userDetails == null) {
+            @RequestHeader(value = "Authorization", required = false) String authHeader) { // ★修正
+        
+        String username = extractUser(authHeader);
+        if (username == null) {
             return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "ログイン情報が見つかりません"));
         }
 
-        return userRepository.findByUsername(userDetails.getUsername())
+        return userRepository.findByUsername(username)
             .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found")))
             .flatMap(user -> {
                 boolean isPremium = Boolean.TRUE.equals(user.getPremium());
@@ -209,8 +187,8 @@ public class BookController {
             @PathVariable Integer workId,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
         
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
-        String username = jwtUtil.extractUsername(authHeader.substring(7));
+        String username = extractUser(authHeader);
+        if (username == null) return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
 
         return userRepository.findByUsername(username)
             .flatMap(user -> favoriteRepository.existsByUserIdAndBookId(user.getId(), workId))
@@ -223,8 +201,8 @@ public class BookController {
             @PathVariable Integer workId,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
-        String username = jwtUtil.extractUsername(authHeader.substring(7));
+        String username = extractUser(authHeader);
+        if (username == null) return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
 
         return userRepository.findByUsername(username)
             .flatMap(user -> 
@@ -249,6 +227,22 @@ public class BookController {
                         }
                     })
             );
+    }
+
+    // --- ヘルパーメソッド: トークンからユーザー名を抽出 ---
+    private String extractUser(String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return null;
+        }
+        try {
+            String token = authHeader.substring(7);
+            if (jwtUtil.validateToken(token)) {
+                return jwtUtil.extractUsername(token);
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+        return null;
     }
 
     // 共通処理
