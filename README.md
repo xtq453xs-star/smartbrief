@@ -103,8 +103,6 @@ Web版の機能をLINEでも利用可能です。
 ---
 
 ## 📐 システム構成図
-
-```mermaid
 graph TD
     %% ユーザーからのアクセスフロー
     User((User)) -->|Browser| FE[React Frontend]
@@ -135,7 +133,9 @@ graph TD
     class FE,BE,n8n_bot,n8n_mail,n8n_batch,MySQL container;
     class User,Stripe,Aozora,OpenAI,LINE external;
 
-🧩 詳細なシステムアーキテクチャ
-より詳しい構成や設計ポリシーについては、下記ドキュメントをご覧ください。
+---
 
-➡ System Architecture (Public)
+##　🧩 詳細なシステムアーキテクチャ
+    より詳しい構成や設計ポリシーについては、下記ドキュメントをご覧ください。
+
+    ➡ System Architecture (Public)
