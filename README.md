@@ -6,7 +6,7 @@
 
 ## 📖 どんなサービス？
 **「名作を、10分で。」**
-SmartBriefは、忙しい現代人のために、青空文庫の名作文学をAIが読みやすく要約して提供する**「時短読書プラットフォーム」**です。
+SmartBriefは、忙しい現代人のために、青空文庫の名作文学をAIが読みやすく要約して提供する「時短読書プラットフォーム」です。
 
 膨大な数の作品の中から、今の気分に合った本を瞬時に検索し、雑誌のような美しいレイアウトで要約を楽しむことができます。
 また、**LINE公式アカウントとも完全連動**しており、スマホから手軽に読書体験が可能です。
@@ -19,7 +19,7 @@ SmartBriefは、忙しい現代人のために、青空文庫の名作文学をA
 
 ### 🌐 ライブデモ
 実際に稼働しているサービスをご覧いただけます。
-**URL:** [https://smartbrief.jp/](https://smartbrief.jp/)
+**URL:** [https://smartbrief.jp/](https://smartbrief.jp/)<br>
 *(※決済機能はテストモードで安全に動作確認が可能です)*
 
 ---
@@ -87,13 +87,16 @@ graph TD
     User -->|LINE App| LINE[LINE Bot]
     
     FE -->|REST API / JWT| BE[Spring Boot API]
-    LINE -->|Webhook| n8n_bot[n8n (LINE Handler)]
+    
+    %% ★修正: ラベル内のカッコを "" で囲みました
+    LINE -->|Webhook| n8n_bot["n8n (LINE Handler)"]
     n8n_bot -->|REST API| BE
     
     subgraph "Application Core (Docker)"
-        BE -->|Async Query / R2DBC| MySQL[(MySQL DB)]
+        BE -->|Async Query / R2DBC| MySQL[("MySQL DB")]
         BE -->|Subscription Status| Stripe[Stripe API]
-        BE -->|Email Request| n8n_mail[n8n (Email Service)]
+        %% ★修正: こちらも念のため囲みました
+        BE -->|Email Request| n8n_mail["n8n (Email Service)"]
     end
     
     %% 裏側のデータパイプライン
