@@ -138,3 +138,4 @@ graph TD
     
 🧩 詳細なシステムアーキテクチャ
 より詳しい構成や設計ポリシーについては、下記ドキュメントをご覧ください。
+➡ System Architecture (Public)
