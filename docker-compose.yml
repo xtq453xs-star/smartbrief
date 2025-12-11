@@ -16,15 +16,21 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    
+    # ★修正: クォーテーションを補完しました
     command:
+      - '--default-authentication-plugin=mysql_native_password'
       - '--log_bin_trust_function_creators=1'
       - '--character-set-server=utf8mb4'
       - '--collation-server=utf8mb4_unicode_ci'
+      
     ports:
       - "3306:3306"
     networks:
       n8n_data_ai_net:
         ipv4_address: 10.10.0.100
+    
+    # MySQLの健康診断
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
@@ -101,13 +107,18 @@ services:
       - SPRING_R2DBC_URL=${BILLING_DB_URL}
       - SPRING_R2DBC_USERNAME=${BILLING_DB_USER}
       - SPRING_R2DBC_PASSWORD=${BILLING_DB_PASSWORD}
+      
       - AOZORA_R2DBC_URL=${AOZORA_DB_URL}
       - AOZORA_R2DBC_USERNAME=${AOZORA_DB_USER}
       - AOZORA_R2DBC_PASSWORD=${AOZORA_DB_PASSWORD}
+
       - STRIPE_API_KEY=${STRIPE_API_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      
+      # Java側で @Value("${JWT_SECRET_KEY}") と設定したのでこれでOK
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_EXPIRATION=${JWT_EXPIRATION}
+
     depends_on:
       mysql:
         condition: service_healthy 
@@ -121,21 +132,27 @@ services:
     build:
       context: ./frontend 
       dockerfile: Dockerfile 
+    
     container_name: react_frontend
     restart: always
+    
     volumes:
       - ./frontend:/app 
       - /app/node_modules 
+    
     ports:
       - "5173:5173"
+    
     environment:
       - CHOKIDAR_USEPOLLING=true
       - WDS_SOCKET_PORT=0
+    
     depends_on:
       - billing-api
+    
     networks:
       - n8n_data_ai_net
-
+              
 networks:
   n8n_data_ai_net:
     driver: bridge
