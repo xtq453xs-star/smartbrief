@@ -47,4 +47,14 @@ public class Work {
     private String catchphrase;
 
     private String insight;
+    
+    // ★★★ 追加: 海外翻訳対応 ★★★
+    @Column("category")
+    private String category; // "AOZORA" or "TRANSLATION"
+
+    @Column("original_title")
+    private String originalTitle;
+
+    @Column("body_text")
+    private String bodyText;
 }

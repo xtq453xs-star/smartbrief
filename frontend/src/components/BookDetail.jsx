@@ -2,12 +2,15 @@ import React, { useState, useEffect } from 'react';
 
 const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
   const [book, setBook] = useState(null);
-  const [loading, setLoading] = useState(false); // 初期値false (親で制御済み)
+  const [loading, setLoading] = useState(false); 
   const [error, setError] = useState(null);
 
   // ★追加: お気に入り状態管理
   const [isFavorite, setIsFavorite] = useState(false);
   const [favLoading, setFavLoading] = useState(false);
+
+  // 表示モード (summary: あらすじ, full: 本文)
+  const [viewMode, setViewMode] = useState('summary');
 
   const getAccentColor = (id) => {
     const colors = ['#FF9A9E', '#FECFEF', '#A18CD1', '#FBC2EB', '#8FD3F4', '#84FAB0', '#E0C3FC'];
@@ -84,7 +87,7 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
       }
   };
 
-  // --- 文字列操作ロジック (デザイン用) ---
+  // --- 文字列操作ロジック ---
 
   const extractLead = (text) => {
     if (!text) return null;
@@ -142,6 +145,9 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
   
   const leadData = extractLead(rawText);
   const bodyText = extractBody(rawText);
+  
+  // 翻訳作品判定
+  const isTranslation = book.category === 'TRANSLATION';
 
   return (
     <div style={styles.container}>
@@ -155,9 +161,11 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
         {/* ヘッダー */}
         <header style={{...styles.header, background: `linear-gradient(135deg, ${accentColor}20 0%, #fff 100%)`, borderTop: `6px solid ${accentColor}`}}>
           <div style={styles.headerContent}>
-            <div style={styles.metaLabel}>CLASSIC LITERATURE</div>
+            <div style={styles.metaLabel}>
+                {isTranslation ? 'WORLD MASTERPIECE' : 'CLASSIC LITERATURE'}
+            </div>
             
-            {/* ★修正: タイトルの横にお気に入りボタンを追加 */}
+            {/* タイトルとお気に入りボタン */}
             <h1 style={styles.title}>
                 {book.title}
                 <button 
@@ -173,6 +181,10 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
                 </button>
             </h1>
             
+            {book.originalTitle && (
+                <p style={styles.originalTitle}>{book.originalTitle}</p>
+            )}
+
             <div style={styles.author}>
               <span style={styles.authorLabel}>著</span> {book.authorName}
             </div>
@@ -197,21 +209,69 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
             </section>
           )}
 
-          {/* 本文セクション */}
-          <section style={styles.section}>
-            <h2 style={styles.sectionTitle}>
-              <span style={{...styles.marker, background: accentColor}}></span>
-              あらすじ・解説
-            </h2>
-            
-            <div style={styles.textBody}>
-              {bodyText.split('\n').map((line, i) => (
-                line.trim() && (
-                  <p key={i} style={styles.paragraph}>{line}</p>
+          {/* タブ切り替えボタン */}
+          <div style={styles.tabContainer}>
+            <button 
+              style={viewMode === 'summary' ? styles.activeTab : styles.tab}
+              onClick={() => setViewMode('summary')}
+            >
+              📖 あらすじ
+            </button>
+            <button 
+              style={viewMode === 'full' ? styles.activeTab : styles.tab}
+              onClick={() => setViewMode('full')}
+            >
+              📄 本文を読む
+            </button>
+          </div>
+
+          {/* コンテンツ切り替えエリア */}
+          <div style={styles.contentBox}>
+             {viewMode === 'summary' ? (
+                // あらすじ表示
+                <section style={styles.section}>
+                   <div style={styles.textBody}>
+                     {bodyText.split('\n').map((line, i) => (
+                       line.trim() && (
+                         <p key={i} style={styles.paragraph}>{line}</p>
+                       )
+                     ))}
+                   </div>
+                </section>
+             ) : (
+                // 本文表示 (翻訳分岐)
+                isTranslation ? (
+                    <section style={styles.section}>
+                        <div style={{padding: '20px', backgroundColor: '#fdfbf7', borderRadius: '8px', border: '1px solid #f0e6d2'}}>
+                             <h3 style={{fontSize:'16px', color:'#8c7b60', marginBottom:'20px', textAlign:'center'}}>
+                                 - 本文プレビュー (AI翻訳) -
+                             </h3>
+                             <div style={styles.textBody}>
+                                 {book.bodyText ? book.bodyText.split('\n').map((line, i) => (
+                                   line.trim() && <p key={i} style={styles.paragraph}>{line}</p>
+                                 )) : <p style={{textAlign:'center', color:'#999'}}>本文データがありません。</p>}
+                             </div>
+                        </div>
+                    </section>
+                ) : (
+                    <div style={{textAlign: 'center', padding: '40px 20px', backgroundColor: '#f9f9f9', borderRadius: '8px'}}>
+                        <p style={{marginBottom: '20px'}}>青空文庫の公式サイトで全文を閲覧します。</p>
+                        {book.aozoraUrl ? (
+                          <a 
+                            href={book.aozoraUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            style={styles.amazonButton} 
+                          >
+                            青空文庫で開く ↗
+                          </a>
+                        ) : (
+                          <p style={{color: '#999'}}>本文リンクが見つかりませんでした。</p>
+                        )}
+                    </div>
                 )
-              ))}
-            </div>
-          </section>
+             )}
+          </div>
 
           <footer style={styles.bookFooter}>
             <div style={styles.footerRow}>
@@ -223,8 +283,8 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
               <span style={styles.footerValue}>{book.authorName}</span>
             </div>
             <div style={styles.footerRow}>
-              <span style={styles.footerLabel}>底本</span>
-              <span style={styles.footerValue}>青空文庫</span>
+              <span style={styles.footerLabel}>種別</span>
+              <span style={styles.footerValue}>{isTranslation ? '海外翻訳' : '青空文庫'}</span>
             </div>
           </footer>
 
@@ -272,7 +332,10 @@ const styles = {
   metaLabel: { fontSize: '12px', letterSpacing: '0.1em', color: '#718096', marginBottom: '10px', fontWeight: 'bold' },
   title: {
     fontFamily: '"Shippori Mincho", serif', fontSize: '32px', fontWeight: 'bold', color: '#1a202c', marginBottom: '15px', lineHeight: '1.4',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', // ハートを中央寄せにするため
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+  originalTitle: {
+    fontFamily: '"Helvetica Neue", Arial, sans-serif', fontSize: '16px', color: '#718096', marginBottom: '20px', fontStyle: 'italic',
   },
   author: {
     fontFamily: '"Shippori Mincho", serif', fontSize: '18px', color: '#4a5568', marginBottom: '30px',
@@ -319,8 +382,23 @@ const styles = {
     zIndex: 1,
     position: 'relative',
   },
-  textBody: { marginBottom: '40px' }, // 追加
-  paragraph: { marginBottom: '1.5em', lineHeight: '1.8', fontSize: '16px' }, // 追加
+  textBody: { marginBottom: '40px' },
+  paragraph: { marginBottom: '1.5em', lineHeight: '1.8', fontSize: '16px' },
+
+  tabContainer: {
+    display: 'flex', borderBottom: '1px solid #ddd', marginBottom: '30px',
+  },
+  tab: {
+    flex: 1, padding: '15px', border: 'none', backgroundColor: 'transparent',
+    cursor: 'pointer', fontSize: '16px', color: '#999', fontFamily: '"Shippori Mincho", serif',
+    borderBottom: '3px solid transparent', transition: '0.2s',
+  },
+  activeTab: {
+    flex: 1, padding: '15px', border: 'none', backgroundColor: 'transparent',
+    cursor: 'pointer', fontSize: '16px', color: '#2c3e50', fontFamily: '"Shippori Mincho", serif',
+    borderBottom: '3px solid #2c3e50', fontWeight: 'bold',
+  },
+  contentBox: { minHeight: '200px' },
 
   bookFooter: {
       borderTop: '1px solid #eee', paddingTop: '30px', marginTop: '50px',

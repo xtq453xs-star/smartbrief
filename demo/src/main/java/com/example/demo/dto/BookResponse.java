@@ -19,6 +19,11 @@ public class BookResponse {
     private boolean isHighQuality;
     private String genreTag;
 
+    // ★★★ 追加: 海外翻訳対応 ★★★
+    private String category;      // "AOZORA" or "TRANSLATION"
+    private String originalTitle; // 原題
+    private String bodyText;      // 翻訳本文
+
     public static BookResponse from(Work work) {
         BookResponse dto = new BookResponse();
         
@@ -26,14 +31,14 @@ public class BookResponse {
         dto.setTitle(work.getTitle());
         dto.setAuthorName(work.getAuthorName());
         dto.setAozoraUrl(work.getAozoraUrl());
-        // ★追加
+        
         dto.setGenreTag(cleanText(work.getGenreTag()));
 
         // HQフラグ
         boolean isHq = Boolean.TRUE.equals(work.getIsHq());
         dto.setHighQuality(isHq);
 
-        // ★修正: HQなら summaryHq、通常なら summary300 をセットする
+        // HQなら summaryHq、通常なら summary300 をセットする
         if (isHq) {
             dto.setSummaryText(cleanText(work.getSummaryHq()));
         } else {
@@ -43,6 +48,11 @@ public class BookResponse {
         dto.setCatchphrase(cleanText(work.getCatchphrase()));
         dto.setInsight(cleanText(work.getInsight()));
         
+        // ★★★ 追加: 海外翻訳データのセット ★★★
+        dto.setCategory(work.getCategory() != null ? work.getCategory() : "AOZORA");
+        dto.setOriginalTitle(cleanText(work.getOriginalTitle()));
+        dto.setBodyText(work.getBodyText()); // 本文は cleanText せずにそのまま渡す
+
         return dto;
     }
     

@@ -175,6 +175,14 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
               </button>
             )}
 
+            {/* ★追加: お問い合わせボタン */}
+            <a 
+              href="mailto:info@smartbrief.jp?subject=SmartBriefへのお問い合わせ" 
+              style={styles.contactBtn}
+            >
+              📩 お問い合わせ
+            </a>
+
           </div>
           <button onClick={onLogout} style={styles.logoutBtn}>ログアウト</button>
         </div>
@@ -223,7 +231,8 @@ const styles = {
   // ★追加: ボタンのスタイル
   upgradeBtnSmall: { marginTop: '10px', width: '100%', padding: '8px', fontSize: '12px', backgroundColor: '#28a745', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' },
   manageBtnSmall: { marginTop: '10px', width: '100%', padding: '8px', fontSize: '12px', backgroundColor: '#6c757d', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' },
-
+  // ★追加: お問い合わせボタンのスタイル
+  contactBtn: {display: 'block',marginTop: '10px', width: '100%', padding: '8px', fontSize: '11px',backgroundColor: 'transparent', color: '#b0c4de',border: '1px dashed #b0c4de', borderRadius: '4px',textAlign: 'center', textDecoration: 'none',cursor: 'pointer', transition: '0.2s',boxSizing: 'border-box'},
   main: { flex: 1, padding: '40px 60px', overflowY: 'auto' },
   header: { marginBottom: '40px', borderBottom: '1px solid #ddd', paddingBottom: '20px' },
   pageTitle: { fontSize: '28px', margin: '0 0 10px 0', color: '#2c3e50', fontWeight: 'bold' },
