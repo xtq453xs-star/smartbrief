@@ -54,7 +54,7 @@ SmartBrief は、青空文庫の作品を対象にした **AI要約プラット�
 
 ### 2.2 アーキテクチャ図（概略）
 
-graph TD
+ggraph TD
     %% ユーザーからのアクセスフロー
     User((User)) -->|Browser| FE[React Frontend]
     User -->|LINE App| LINE[LINE Bot]
@@ -83,6 +83,7 @@ graph TD
     classDef external fill:#fff3e0,stroke:#ff6f00,stroke-width:2px;
     class FE,BE,n8n_bot,n8n_mail,n8n_batch,DB container;
     class User,Stripe,Aozora,OpenAI,LINE external;
+
 ## 3. Backend Design（Java / Spring WebFlux）
 
 ### 3.1 認証・認可
