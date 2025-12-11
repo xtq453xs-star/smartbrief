@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
+// ★追加: 共通フッターを読み込み
+import Footer from './Footer';
 
 const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
   const [book, setBook] = useState(null);
   const [loading, setLoading] = useState(false); 
   const [error, setError] = useState(null);
 
-  // ★追加: お気に入り状態管理
+  // お気に入り状態管理
   const [isFavorite, setIsFavorite] = useState(false);
   const [favLoading, setFavLoading] = useState(false);
 
@@ -39,7 +41,7 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
             const data = await response.json();
             setBook(data);
             
-            // ★追加: お気に入り状態のチェック
+            // お気に入り状態のチェック
             checkFavoriteStatus();
         }
       } catch (err) {
@@ -49,7 +51,7 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
       }
     };
 
-    // ★追加: お気に入り確認API
+    // お気に入り確認API
     const checkFavoriteStatus = async () => {
       try {
         const res = await fetch(`/api/v1/books/${bookId}/favorite`, {
@@ -67,7 +69,7 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
     return () => { isMounted = false; };
   }, [bookId, token, onLimitReached]);
 
-  // ★追加: お気に入りトグル処理
+  // お気に入りトグル処理
   const toggleFavorite = async () => {
       if (favLoading) return;
       setFavLoading(true);
@@ -301,6 +303,9 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
 
         </div>
       </article>
+
+      {/* ★追加: 共通フッター */}
+      <Footer />
     </div>
   );
 };

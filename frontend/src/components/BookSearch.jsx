@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom'; // ★必須
+import { useSearchParams } from 'react-router-dom';
+// ★追加: Footer読み込み
+import Footer from './Footer';
 
 const BookSearch = ({ token, onBookSelect }) => {
   const [query, setQuery] = useState('');
@@ -10,44 +12,28 @@ const BookSearch = ({ token, onBookSelect }) => {
   const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // URLパラメータ取得用
   const [searchParams] = useSearchParams(); 
-
-  // ランキングデータ
   const [rankingBooks, setRankingBooks] = useState([]);
-  // 人気作家リスト
   const [authors, setAuthors] = useState([]);
 
   // --- 初期データ取得 ---
   useEffect(() => {
-    // ランキング
-    fetch('/api/v1/books/ranking', {
-      headers: { 'Authorization': `Bearer ${token}` } 
-    })
+    fetch('/api/v1/books/ranking', { headers: { 'Authorization': `Bearer ${token}` } })
     .then(res => res.ok ? res.json() : [])
     .then(data => setRankingBooks(data))
     .catch(err => console.error("Ranking fetch error", err));
 
-    // 人気作家
-    fetch('/api/v1/books/authors', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
+    fetch('/api/v1/books/authors', { headers: { 'Authorization': `Bearer ${token}` } })
     .then(res => res.ok ? res.json() : [])
     .then(data => setAuthors(data))
     .catch(err => console.error("Authors fetch error", err));
   }, [token]);
 
-  // --- 通常検索実行ロジック ---
+  // --- 通常検索実行 ---
   const executeSearch = async (searchWord) => {
     if (!searchWord || !searchWord.trim()) return;
-
-    setLoading(true);
-    setListLoading(true);
-    setError(null);
-    setSuggestions([]);     
-    setShowSuggestions(false);
-    setBooks([]);
-    setQuery(searchWord);
+    setLoading(true); setListLoading(true); setError(null);
+    setSuggestions([]); setShowSuggestions(false); setBooks([]); setQuery(searchWord);
 
     try {
       const response = await fetch(`/api/v1/books/search?q=${encodeURIComponent(searchWord)}`, {
@@ -56,71 +42,41 @@ const BookSearch = ({ token, onBookSelect }) => {
       if (!response.ok) throw new Error('検索に失敗しました');
       const data = await response.json();
       setBooks(data);
-    } catch (err) {
-      setError('検索中にエラーが発生しました。');
-    } finally {
-      setLoading(false);
-      setListLoading(false);
-    }
+    } catch (err) { setError('検索中にエラーが発生しました。'); } 
+    finally { setLoading(false); setListLoading(false); }
   };
 
-  // --- ★追加: ジャンル検索実行ロジック ---
+  // --- ジャンル検索実行 ---
   const executeGenreSearch = async (genreWord) => {
     if (!genreWord) return;
-
-    setLoading(true);
-    setListLoading(true);
-    setError(null);
-    setSuggestions([]);     
-    setShowSuggestions(false);
-    setBooks([]);
-    setQuery(`ジャンル: ${genreWord}`); // 検索窓にジャンル名を表示
+    setLoading(true); setListLoading(true); setError(null);
+    setSuggestions([]); setShowSuggestions(false); setBooks([]); setQuery(`ジャンル: ${genreWord}`);
 
     try {
-      // ジャンル検索APIを叩く
       const response = await fetch(`/api/v1/books/search/genre?q=${encodeURIComponent(genreWord)}`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (!response.ok) throw new Error('ジャンル検索に失敗しました');
       const data = await response.json();
       setBooks(data);
-    } catch (err) {
-      setError('検索中にエラーが発生しました。');
-    } finally {
-      setLoading(false);
-      setListLoading(false);
-    }
+    } catch (err) { setError('検索中にエラーが発生しました。'); } 
+    finally { setLoading(false); setListLoading(false); }
   };
 
-  // --- ★追加: URLパラメータ監視 (画面遷移時に実行) ---
+  // --- URLパラメータ監視 ---
   useEffect(() => {
-    const genreQuery = searchParams.get('genre'); // ?genre=...
-    const textQuery = searchParams.get('q');      // ?q=...
-
-    if (genreQuery) {
-      // ジャンル指定があればジャンル検索
-      executeGenreSearch(genreQuery);
-    } else if (textQuery) {
-      // キーワード指定があれば通常検索
-      executeSearch(textQuery);
-    }
+    const genreQuery = searchParams.get('genre');
+    const textQuery = searchParams.get('q');
+    if (genreQuery) executeGenreSearch(genreQuery);
+    else if (textQuery) executeSearch(textQuery);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]); // URLが変わるたびに実行
+  }, [searchParams]);
 
+  const handleSearchSubmit = (e) => { e.preventDefault(); executeSearch(query); };
 
-  // フォーム送信時のハンドラ
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    executeSearch(query);
-  };
-
-  // --- デバウンス処理 (サジェスト) ---
+  // --- デバウンス処理 ---
   useEffect(() => {
-    // "ジャンル:" で始まる場合はサジェストしない
-    if (!query.trim() || query.startsWith('ジャンル:')) {
-      setSuggestions([]);
-      return;
-    }
+    if (!query.trim() || query.startsWith('ジャンル:')) { setSuggestions([]); return; }
     const delayDebounceFn = setTimeout(async () => {
       try {
         const response = await fetch(`/api/v1/books/suggest?q=${encodeURIComponent(query)}`, {
@@ -128,8 +84,7 @@ const BookSearch = ({ token, onBookSelect }) => {
         });
         if (response.ok) {
           const data = await response.json();
-          setSuggestions(data);
-          setShowSuggestions(true);
+          setSuggestions(data); setShowSuggestions(true);
         }
       } catch (err) { console.error(err); }
     }, 300);
@@ -137,9 +92,7 @@ const BookSearch = ({ token, onBookSelect }) => {
   }, [query, token]);
 
   const handleSuggestionClick = (book) => {
-    setQuery(book.title);
-    setSuggestions([]);
-    onBookSelect(book.id);
+    setQuery(book.title); setSuggestions([]); onBookSelect(book.id);
   };
 
   const getCoverColor = (id) => {
@@ -161,7 +114,7 @@ const BookSearch = ({ token, onBookSelect }) => {
         <p style={styles.subText}>AIが要約した名作文学の世界へ</p>
       </div>
 
-      {/* 人気ランキング */}
+      {/* ランキング表示 */}
       {rankingBooks.length > 0 && (
         <div style={{marginBottom: '40px'}}>
           <h3 style={{fontSize: '18px', color: '#4a5568', marginBottom: '15px', display:'flex', alignItems:'center', gap:'8px'}}>
@@ -169,11 +122,7 @@ const BookSearch = ({ token, onBookSelect }) => {
           </h3>
           <div className="ranking-scroll" style={styles.rankingGrid}>
             {rankingBooks.map((book, index) => (
-              <div 
-                key={`rank-${book.id || index}`}
-                style={styles.rankingCard}
-                onClick={() => onBookSelect(book.id)}
-              >
+              <div key={`rank-${book.id || index}`} style={styles.rankingCard} onClick={() => onBookSelect(book.id)}>
                 <div style={styles.rankBadge}>{index + 1}</div>
                 <div style={{...styles.coverImage, height: '100px', background: `linear-gradient(135deg, ${getCoverColor(book.id || index)} 0%, #fff 100%)`}}>
                   <span style={{...styles.coverTitle, fontSize: '10px'}}>{book.title}</span>
@@ -228,11 +177,7 @@ const BookSearch = ({ token, onBookSelect }) => {
           <p style={styles.authorLabel}>👩‍🏫 人気の作家から探す:</p>
           <div style={styles.chipContainer}>
             {authors.map((author, index) => (
-              <button 
-                key={index} 
-                style={styles.authorChip}
-                onClick={() => executeSearch(author)}
-              >
+              <button key={index} style={styles.authorChip} onClick={() => executeSearch(author)}>
                 {author}
               </button>
             ))}
@@ -242,8 +187,8 @@ const BookSearch = ({ token, onBookSelect }) => {
 
       {error && <p style={styles.error}>{error}</p>}
 
-      {/* 検索結果 (グリッド) */}
-      <div className="book-grid-container">
+      {/* 検索結果 */}
+      <div className="book-grid-container" style={{marginBottom: '40px'}}>
         {listLoading ? (
           <div style={styles.loadingContainer}>
             <div style={{...styles.spinner, borderColor: '#ccc', borderTopColor: '#007bff'}}></div>
@@ -261,7 +206,6 @@ const BookSearch = ({ token, onBookSelect }) => {
                 <div style={{...styles.coverImage, background: `linear-gradient(135deg, ${getCoverColor(book.id || index)} 0%, #fff 100%)`}}>
                   <span style={styles.coverTitle}>{book.title}</span>
                 </div>
-                
                 <div style={styles.cardContent}>
                   <div style={styles.bookTitle}>{book.title}</div>
                   <div style={styles.bookAuthor}>{book.authorName}</div>
@@ -279,6 +223,9 @@ const BookSearch = ({ token, onBookSelect }) => {
           )
         )}
       </div>
+
+      {/* ★追加: 共通フッター */}
+      <Footer />
     </div>
   );
 };

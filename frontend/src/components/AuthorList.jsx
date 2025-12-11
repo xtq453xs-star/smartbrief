@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+// ★追加: Footer読み込み
+import Footer from './Footer';
 
 const AuthorList = ({ token, onBack }) => {
   const navigate = useNavigate();
@@ -21,17 +23,7 @@ const AuthorList = ({ token, onBack }) => {
     });
   }, [token]);
 
-  // 作家をクリックした時の処理
   const handleAuthorClick = (authorName) => {
-    // 検索画面へ遷移し、クエリパラメータで作家名を渡すなどの工夫が必要ですが
-    // ここではシンプルに検索画面のコンポーネントを呼び出すための準備として
-    // App.jsx側でハンドリングしやすいように設計するか、
-    // ここでは navigate('/search') して、検索窓に自動入力させるのがスマートです。
-    
-    // 今回は「検索画面へ遷移して、その作家で検索させる」ために
-    // BookSearchコンポーネントがURLパラメータを受け取れるようにするのがベストですが
-    // 手っ取り早く、state経由などで実装します。
-    // (※App.jsxの改修で /search?q=作家名 で開けるようにします)
     navigate(`/search?q=${encodeURIComponent(authorName)}`);
   };
 
@@ -56,16 +48,22 @@ const AuthorList = ({ token, onBack }) => {
           </button>
         ))}
       </div>
+
+      {/* ★追加: 共通フッター */}
+      <Footer />
     </div>
   );
 };
 
 const styles = {
-  container: { maxWidth: '900px', margin: '0 auto', padding: '20px' },
+  container: { maxWidth: '900px', margin: '0 auto', padding: '20px 20px 60px' },
   backButton: { padding: '8px 16px', backgroundColor: '#f0f0f0', border: 'none', borderRadius: '4px', cursor: 'pointer', marginBottom: '20px' },
   title: { fontSize: '28px', color: '#2c3e50', marginBottom: '5px' },
   sub: { color: '#7f8c8d', marginBottom: '30px' },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '15px' },
+  grid: { 
+    display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', 
+    gap: '15px', marginBottom: '40px' 
+  },
   authorCard: {
     backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '8px',
     padding: '20px', cursor: 'pointer', display: 'flex', flexDirection: 'column',

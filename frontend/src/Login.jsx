@@ -6,13 +6,17 @@ const Login = ({ onLogin }) => {
   const [viewMode, setViewMode] = useState('login'); // 'login' or 'register'
   
   const [username, setUsername] = useState('');
-  const [email, setEmail] = useState(''); // ★追加
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  
+  // ★追加: 規約同意のチェック状態
+  const [agreed, setAgreed] = useState(false);
+
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // 法的表記の表示モード
-  const [legalMode, setLegalMode] = useState(null); // 'tokusho' | 'privacy' | null
+  // 法的表記の表示モード: 'tokusho' | 'privacy' | 'terms' | null
+  const [legalMode, setLegalMode] = useState(null); 
 
   // --- ログイン処理 ---
   const handleLogin = async (e) => {
@@ -21,7 +25,6 @@ const Login = ({ onLogin }) => {
     setMessage('');
 
     try {
-      // ユーザー名は ID または Email として扱われる
       const response = await fetch('/api/v1/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -30,11 +33,9 @@ const Login = ({ onLogin }) => {
 
       if (response.ok) {
         const data = await response.json();
-        // ★修正: 親コンポーネント(App.js)のonLoginを呼び出す
-        // App.js側でlocalStorageへの保存とsetTokenを行う
         onLogin(data.token);
       } else {
-        setMessage('ログインに失敗しました。ID/メールまたはパスワードが違います。');
+        setMessage('書架に見当たりません。IDかパスワードをご確認ください。');
       }
     } catch (error) {
       setMessage('通信エラーが発生しました。');
@@ -43,12 +44,17 @@ const Login = ({ onLogin }) => {
     }
   };
 
-  // --- 新規会員登録処理 (3点セット必須) ---
+  // --- 新規会員登録処理 ---
   const handleRegister = async (e) => {
     e.preventDefault();
     setMessage('');
 
-    // バリデーション
+    // ★追加: 同意チェック
+    if (!agreed) {
+      setMessage('利用規約とプライバシーポリシーへの同意が必要です。');
+      return;
+    }
+
     if (username === password) {
       setMessage('IDと同じパスワードは使用できません。');
       return;
@@ -58,7 +64,6 @@ const Login = ({ onLogin }) => {
       setMessage('パスワードは8文字以上で、大文字・小文字・数字・記号を含めてください。');
       return;
     }
-    // ★追加: 簡易メールチェック
     if (!email || !email.includes('@')) {
       setMessage('有効なメールアドレスを入力してください。');
       return;
@@ -69,13 +74,13 @@ const Login = ({ onLogin }) => {
       const response = await fetch('/api/v1/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // ★修正: email も送信する
         body: JSON.stringify({ username, email, password }),
       });
       if (response.ok) {
-        alert('登録が完了しました！ログインしてください。');
+        alert('利用者カードを作成しました！ログインしてください。');
         setViewMode('login');
-        setPassword(''); // パスワードだけクリア
+        setPassword('');
+        setAgreed(false);
       } else {
         const errText = await response.text();
         setMessage(`登録エラー: ${errText}`);
@@ -105,7 +110,7 @@ const Login = ({ onLogin }) => {
   // --- 法的表記：特定商取引法 ---
   const renderTokusho = () => (
     <div style={styles.legalContainer}>
-      <h3>特定商取引法に基づく表記</h3>
+      <h3 style={styles.legalTitle}>特定商取引法に基づく表記</h3>
       <table style={styles.legalTable}>
         <tbody>
           <tr><th>販売業者</th><td>SmartBrief 運営事務局</td></tr>
@@ -114,7 +119,6 @@ const Login = ({ onLogin }) => {
           <tr><th>電話番号</th><td>080-4360-6004</td></tr>
           <tr><th>メールアドレス</th><td>info@smartbrief.jp</td></tr>
           <tr><th>販売価格</th><td>月額 1,000円 (税込)</td></tr>
-          <tr><th>商品代金以外の必要料金</th><td>インターネット接続料金</td></tr>
           <tr><th>支払方法</th><td>クレジットカード決済 (Stripe)</td></tr>
           <tr><th>支払時期</th><td>初回申込時および翌月以降毎月請求</td></tr>
           <tr><th>商品の引渡時期</th><td>決済完了後、即時利用可能</td></tr>
@@ -131,8 +135,8 @@ const Login = ({ onLogin }) => {
   // --- 法的表記：プライバシーポリシー ---
   const renderPrivacy = () => (
     <div style={styles.legalContainer}>
-      <h3>プライバシーポリシー</h3>
-      <div style={{textAlign: 'left', fontSize: '14px', lineHeight: '1.6'}}>
+      <h3 style={styles.legalTitle}>プライバシーポリシー</h3>
+      <div style={styles.legalText}>
         <p>SmartBrief（以下「当サービス」）は、ユーザーの個人情報を適切に保護します。</p>
         <h4>1. 収集する情報</h4>
         <p>ユーザー名、パスワード、メールアドレス、閲覧履歴、決済情報（Stripe経由）。</p>
@@ -145,27 +149,101 @@ const Login = ({ onLogin }) => {
     </div>
   );
 
+  // --- ★追加：利用規約 ---
+  const renderTerms = () => (
+    <div style={styles.legalContainer}>
+      <h3 style={styles.legalTitle}>利用規約</h3>
+      <div style={styles.legalText}>
+        <p>この利用規約（以下「本規約」）は、SmartBrief（以下「当サービス」）の利用条件を定めるものです。</p>
+        <h4>1. サービスの概要</h4>
+        <p>当サービスは、AIを用いて青空文庫等の作品を要約・提供するサービスです。</p>
+        <h4>2. 免責事項</h4>
+        <p>当サービスが提供する要約内容はAIによって生成されたものであり、その正確性や完全性を保証するものではありません。また、当サービスの利用により生じた損害について、運営者は一切の責任を負いません。</p>
+        <h4>3. 禁止事項</h4>
+        <p>コンテンツの無断転載、不正アクセス、その他運営者が不適切と判断する行為を禁止します。</p>
+        <h4>4. 規約の変更</h4>
+        <p>運営者は、必要と判断した場合、ユーザーへの通知なく本規約を変更することができるものとします。</p>
+      </div>
+      <button onClick={() => setLegalMode(null)} style={styles.closeButton}>閉じる</button>
+    </div>
+  );
+
+  // --- サービス概要（図書館風デザイン） ---
+  const renderServiceInfo = () => (
+    <div style={styles.infoBox}>
+      <div style={styles.infoBoxHeader}>
+        <span style={styles.infoBoxIcon}>📖</span>
+        <h3 style={styles.infoTitle}>SmartBrief 利用案内</h3>
+      </div>
+      
+      <p style={styles.infoText}>
+        当館は、青空文庫の名作文学をAIが読みやすく要約して提供する、<br/>
+        <strong>会員制「時短読書プラットフォーム」</strong>です。
+      </p>
+      
+      <div style={styles.infoSection}>
+         <strong style={styles.infoLabel}>【 蔵書・機能 】</strong>
+         <ul style={styles.infoList}>
+           <li>名作文学のAI要約（雑誌風レイアウト）の無制限閲覧</li>
+           <li>今の気分に合わせた書籍検索機能</li>
+           <li>LINE連携によるスマートフォン最適化表示</li>
+         </ul>
+      </div>
+         
+      <div style={styles.infoSection}>
+         <strong style={styles.infoLabel}>【 入館システム 】</strong>
+         <p style={styles.infoTextSmall}>
+           有料コンテンツ（要約記事全文）を含んだ会員制サイトの利用料です。<br/>
+           ※利用者登録および決済完了後、<strong>即時に</strong>プレミアム機能を提供します。
+         </p>
+      </div>
+
+      <div style={{...styles.infoSection, borderBottom: 'none', marginBottom: 0}}>
+         <strong style={styles.infoLabel}>【 料金プラン 】</strong>
+         <ul style={styles.infoList}>
+           <li style={{color: '#8d6e63', fontWeight: 'bold'}}>プレミアムプラン：¥1,000/月（税込）</li>
+           <li>フリープラン：¥0/月</li>
+         </ul>
+      </div>
+    </div>
+  );
+
   // --- コンテンツ切り替え ---
   const renderContent = () => {
-    // 1. 法的表記モードならそれを表示
     if (legalMode === 'tokusho') return renderTokusho();
     if (legalMode === 'privacy') return renderPrivacy();
+    if (legalMode === 'terms') return renderTerms(); // ★追加
 
-    // 2. 通常のログイン/登録モード
     if (viewMode === 'register') {
       return (
         <form onSubmit={handleRegister} style={styles.form}>
-          <h2 style={styles.title}>新規会員登録</h2>
+          <h2 style={styles.formTitle}>新規利用者登録</h2>
           
           {renderInput('ユーザーID', 'text', username, setUsername, '半角英数')}
-          {/* ★追加: メールアドレス入力欄 */}
           {renderInput('メールアドレス', 'email', email, setEmail, 'example@email.com')}
           {renderInput('パスワード', 'password', password, setPassword, '8文字以上(英数記号混在)')}
+
+          {/* ★追加: 同意チェックボックス */}
+          <div style={styles.checkboxContainer}>
+            <input 
+              type="checkbox" 
+              id="agreeCheck" 
+              checked={agreed} 
+              onChange={(e) => setAgreed(e.target.checked)}
+              style={styles.checkbox}
+            />
+            <label htmlFor="agreeCheck" style={styles.checkboxLabel}>
+              <button type="button" onClick={() => setLegalMode('terms')} style={styles.linkInLabel}>利用規約</button>
+              と
+              <button type="button" onClick={() => setLegalMode('privacy')} style={styles.linkInLabel}>プライバシーポリシー</button>
+              に同意する
+            </label>
+          </div>
 
           {message && <p style={styles.error}>{message}</p>}
 
           <button type="submit" style={styles.button} disabled={isLoading}>
-            {isLoading ? '登録中...' : 'アカウント作成'}
+            {isLoading ? '登録中...' : '利用者カードを作成'}
           </button>
 
           <div style={styles.footer}>
@@ -180,25 +258,23 @@ const Login = ({ onLogin }) => {
     // Default: Login
     return (
       <form onSubmit={handleLogin} style={styles.form}>
-        <h2 style={styles.title}>ログイン</h2>
+        <h2 style={styles.formTitle}>ログイン</h2>
         
-        {/* ★修正: ラベル変更 */}
         {renderInput('ユーザーID / メールアドレス', 'text', username, setUsername, '')}
         {renderInput('パスワード', 'password', password, setPassword, '')}
 
         {message && <p style={styles.error}>{message}</p>}
 
         <button type="submit" style={styles.button} disabled={isLoading}>
-          {isLoading ? '認証中...' : 'ログイン'}
+          {isLoading ? '入館する' : 'ログイン'}
         </button>
 
         <div style={styles.footer}>
-          <p>アカウントをお持ちでないですか？</p>
+          <p>初めてのご利用ですか？</p>
           <button type="button" onClick={() => setViewMode('register')} style={styles.linkButton}>
-            新規会員登録
+            新規利用者登録
           </button>
           <br />
-          {/* ★修正: パスワードリセット画面へ遷移 */}
           <button type="button" onClick={() => navigate('/forgot-password')} style={styles.linkButtonSmall}>
             パスワードを忘れましたか？
           </button>
@@ -211,29 +287,31 @@ const Login = ({ onLogin }) => {
     <div style={styles.container}>
       <div style={styles.wrapper}>
         
-        {/* サービスロゴ・説明エリア */}
-        <div style={{textAlign: 'center', marginBottom: '40px'}}>
-           <h1 style={{color: '#333', fontSize: '3rem', margin: '0 0 10px 0'}}>SmartBrief</h1>
-           <p style={{color: '#666', fontSize: '1.2rem', lineHeight: '1.8', margin: '0 0 20px 0'}}>
-             青空文庫をAIで超要約。<br />
-             忙しいあなたのための読書体験。
-           </p>
-           <p style={{color: '#28a745', fontWeight: 'bold', fontSize: '1.1rem'}}>
-             月額 ¥1,000 で読み放題
+        {/* ロゴとキャッチコピー */}
+        <div style={{textAlign: 'center', marginBottom: '30px'}}>
+           <h1 style={styles.logo}>SmartBrief</h1>
+           <p style={styles.catchphrase}>
+             時を超えた名作を、現代のスピードで。<br />
+             教養深まる、AI要約図書館。
            </p>
         </div>
 
-        {/* コンテンツエリア (カード) */}
+        {/* サービス概要（法的表記モード時は隠す） */}
+        {!legalMode && renderServiceInfo()}
+
+        {/* メインカード */}
         <div style={styles.card}>
           {renderContent()}
         </div>
 
         {/* フッターリンク */}
         <footer style={styles.siteFooter}>
+          <button onClick={() => setLegalMode('terms')} style={styles.footerLink}>利用規約</button>
+          <span style={styles.footerSeparator}>|</span>
           <button onClick={() => setLegalMode('tokusho')} style={styles.footerLink}>特定商取引法に基づく表記</button>
-          <span style={{margin: '0 10px'}}>|</span>
+          <span style={styles.footerSeparator}>|</span>
           <button onClick={() => setLegalMode('privacy')} style={styles.footerLink}>プライバシーポリシー</button>
-          <p style={{marginTop: '20px', fontSize: '12px', color: '#999'}}>© 2025 SmartBrief</p>
+          <p style={styles.copyright}>© 2025 SmartBrief Library</p>
         </footer>
 
       </div>
@@ -241,26 +319,98 @@ const Login = ({ onLogin }) => {
   );
 };
 
-// スタイル (変更なし)
+// ★デザイン：落ち着いた図書館テーマ
 const styles = {
-  container: { display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#f0f2f5', fontFamily: 'sans-serif', padding: '20px' },
-  wrapper: { width: '100%', maxWidth: '400px' },
-  card: { padding: '40px', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', textAlign: 'center', marginBottom: '40px' },
-  title: { marginBottom: '24px', color: '#333', fontSize: '24px', fontWeight: 'bold' },
+  container: { 
+    display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', 
+    backgroundColor: '#f4f1ea', // 生成り色（古紙風）
+    color: '#4a3b32', // ダークブラウン（インク色）
+    fontFamily: '"Shippori Mincho", "Yu Mincho", serif', // 明朝体で文学的に
+    padding: '40px 20px'
+  },
+  wrapper: { width: '100%', maxWidth: '460px' },
+
+  logo: { 
+    fontSize: '3.5rem', margin: '0 0 10px 0', color: '#3e2723', 
+    letterSpacing: '2px', fontWeight: 'bold', textShadow: '1px 1px 0px rgba(0,0,0,0.1)'
+  },
+  catchphrase: { 
+    color: '#6d4c41', fontSize: '1.1rem', lineHeight: '1.8', margin: '0', fontStyle: 'italic' 
+  },
+
+  // サービス概要（案内板風）
+  infoBox: { 
+    backgroundColor: '#fffcf5', // 明るいクリーム色
+    padding: '25px 30px', 
+    borderRadius: '4px', // 角を少し丸くする程度（カード風）
+    marginBottom: '25px', 
+    border: '1px solid #d7ccc8', 
+    boxShadow: '0 2px 5px rgba(62, 39, 35, 0.05)',
+    borderTop: '4px solid #8d6e63' // 背表紙のようなアクセント
+  },
+  infoBoxHeader: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '15px' },
+  infoBoxIcon: { fontSize: '24px' },
+  infoTitle: { fontSize: '18px', fontWeight: 'bold', margin: 0, color: '#4e342e' },
+  infoText: { fontSize: '14px', lineHeight: '1.8', color: '#5d4037', margin: '0 0 15px 0', textAlign: 'center' },
+  infoTextSmall: { fontSize: '13px', lineHeight: '1.6', color: '#5d4037', margin: 0 },
+  infoSection: { marginBottom: '15px', paddingBottom: '15px', borderBottom: '1px dashed #d7ccc8' },
+  infoLabel: { display: 'block', fontSize: '13px', color: '#3e2723', marginBottom: '8px', fontWeight: 'bold' },
+  infoList: { fontSize: '13px', lineHeight: '1.8', color: '#5d4037', paddingLeft: '20px', margin: '0' },
+
+  // カード（入力フォーム）
+  card: { 
+    padding: '40px', backgroundColor: '#ffffff', borderRadius: '4px', 
+    boxShadow: '0 10px 30px rgba(62, 39, 35, 0.1)', 
+    textAlign: 'center', marginBottom: '40px', border: '1px solid #efebe9'
+  },
+  formTitle: { marginBottom: '24px', color: '#3e2723', fontSize: '22px', fontWeight: 'bold', borderBottom: '2px solid #f4f1ea', display: 'inline-block', paddingBottom: '5px' },
   form: { display: 'flex', flexDirection: 'column' },
-  inputGroup: { marginBottom: '16px', textAlign: 'left' },
-  label: { display: 'block', marginBottom: '8px', color: '#666', fontSize: '14px' },
-  input: { width: '100%', padding: '10px', fontSize: '16px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' },
-  button: { width: '100%', padding: '12px', marginTop: '10px', backgroundColor: '#007bff', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer' },
-  error: { color: '#dc3545', marginBottom: '10px', fontSize: '14px' },
-  footer: { marginTop: '24px', borderTop: '1px solid #eee', paddingTop: '16px', fontSize: '14px', color: '#666' },
-  linkButton: { background: 'none', border: 'none', color: '#007bff', cursor: 'pointer', textDecoration: 'underline', fontSize: '14px', padding: '5px' },
-  linkButtonSmall: { background: 'none', border: 'none', color: '#6c757d', cursor: 'pointer', fontSize: '12px', marginTop: '10px' },
-  siteFooter: { textAlign: 'center', fontSize: '12px', color: '#666' },
-  footerLink: { background: 'none', border: 'none', color: '#666', cursor: 'pointer', textDecoration: 'underline', fontSize: '12px' },
+  
+  inputGroup: { marginBottom: '20px', textAlign: 'left' },
+  label: { display: 'block', marginBottom: '8px', color: '#6d4c41', fontSize: '14px', fontFamily: 'sans-serif', fontSize: '13px' }, // 入力ラベルは視認性のためゴシックも可だが、今回は雰囲気を優先
+  input: { 
+    width: '100%', padding: '12px', fontSize: '16px', 
+    border: '1px solid #d7ccc8', borderRadius: '2px', // 角ばらせる
+    backgroundColor: '#fffcf5', color: '#4e342e',
+    boxSizing: 'border-box', outline: 'none', transition: 'border-color 0.2s', fontFamily: 'sans-serif'
+  },
+
+  button: { 
+    width: '100%', padding: '14px', marginTop: '15px', 
+    backgroundColor: '#5d4037', // 革のような濃い茶色
+    color: '#fff', border: 'none', borderRadius: '2px', 
+    fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', 
+    boxShadow: '0 2px 4px rgba(0,0,0,0.2)', letterSpacing: '1px',
+    transition: 'background-color 0.2s'
+  },
+  
+  error: { color: '#b71c1c', marginBottom: '15px', fontSize: '14px', backgroundColor: '#ffebee', padding: '10px', borderRadius: '2px' },
+
+  footer: { marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #efebe9', fontSize: '14px', color: '#8d6e63' },
+  linkButton: { background: 'none', border: 'none', color: '#5d4037', cursor: 'pointer', textDecoration: 'underline', fontSize: '14px', padding: '5px', fontWeight: 'bold' },
+  linkButtonSmall: { background: 'none', border: 'none', color: '#a1887f', cursor: 'pointer', fontSize: '12px', marginTop: '15px', textDecoration: 'underline' },
+
+  // チェックボックス周り
+  checkboxContainer: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', margin: '10px 0 20px 0' },
+  checkbox: { cursor: 'pointer', width: '16px', height: '16px', accentColor: '#5d4037' },
+  checkboxLabel: { fontSize: '13px', color: '#5d4037' },
+  linkInLabel: { background: 'none', border: 'none', color: '#3e2723', textDecoration: 'underline', cursor: 'pointer', padding: '0 4px', fontWeight: 'bold' },
+
+  // フッター
+  siteFooter: { textAlign: 'center', fontSize: '12px', color: '#a1887f' },
+  footerLink: { background: 'none', border: 'none', color: '#8d6e63', cursor: 'pointer', textDecoration: 'none', fontSize: '12px', padding: '5px', fontFamily: '"Shippori Mincho", serif' },
+  footerSeparator: { margin: '0 5px', color: '#d7ccc8' },
+  copyright: { marginTop: '15px', fontFamily: 'sans-serif', fontSize: '11px', opacity: 0.8 },
+
+  // 法的表記エリア
   legalContainer: { textAlign: 'left' },
-  legalTable: { width: '100%', fontSize: '14px', borderCollapse: 'collapse', marginBottom: '20px' },
-  closeButton: { padding: '10px 20px', backgroundColor: '#6c757d', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }
+  legalTitle: { fontSize: '18px', borderBottom: '1px solid #d7ccc8', paddingBottom: '10px', marginBottom: '15px', color: '#3e2723' },
+  legalText: { fontSize: '13px', lineHeight: '1.8', color: '#5d4037', maxHeight: '300px', overflowY: 'auto', paddingRight: '10px' },
+  legalTable: { width: '100%', fontSize: '13px', borderCollapse: 'collapse', marginBottom: '20px', lineHeight: '1.8', color: '#4e342e' },
+  closeButton: { padding: '8px 20px', backgroundColor: '#8d6e63', color: '#fff', border: 'none', borderRadius: '2px', cursor: 'pointer', marginTop: '10px' }
 };
+
+// ホバーエフェクト（JS側で簡易実装）
+styles.button[':hover'] = { backgroundColor: '#3e2723' };
 
 export default Login;

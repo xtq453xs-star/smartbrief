@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+// ★追加: Footer読み込み
+import Footer from './Footer';
 
 const GenreList = ({ token, onBack }) => {
   const navigate = useNavigate();
@@ -7,7 +9,6 @@ const GenreList = ({ token, onBack }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // ジャンル一覧を取得
     fetch('/api/v1/books/genres', {
       headers: { 'Authorization': `Bearer ${token}` }
     })
@@ -23,7 +24,6 @@ const GenreList = ({ token, onBack }) => {
   }, [token]);
 
   const handleGenreClick = (genre) => {
-    // 検索画面へ遷移 (genreパラメータを渡す)
     navigate(`/search?genre=${encodeURIComponent(genre)}`);
   };
 
@@ -52,6 +52,9 @@ const GenreList = ({ token, onBack }) => {
           </button>
         ))}
       </div>
+
+      {/* ★追加: 共通フッター */}
+      <Footer />
     </div>
   );
 };
@@ -72,10 +75,11 @@ const styles = {
   grid: { 
     display: 'grid', 
     gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', 
-    gap: '15px' 
+    gap: '15px',
+    marginBottom: '40px' // Footerとの間隔
   },
   genreCard: {
-    backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: '30px', // 丸くする
+    backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: '30px',
     padding: '15px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
     transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
     fontSize: '15px', color: '#333', fontWeight: 'bold'
