@@ -54,7 +54,8 @@ SmartBrief は、青空文庫の作品を対象にした **AI要約プラット�
 
 ### 2.2 アーキテクチャ図（概略）
 
-ggraph TD
+```mermaid
+graph TD
     %% ユーザーからのアクセスフロー
     User((User)) -->|Browser| FE[React Frontend]
     User -->|LINE App| LINE[LINE Bot]
