@@ -134,11 +134,11 @@ graph TD
         BE -->|Email Request| n8n_mail["n8n (Email Service)"]
     end
     
-    %% 裏側のデータパイプライン (ここを修正！)
+    %% 裏側のデータパイプライン
     subgraph "Content Factory (n8n)"
         n8n_batch[n8n Batch Workflow] -->|1. Fetch Text| Gutenberg[Project Gutenberg]
-        n8n_batch -->|2. Translate| Vertex[Google Vertex AI<br/>(Gemini)]
-        n8n_batch -->|3. Summarize| OpenAI[OpenAI API<br/>(GPT-5 Nano)]
+        n8n_batch -->|2. Translate| Vertex["Google Vertex AI<br/>(Gemini)"]
+        n8n_batch -->|3. Summarize| OpenAI["OpenAI API<br/>(GPT-5 Nano)"]
         n8n_batch -->|4. Store Content| MySQL
     end
 
