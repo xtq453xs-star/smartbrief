@@ -134,17 +134,18 @@ graph TD
         BE -->|Email Request| n8n_mail["n8n (Email Service)"]
     end
     
-    %% 裏側のデータパイプライン
+    %% 裏側のデータパイプライン (ここを修正！)
     subgraph "Content Factory (n8n)"
-        n8n_batch[n8n Batch Workflow] -->|1. Fetch English Text| Gutenberg[Project Gutenberg]
-        n8n_batch -->|2. Translate & Summarize| Vertex[Google Vertex AI]
-        n8n_batch -->|3. Store Content| MySQL
+        n8n_batch[n8n Batch Workflow] -->|1. Fetch Text| Gutenberg[Project Gutenberg]
+        n8n_batch -->|2. Translate| Vertex[Google Vertex AI<br/>(Gemini)]
+        n8n_batch -->|3. Summarize| OpenAI[OpenAI API<br/>(GPT-5 Nano)]
+        n8n_batch -->|4. Store Content| MySQL
     end
 
     classDef container fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
     classDef external fill:#fff3e0,stroke:#ff6f00,stroke-width:2px;
     class FE,BE,n8n_bot,n8n_mail,n8n_batch,MySQL container;
-    class User,Stripe,Gutenberg,Vertex,LINE external;
+    class User,Stripe,Gutenberg,Vertex,OpenAI,LINE external;
 ```
     
 🧩 詳細なシステムアーキテクチャ
