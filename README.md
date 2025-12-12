@@ -64,8 +64,6 @@ Web版の機能をLINEでも利用可能です。
 
 ## 📸 画面イメージ
 
-## 📸 画面イメージ
-
 ### ▼ トップページ（ダッシュボード）
 読みかけの本へのアクセスや、お気に入り管理、多彩な検索機能が集約されたホーム画面です。
 <img src="https://github.com/user-attachments/assets/546c9128-bf0a-4205-ac0c-9bce38feed0d" width="100%" alt="トップページ" style="margin-bottom: 30px; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" />
