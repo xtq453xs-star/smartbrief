@@ -66,7 +66,7 @@ Web版の機能をLINEでも利用可能です。
 
 | トップページ（ダッシュボード） | 詳細ページ（翻訳リーダーモード） |
 | :---: | :---: |
-| <img src="https://github.com/user-attachments/assets/5e33c07d-1c07-4df2-90ec-e99d48cb73c6" width="800" alt="トップページ" /> | <img src="https://github.com/user-attachments/assets/2dc648a1-52d6-421f-bf75-73c8e662a00f" width="800" alt="詳細ページ" /> |
+| <img src="https://github.com/user-attachments/assets/546c9128-bf0a-4205-ac0c-9bce38feed0d" width="800" alt="トップページ" /> | <img src="https://github.com/user-attachments/assets/f96aa13f-e051-4a75-8eb9-994771755177" width="800" alt="詳細ページ" /> |
 
 ---
 
