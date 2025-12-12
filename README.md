@@ -1,40 +1,44 @@
-# SmartBrief (青空文庫 AI要約プラットフォーム)
+SmartBrief (青空文庫 & 世界名作 AI要約プラットフォーム)
 
-> **Note**  
-> ※本プロジェクトは、個人での商用化を目指して設計・開発・運用を行っているSaaSプロダクトです。  
-> **【2025/12 リリース済】** 認証基盤、決済、LINE連携を含む全機能が稼働中です。
+> **Note** > ※本プロジェクトは、個人での商用化を目指して設計・開発・運用を行っているSaaSプロダクトです。  
+> **【2025/12 リリース済】** 認証、決済(Stripe)、翻訳パイプライン、LINE連携を含む全機能が稼働中です。
 
 ---
 
 ## 📖 どんなサービス？
 
-**「名作を、10分で。」**  
-SmartBriefは、忙しい現代人のために、青空文庫の名作文学をAIが読みやすく要約して提供する**「時短読書プラットフォーム」**です。
+**「名作を、10分で。」** SmartBriefは、忙しい現代人のために、青空文庫や海外の名作文学をAIが読みやすく要約・翻訳して提供する**「時短読書プラットフォーム」**です。
 
 膨大な数の作品の中から、今の気分に合った本を瞬時に検索し、雑誌のような美しいレイアウトで要約を楽しむことができます。  
 また、**LINE公式アカウントとも完全連動**しており、スマホから手軽に読書体験が可能です。
 
 ### ✅ このプロジェクトで技術的に示せること
 
-- **自動化と最適化**: n8nで「収集 → 整形 → AI要約 → DB格納」のパイプラインを構築し、運用負荷の低減とAPIコストの最適化を実現。
+- **自動化コンテンツ工場**: n8nと**Google Vertex AI (Gemini)** を組み合わせ、海外作品の「収集 → 翻訳 → 要約 → DB格納」を行う完全自動パイプラインを構築。
 - **セキュアな設計**: JWT認証、環境変数による機密情報の分離、Cloudflare Tunnelを用いたポート開放なしの安全な公開運用。
 - **SaaS運用**: Stripeサブスクリプションと連携し、決済状態（無料 / プレミアム）に基づいた権限管理と解約フローを完全自動化。
-- **マルチプラットフォーム**: WebアプリとLINEボットのユーザー情報を紐付け、プラットフォームを跨いだシームレスな会員体験を提供。
+- **法規準拠**: 特定商取引法に基づく表記や利用規約を整備し、Stripeの厳格な加盟店審査を通過した実運用レベルの構成。
 
-### 🌐 ライブデモ
+### 🌐 ライブデモ & テストアカウント
 
-実際に稼働しているサービスをご覧いただけます。  
-**URL:** <https://smartbrief.jp/>  
-*(※決済機能はテストモードで安全に動作確認が可能です)*
+実際に稼働しているサービスをご覧いただけます。採用担当者様向けに、機能制限のないプレミアムアカウントをご用意しました。
+
+**URL:** <https://smartbrief.jp/>
+
+**▼ デモ用ログイン情報**
+| プラン | ユーザーID | メールアドレス | パスワード | 特徴 |
+| :--- | :--- | :--- | :--- | :--- |
+| **💎 Premium** | `guest_premium` | `guest.pre@example.com` | `Test@2025` | **翻訳全文・高品質要約**を含む、すべての機能が無制限で利用可能です。 |
+| **🌱 Free** | `guest_free` | `guest.free@example.com` | `Test@2025` | 無料プランの挙動（閲覧制限やアップグレード導線）を確認できます。 |
 
 ---
 
 ## ✨ 主な機能と特徴
 
-### 1. 読書体験を変える「AI要約 & 雑誌風UI」
+### 1. 読書体験を変える「AI要約 & 翻訳リーダー」
 
-単なるテキストの羅列ではなく、**「しっぽり明朝」**フォントや余白を活かした**雑誌風のデザイン**を採用。  
-AI（**GPT-5 Nano**）が生成した高品質な要約により、難解な古典文学も短時間で理解できます。
+- **AI要約:** **GPT-5 Nano** が生成した高品質な要約を、**「しっぽり明朝」**フォントや余白を活かした**雑誌風のデザイン**で提供。
+- **[NEW] 翻訳リーダー:** 海外のパブリックドメイン作品（O.ヘンリー等）を、**Vertex AI** が文脈を考慮して翻訳。外部サイトに飛ばず、アプリ内で完結するシームレスな読書体験を実現しました。
 
 ### 2. 自分だけの図書館「マイ・ライブラリ」
 
@@ -60,7 +64,7 @@ Web版の機能をLINEでも利用可能です。
 
 ## 📸 画面イメージ
 
-| トップページ（ダッシュボード） | 詳細ページ（要約リーダー） |
+| トップページ（ダッシュボード） | 詳細ページ（翻訳リーダーモード） |
 | :---: | :---: |
 | <img src="https://github.com/user-attachments/assets/5e33c07d-1c07-4df2-90ec-e99d48cb73c6" width="800" alt="トップページ" /> | <img src="https://github.com/user-attachments/assets/2dc648a1-52d6-421f-bf75-73c8e662a00f" width="800" alt="詳細ページ" /> |
 
@@ -70,10 +74,13 @@ Web版の機能をLINEでも利用可能です。
 
 ### 🔥 こだわりのアーキテクチャ
 
-#### 事前生成型データパイプライン (n8n)
+#### 複合AIパイプライン (n8n + Vertex AI) 
 
-- ユーザーのリクエスト毎にAI生成するのではなく、裏側で **n8n (ローコードツール)** が自動で作品を収集・要約・DB格納を行っています。
-- これにより、ユーザーへのレスポンスを**高速化**し、都度生成によるAPIコストを**最適化**しています。
+- **コンテンツ自動生成:** ユーザーのリクエスト毎に生成するのではなく、裏側の **n8n** が定期的にソースを巡回。
+- **マルチモデル活用:**
+    - 要約生成: **OpenAI (GPT-5 Nano)**
+    - 翻訳・メタデータ生成: **Google Vertex AI (Gemini)**
+- これらを使い分けることで、コストパフォーマンスと品質の最大化を実現しています。
 
 #### 完全非同期のバックエンド (Spring WebFlux)
 
@@ -96,7 +103,7 @@ Web版の機能をLINEでも利用可能です。
 | **Backend** | Java 17, Spring Boot 3 (WebFlux), Spring Security |
 | **Database** | MySQL 8.0 (Docker Container, Multi-Schema) |
 | **Infra** | Docker, Docker Compose, Cloudflare Tunnel |
-| **AI / Batch** | n8n, OpenAI API (GPT-5 Nano) |
+| **AI / Batch** | n8n, Google Vertex AI (Gemini), OpenAI API |
 | **Payment** | Stripe API (Checkout & Portal) |
 | **Messaging** | LINE Messaging API |
 
@@ -124,16 +131,16 @@ graph TD
     end
     
     %% 裏側のデータパイプライン
-    subgraph "Data Pipeline (n8n)"
-        n8n_batch[n8n Batch] -->|1. Fetch & Clean| Aozora[青空文庫 Web]
-        n8n_batch -->|2. Summarize| OpenAI[OpenAI API]
-        n8n_batch -->|3. Store Data| MySQL
+    subgraph "Content Factory (n8n)"
+        n8n_batch[n8n Batch Workflow] -->|1. Fetch English Text| Gutenberg[Project Gutenberg]
+        n8n_batch -->|2. Translate & Summarize| Vertex[Google Vertex AI]
+        n8n_batch -->|3. Store Content| MySQL
     end
 
     classDef container fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
     classDef external fill:#fff3e0,stroke:#ff6f00,stroke-width:2px;
     class FE,BE,n8n_bot,n8n_mail,n8n_batch,MySQL container;
-    class User,Stripe,Aozora,OpenAI,LINE external;
+    class User,Stripe,Gutenberg,Vertex,LINE external;
 ```
     
 🧩 詳細なシステムアーキテクチャ
