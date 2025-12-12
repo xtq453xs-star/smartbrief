@@ -11,6 +11,11 @@ import GenreList from './components/GenreList';
 import ForgotPassword from './components/ForgotPassword';
 import ResetPassword from './components/ResetPassword';
 
+// ★追加: 規約ページ用コンポーネントのインポート
+import Terms from './components/Terms';
+import Privacy from './components/Privacy';
+import Legal from './components/Legal';
+
 function AppWrapper() {
   const [token, setToken] = useState(localStorage.getItem('authToken'));
 
@@ -73,19 +78,26 @@ function AppContent({ token, setToken }) {
 
   return (
     <Routes>
+      {/* 公開ルート: ログインしてなくても見れるページ */}
       <Route path="/login" element={ !token ? <Login onLogin={(t) => setToken(t)} /> : <Navigate to="/" /> } />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      
+      {/* ★追加: Stripe審査用 公開ページ (ここに追加！) */}
+      <Route path="/terms" element={<Terms />} />
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/legal" element={<Legal />} />
 
-      {/* ★修正: Dashboardに課金/管理用の関数を渡す */}
+
+      {/* 保護されたルート: ログイン必須 */}
       <Route path="/" element={
         token ? (
           <Dashboard 
             token={token} 
             onLogout={handleLogout} 
             onBookSelect={handleBookSelect}
-            onUpgrade={handleCheckout}           // ★追加
-            onManage={handleManageSubscription}  // ★追加
+            onUpgrade={handleCheckout}
+            onManage={handleManageSubscription}
           />
         ) : <Navigate to="/login" />
       } />
