@@ -127,20 +127,30 @@ public class BookController {
             );
     }
 
-    // --- 検索API ---
+ // --- 検索API ---
     @GetMapping("/search")
-    public Flux<BookResponse> search(@RequestParam("q") String query) {
+    public Flux<BookResponse> search(
+            @RequestParam("q") String query,
+            @RequestParam(name = "size", defaultValue = "100") int size) { // sizeを受け取る
+
         if (query == null || query.trim().isEmpty()) return Flux.empty();
         String searchPattern = "%" + query.trim() + "%";
-        return workRepository.searchByKeyword(searchPattern).map(BookResponse::from);
+        
+        // ★修正: 第2引数に size を渡す
+        return workRepository.searchByKeyword(searchPattern, size).map(BookResponse::from);
     }
     
     // --- ジャンル検索API ---
     @GetMapping("/search/genre")
-    public Flux<BookResponse> searchByGenre(@RequestParam("q") String genre) {
+    public Flux<BookResponse> searchByGenre(
+            @RequestParam("q") String genre,
+            @RequestParam(name = "size", defaultValue = "100") int size) { // sizeを受け取る
+
         if (genre == null || genre.trim().isEmpty()) return Flux.empty();
         String searchPattern = "%" + genre.trim() + "%";
-        return workRepository.findByGenreTagContaining(searchPattern).map(BookResponse::from);
+        
+        // ★修正: 第2引数に size を渡す
+        return workRepository.findByGenreTagContaining(searchPattern, size).map(BookResponse::from);
     }
 
     // --- サジェスト検索API ---

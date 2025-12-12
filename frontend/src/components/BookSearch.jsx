@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'; // ★ useRefを追加
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Footer from './Footer';
 
@@ -15,12 +15,12 @@ const BookSearch = ({ token, onBookSelect }) => {
   const [rankingBooks, setRankingBooks] = useState([]);
   const [authors, setAuthors] = useState([]);
 
-  // ★追加: 横スクロール操作用のRef
+  // 横スクロール操作用のRef
   const rankingScrollRef = useRef(null);
 
   // --- 初期データ取得 ---
   useEffect(() => {
-    fetch('/api/v1/books/ranking', { headers: { 'Authorization': `Bearer ${token}` } })
+    fetch('/api/v1/books/ranking?limit=100', { headers: { 'Authorization': `Bearer ${token}` } })
     .then(res => res.ok ? res.json() : [])
     .then(data => setRankingBooks(data))
     .catch(err => console.error("Ranking fetch error", err));
@@ -38,7 +38,7 @@ const BookSearch = ({ token, onBookSelect }) => {
     setSuggestions([]); setShowSuggestions(false); setBooks([]); setQuery(searchWord);
 
     try {
-      const response = await fetch(`/api/v1/books/search?q=${encodeURIComponent(searchWord)}`, {
+      const response = await fetch(`/api/v1/books/search?q=${encodeURIComponent(searchWord)}&limit=100`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (!response.ok) throw new Error('検索に失敗しました');
@@ -55,8 +55,7 @@ const BookSearch = ({ token, onBookSelect }) => {
     setSuggestions([]); setShowSuggestions(false); setBooks([]); setQuery(`ジャンル: ${genreWord}`);
 
     try {
-      const response = await fetch(`/api/v1/books/search/genre?q=${encodeURIComponent(genreWord)}`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+      const response = await fetch(`/api/v1/books/search/genre?q=${encodeURIComponent(genreWord)}&limit=100`, {
       });
       if (!response.ok) throw new Error('ジャンル検索に失敗しました');
       const data = await response.json();
@@ -102,11 +101,11 @@ const BookSearch = ({ token, onBookSelect }) => {
     return colors[id % colors.length];
   };
 
-  // ★追加: ランキングのスクロール処理
+  // ランキングのスクロール処理
   const scrollRanking = (direction) => {
     if (rankingScrollRef.current) {
       const { current } = rankingScrollRef;
-      const scrollAmount = 300; // 一回のスクロール量
+      const scrollAmount = 300;
       if (direction === 'left') {
         current.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
       } else {
@@ -122,7 +121,6 @@ const BookSearch = ({ token, onBookSelect }) => {
         .book-card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
         .ranking-scroll::-webkit-scrollbar { display: none; }
         .ranking-scroll { -ms-overflow-style: none; scrollbar-width: none; }
-        /* ボタンのホバーエフェクト */
         .scroll-btn:hover { background-color: rgba(255,255,255,1) !important; transform: scale(1.1); }
       `}</style>
       
@@ -138,7 +136,6 @@ const BookSearch = ({ token, onBookSelect }) => {
             <span>👑</span> 今週の人気ランキング
           </h3>
           
-          {/* ★修正: スクロールボタンを含めるためのラッパー */}
           <div style={{position: 'relative'}}>
             {/* 左ボタン */}
             <button 
@@ -149,7 +146,7 @@ const BookSearch = ({ token, onBookSelect }) => {
               &#10094;
             </button>
 
-            {/* スクロール本体に ref を追加 */}
+            {/* スクロール本体 */}
             <div 
               ref={rankingScrollRef} 
               className="ranking-scroll" 
@@ -253,7 +250,17 @@ const BookSearch = ({ token, onBookSelect }) => {
                 <div style={styles.cardContent}>
                   <div style={styles.bookTitle}>{book.title}</div>
                   <div style={styles.bookAuthor}>{book.authorName}</div>
-                  {(book.highQuality || book.isHq) && <span style={styles.hqBadge}>✨ おすすめ</span>}
+                  
+                  {/* ★追加: 要約表示ロジック (AI要約 -> なければ通常要約 -> なければ準備中) */}
+                  <div style={styles.bookSummary}>
+                    {(() => {
+                      const text = book.summary_hq || book.summaryHq || book.summary_300 || book.summary300;
+                      if (!text) return <span style={{color: '#ccc'}}>要約準備中...</span>;
+                      return text.length > 50 ? text.substring(0, 50) + '...' : text;
+                    })()}
+                  </div>
+
+                  {(book.summary_hq || book.summaryHq) && <span style={styles.hqBadge}>✨ AI解説あり</span>}
                 </div>
               </div>
             ))}
@@ -307,7 +314,6 @@ const styles = {
   rankingGrid: { display: 'flex', gap: '15px', overflowX: 'auto', paddingBottom: '10px', scrollSnapType: 'x mandatory', scrollBehavior: 'smooth' },
   rankingCard: { minWidth: '120px', maxWidth: '120px', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', cursor: 'pointer', border: '1px solid #f0f0f0', position: 'relative', flexShrink: 0, scrollSnapAlign: 'start' },
   rankBadge: { position: 'absolute', top: '5px', left: '5px', width: '24px', height: '24px', backgroundColor: '#FFD700', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px', zIndex: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.2)', textShadow: '0 1px 1px rgba(0,0,0,0.3)' },
-  // ★追加: スクロールボタンのスタイル
   scrollButton: {
     position: 'absolute',
     top: '50%',
@@ -326,6 +332,19 @@ const styles = {
     fontSize: '18px',
     color: '#4a5568',
     transition: 'all 0.2s',
+  },
+  // ★追加: 要約テキストのスタイル
+  bookSummary: {
+    fontSize: '12px',
+    color: '#666',
+    marginTop: '8px',
+    marginBottom: '8px',
+    lineHeight: '1.5',
+    display: '-webkit-box',
+    WebkitLineClamp: '3', // 3行まで
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
+    height: '4.5em', // 高さ固定でレイアウト崩れを防ぐ
   }
 };
 
