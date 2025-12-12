@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react'; // ★ useRefを追加
 import { useSearchParams } from 'react-router-dom';
-// ★追加: Footer読み込み
 import Footer from './Footer';
 
 const BookSearch = ({ token, onBookSelect }) => {
@@ -15,6 +14,9 @@ const BookSearch = ({ token, onBookSelect }) => {
   const [searchParams] = useSearchParams(); 
   const [rankingBooks, setRankingBooks] = useState([]);
   const [authors, setAuthors] = useState([]);
+
+  // ★追加: 横スクロール操作用のRef
+  const rankingScrollRef = useRef(null);
 
   // --- 初期データ取得 ---
   useEffect(() => {
@@ -100,6 +102,19 @@ const BookSearch = ({ token, onBookSelect }) => {
     return colors[id % colors.length];
   };
 
+  // ★追加: ランキングのスクロール処理
+  const scrollRanking = (direction) => {
+    if (rankingScrollRef.current) {
+      const { current } = rankingScrollRef;
+      const scrollAmount = 300; // 一回のスクロール量
+      if (direction === 'left') {
+        current.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+      } else {
+        current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+      }
+    }
+  };
+
   return (
     <div style={styles.container}>
       <style>{`
@@ -107,6 +122,8 @@ const BookSearch = ({ token, onBookSelect }) => {
         .book-card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
         .ranking-scroll::-webkit-scrollbar { display: none; }
         .ranking-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+        /* ボタンのホバーエフェクト */
+        .scroll-btn:hover { background-color: rgba(255,255,255,1) !important; transform: scale(1.1); }
       `}</style>
       
       <div style={styles.headerArea}>
@@ -120,19 +137,46 @@ const BookSearch = ({ token, onBookSelect }) => {
           <h3 style={{fontSize: '18px', color: '#4a5568', marginBottom: '15px', display:'flex', alignItems:'center', gap:'8px'}}>
             <span>👑</span> 今週の人気ランキング
           </h3>
-          <div className="ranking-scroll" style={styles.rankingGrid}>
-            {rankingBooks.map((book, index) => (
-              <div key={`rank-${book.id || index}`} style={styles.rankingCard} onClick={() => onBookSelect(book.id)}>
-                <div style={styles.rankBadge}>{index + 1}</div>
-                <div style={{...styles.coverImage, height: '100px', background: `linear-gradient(135deg, ${getCoverColor(book.id || index)} 0%, #fff 100%)`}}>
-                  <span style={{...styles.coverTitle, fontSize: '10px'}}>{book.title}</span>
+          
+          {/* ★修正: スクロールボタンを含めるためのラッパー */}
+          <div style={{position: 'relative'}}>
+            {/* 左ボタン */}
+            <button 
+              className="scroll-btn"
+              onClick={() => scrollRanking('left')} 
+              style={{...styles.scrollButton, left: '-20px'}}
+            >
+              &#10094;
+            </button>
+
+            {/* スクロール本体に ref を追加 */}
+            <div 
+              ref={rankingScrollRef} 
+              className="ranking-scroll" 
+              style={styles.rankingGrid}
+            >
+              {rankingBooks.map((book, index) => (
+                <div key={`rank-${book.id || index}`} style={styles.rankingCard} onClick={() => onBookSelect(book.id)}>
+                  <div style={styles.rankBadge}>{index + 1}</div>
+                  <div style={{...styles.coverImage, height: '100px', background: `linear-gradient(135deg, ${getCoverColor(book.id || index)} 0%, #fff 100%)`}}>
+                    <span style={{...styles.coverTitle, fontSize: '10px'}}>{book.title}</span>
+                  </div>
+                  <div style={{padding: '10px'}}>
+                    <div style={{...styles.bookTitle, fontSize: '12px'}}>{book.title}</div>
+                    <div style={{...styles.bookAuthor, fontSize: '10px'}}>{book.authorName}</div>
+                  </div>
                 </div>
-                <div style={{padding: '10px'}}>
-                  <div style={{...styles.bookTitle, fontSize: '12px'}}>{book.title}</div>
-                  <div style={{...styles.bookAuthor, fontSize: '10px'}}>{book.authorName}</div>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
+
+            {/* 右ボタン */}
+            <button 
+              className="scroll-btn"
+              onClick={() => scrollRanking('right')} 
+              style={{...styles.scrollButton, right: '-20px'}}
+            >
+              &#10095;
+            </button>
           </div>
         </div>
       )}
@@ -224,7 +268,6 @@ const BookSearch = ({ token, onBookSelect }) => {
         )}
       </div>
 
-      {/* ★追加: 共通フッター */}
       <Footer />
     </div>
   );
@@ -261,9 +304,29 @@ const styles = {
   bookTitle: { fontWeight: 'bold', fontSize: '15px', color: '#2d3748', marginBottom: '5px', lineHeight: '1.4' },
   bookAuthor: { color: '#718096', fontSize: '13px', marginBottom: '10px' },
   hqBadge: { fontSize: '11px', backgroundColor: '#FFFBEB', color: '#D97706', padding: '2px 8px', borderRadius: '10px', border: '1px solid #FCD34D', alignSelf: 'flex-start', fontWeight: 'bold' },
-  rankingGrid: { display: 'flex', gap: '15px', overflowX: 'auto', paddingBottom: '10px', scrollSnapType: 'x mandatory' },
+  rankingGrid: { display: 'flex', gap: '15px', overflowX: 'auto', paddingBottom: '10px', scrollSnapType: 'x mandatory', scrollBehavior: 'smooth' },
   rankingCard: { minWidth: '120px', maxWidth: '120px', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', cursor: 'pointer', border: '1px solid #f0f0f0', position: 'relative', flexShrink: 0, scrollSnapAlign: 'start' },
-  rankBadge: { position: 'absolute', top: '5px', left: '5px', width: '24px', height: '24px', backgroundColor: '#FFD700', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px', zIndex: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.2)', textShadow: '0 1px 1px rgba(0,0,0,0.3)' }
+  rankBadge: { position: 'absolute', top: '5px', left: '5px', width: '24px', height: '24px', backgroundColor: '#FFD700', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px', zIndex: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.2)', textShadow: '0 1px 1px rgba(0,0,0,0.3)' },
+  // ★追加: スクロールボタンのスタイル
+  scrollButton: {
+    position: 'absolute',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    width: '40px',
+    height: '40px',
+    borderRadius: '50%',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    border: '1px solid #e2e8f0',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    zIndex: 20,
+    fontSize: '18px',
+    color: '#4a5568',
+    transition: 'all 0.2s',
+  }
 };
 
 export default BookSearch;
