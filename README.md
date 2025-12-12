@@ -64,9 +64,15 @@ Web版の機能をLINEでも利用可能です。
 
 ## 📸 画面イメージ
 
-| トップページ（ダッシュボード） | 詳細ページ（翻訳リーダーモード） |
-| :---: | :---: |
-| <img src="https://github.com/user-attachments/assets/546c9128-bf0a-4205-ac0c-9bce38feed0d" width="800" alt="トップページ" /> | <img src="https://github.com/user-attachments/assets/f96aa13f-e051-4a75-8eb9-994771755177" width="800" alt="詳細ページ" /> |
+## 📸 画面イメージ
+
+### ▼ トップページ（ダッシュボード）
+読みかけの本へのアクセスや、お気に入り管理、多彩な検索機能が集約されたホーム画面です。
+<img src="https://github.com/user-attachments/assets/546c9128-bf0a-4205-ac0c-9bce38feed0d" width="100%" alt="トップページ" style="margin-bottom: 30px; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" />
+
+### ▼ 詳細ページ（翻訳リーダーモード）
+海外作品専用のビューアです。青空文庫へのリンクではなく、AIが翻訳した全文をアプリ内でシームレスに読むことができます。
+<img src="https://github.com/user-attachments/assets/f96aa13f-e051-4a75-8eb9-994771755177" width="100%" alt="詳細ページ" style="border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" />
 
 ---
 
