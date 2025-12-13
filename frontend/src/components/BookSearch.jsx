@@ -11,57 +11,111 @@ const BookSearch = ({ token, onBookSelect }) => {
   const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState(null);
   
+  // --- 追加: ページネーション用ステート ---
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true); // まだ次があるか
+  const [currentSearchType, setCurrentSearchType] = useState(null); // 'text' or 'genre'
+  const [lastSearchWord, setLastSearchWord] = useState(''); // 最後に検索した言葉
+  const LIMIT = 50; // 1回の取得件数
+
   const [searchParams] = useSearchParams(); 
   const [rankingBooks, setRankingBooks] = useState([]);
   const [authors, setAuthors] = useState([]);
 
-  // 横スクロール操作用のRef
   const rankingScrollRef = useRef(null);
 
   // --- 初期データ取得 ---
   useEffect(() => {
-    fetch('/api/v1/books/ranking?limit=100', { headers: { 'Authorization': `Bearer ${token}` } })
+    fetch('/api/v1/books/ranking?limit=20', { headers: { 'Authorization': `Bearer ${token}` } })
     .then(res => res.ok ? res.json() : [])
     .then(data => setRankingBooks(data))
-    .catch(err => console.error("Ranking fetch error", err));
+    .catch(err => console.error(err));
 
     fetch('/api/v1/books/authors', { headers: { 'Authorization': `Bearer ${token}` } })
     .then(res => res.ok ? res.json() : [])
     .then(data => setAuthors(data))
-    .catch(err => console.error("Authors fetch error", err));
+    .catch(err => console.error(err));
   }, [token]);
 
-  // --- 通常検索実行 ---
-  const executeSearch = async (searchWord) => {
-    if (!searchWord || !searchWord.trim()) return;
-    setLoading(true); setListLoading(true); setError(null);
-    setSuggestions([]); setShowSuggestions(false); setBooks([]); setQuery(searchWord);
+  // --- 共通検索関数 (新規・追加読み込み対応) ---
+  const fetchBooks = async (type, word, newOffset, isAppend = false) => {
+    if (!word) return;
+    
+    // 追加読み込みでなければローディング表示、追加なら裏でリストローディング
+    if (!isAppend) {
+      setLoading(true);
+      setListLoading(true);
+      setBooks([]); // クリア
+    } else {
+      setListLoading(true);
+    }
+    
+    setError(null);
 
     try {
-      const response = await fetch(`/api/v1/books/search?q=${encodeURIComponent(searchWord)}&limit=100`, {
+      let url = '';
+      // 文量の多い順 (sort=length_desc) はバックエンド対応が必要ですが、パラメータとして送っておきます
+      const params = `limit=${LIMIT}&offset=${newOffset}&sort=length_desc`;
+
+      if (type === 'text') {
+        url = `/api/v1/books/search?q=${encodeURIComponent(word)}&${params}`;
+      } else if (type === 'genre') {
+        url = `/api/v1/books/search/genre?q=${encodeURIComponent(word)}&${params}`;
+      }
+
+      const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
+
       if (!response.ok) throw new Error('検索に失敗しました');
       const data = await response.json();
-      setBooks(data);
-    } catch (err) { setError('検索中にエラーが発生しました。'); } 
-    finally { setLoading(false); setListLoading(false); }
+
+      // データ反映
+      if (isAppend) {
+        setBooks(prev => [...prev, ...data]); // 既存リストに追加
+      } else {
+        setBooks(data); // 新規リスト
+      }
+
+      // 次があるか判定 (取得数がLIMIT未満ならもう次はない)
+      setHasMore(data.length === LIMIT);
+      
+      // ステート更新
+      setOffset(newOffset);
+      setCurrentSearchType(type);
+      setLastSearchWord(word);
+
+    } catch (err) {
+      setError('検索中にエラーが発生しました。');
+    } finally {
+      setLoading(false);
+      setListLoading(false);
+    }
   };
 
-  // --- ジャンル検索実行 ---
-  const executeGenreSearch = async (genreWord) => {
-    if (!genreWord) return;
-    setLoading(true); setListLoading(true); setError(null);
-    setSuggestions([]); setShowSuggestions(false); setBooks([]); setQuery(`ジャンル: ${genreWord}`);
+  // --- 検索実行 (新規) ---
+  const executeSearch = (searchWord) => {
+    if (!searchWord || !searchWord.trim()) return;
+    setQuery(searchWord);
+    setSuggestions([]); setShowSuggestions(false);
+    // Offset 0 で新規検索
+    fetchBooks('text', searchWord, 0, false);
+  };
 
-    try {
-      const response = await fetch(`/api/v1/books/search/genre?q=${encodeURIComponent(genreWord)}&limit=100`, {
-      });
-      if (!response.ok) throw new Error('ジャンル検索に失敗しました');
-      const data = await response.json();
-      setBooks(data);
-    } catch (err) { setError('検索中にエラーが発生しました。'); } 
-    finally { setLoading(false); setListLoading(false); }
+  // --- ジャンル検索実行 (新規) ---
+  const executeGenreSearch = (genreWord) => {
+    if (!genreWord) return;
+    setQuery(`ジャンル: ${genreWord}`);
+    setSuggestions([]); setShowSuggestions(false);
+    // Offset 0 で新規検索
+    fetchBooks('genre', genreWord, 0, false);
+  };
+
+  // --- 「もっと見る」ボタン用 ---
+  const loadMore = () => {
+    if (!hasMore || listLoading) return;
+    const nextOffset = offset + LIMIT;
+    fetchBooks(currentSearchType, lastSearchWord, nextOffset, true); // true = 追加読み込み
   };
 
   // --- URLパラメータ監視 ---
@@ -75,7 +129,7 @@ const BookSearch = ({ token, onBookSelect }) => {
 
   const handleSearchSubmit = (e) => { e.preventDefault(); executeSearch(query); };
 
-  // --- デバウンス処理 ---
+  // --- デバウンス処理 (サジェスト) ---
   useEffect(() => {
     if (!query.trim() || query.startsWith('ジャンル:')) { setSuggestions([]); return; }
     const delayDebounceFn = setTimeout(async () => {
@@ -101,16 +155,11 @@ const BookSearch = ({ token, onBookSelect }) => {
     return colors[id % colors.length];
   };
 
-  // ランキングのスクロール処理
   const scrollRanking = (direction) => {
     if (rankingScrollRef.current) {
       const { current } = rankingScrollRef;
-      const scrollAmount = 300;
-      if (direction === 'left') {
-        current.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
-      } else {
-        current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-      }
+      const amount = 300;
+      current.scrollBy({ left: direction === 'left' ? -amount : amount, behavior: 'smooth' });
     }
   };
 
@@ -122,6 +171,8 @@ const BookSearch = ({ token, onBookSelect }) => {
         .ranking-scroll::-webkit-scrollbar { display: none; }
         .ranking-scroll { -ms-overflow-style: none; scrollbar-width: none; }
         .scroll-btn:hover { background-color: rgba(255,255,255,1) !important; transform: scale(1.1); }
+        .load-more-btn:hover { background-color: #2b6cb0 !important; }
+        .load-more-btn:disabled { background-color: #cbd5e0 !important; cursor: not-allowed; }
       `}</style>
       
       <div style={styles.headerArea}>
@@ -129,29 +180,15 @@ const BookSearch = ({ token, onBookSelect }) => {
         <p style={styles.subText}>AIが要約した名作文学の世界へ</p>
       </div>
 
-      {/* ランキング表示 */}
+      {/* ランキング */}
       {rankingBooks.length > 0 && (
         <div style={{marginBottom: '40px'}}>
           <h3 style={{fontSize: '18px', color: '#4a5568', marginBottom: '15px', display:'flex', alignItems:'center', gap:'8px'}}>
             <span>👑</span> 今週の人気ランキング
           </h3>
-          
           <div style={{position: 'relative'}}>
-            {/* 左ボタン */}
-            <button 
-              className="scroll-btn"
-              onClick={() => scrollRanking('left')} 
-              style={{...styles.scrollButton, left: '-20px'}}
-            >
-              &#10094;
-            </button>
-
-            {/* スクロール本体 */}
-            <div 
-              ref={rankingScrollRef} 
-              className="ranking-scroll" 
-              style={styles.rankingGrid}
-            >
+            <button className="scroll-btn" onClick={() => scrollRanking('left')} style={{...styles.scrollButton, left: '-20px'}}>&#10094;</button>
+            <div ref={rankingScrollRef} className="ranking-scroll" style={styles.rankingGrid}>
               {rankingBooks.map((book, index) => (
                 <div key={`rank-${book.id || index}`} style={styles.rankingCard} onClick={() => onBookSelect(book.id)}>
                   <div style={styles.rankBadge}>{index + 1}</div>
@@ -165,15 +202,7 @@ const BookSearch = ({ token, onBookSelect }) => {
                 </div>
               ))}
             </div>
-
-            {/* 右ボタン */}
-            <button 
-              className="scroll-btn"
-              onClick={() => scrollRanking('right')} 
-              style={{...styles.scrollButton, right: '-20px'}}
-            >
-              &#10095;
-            </button>
+            <button className="scroll-btn" onClick={() => scrollRanking('right')} style={{...styles.scrollButton, right: '-20px'}}>&#10095;</button>
           </div>
         </div>
       )}
@@ -193,13 +222,7 @@ const BookSearch = ({ token, onBookSelect }) => {
           {showSuggestions && suggestions.length > 0 && (
             <ul style={styles.suggestionList}>
               {suggestions.map((item, index) => (
-                <li 
-                  key={item.id || index}
-                  style={styles.suggestionItem}
-                  onMouseDown={() => handleSuggestionClick(item)}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
-                >
+                <li key={item.id || index} style={styles.suggestionItem} onMouseDown={() => handleSuggestionClick(item)}>
                   <span style={styles.suggestionTitle}>{item.title}</span>
                   <span style={styles.suggestionAuthor}>{item.authorName}</span>
                 </li>
@@ -212,7 +235,7 @@ const BookSearch = ({ token, onBookSelect }) => {
         </button>
       </form>
 
-      {/* 人気作家チップス */}
+      {/* チップス */}
       {authors.length > 0 && (
         <div style={styles.authorSection}>
           <p style={styles.authorLabel}>👩‍🏫 人気の作家から探す:</p>
@@ -230,41 +253,57 @@ const BookSearch = ({ token, onBookSelect }) => {
 
       {/* 検索結果 */}
       <div className="book-grid-container" style={{marginBottom: '40px'}}>
-        {listLoading ? (
+        {loading ? (
           <div style={styles.loadingContainer}>
             <div style={{...styles.spinner, borderColor: '#ccc', borderTopColor: '#007bff'}}></div>
             <span style={{marginLeft: '10px', color: '#666'}}>本棚から探しています...</span>
           </div>
         ) : books.length > 0 ? (
-          <div style={styles.grid}>
-            {books.map((book, index) => (
-              <div 
-                key={book.id || index}
-                className="book-card"
-                style={styles.card}
-                onClick={() => onBookSelect(book.id)}
-              >
-                <div style={{...styles.coverImage, background: `linear-gradient(135deg, ${getCoverColor(book.id || index)} 0%, #fff 100%)`}}>
-                  <span style={styles.coverTitle}>{book.title}</span>
-                </div>
-                <div style={styles.cardContent}>
-                  <div style={styles.bookTitle}>{book.title}</div>
-                  <div style={styles.bookAuthor}>{book.authorName}</div>
-                  
-                  {/* ★追加: 要約表示ロジック (AI要約 -> なければ通常要約 -> なければ準備中) */}
-                  <div style={styles.bookSummary}>
-                    {(() => {
-                      const text = book.summary_hq || book.summaryHq || book.summary_300 || book.summary300;
-                      if (!text) return <span style={{color: '#ccc'}}>要約準備中...</span>;
-                      return text.length > 50 ? text.substring(0, 50) + '...' : text;
-                    })()}
+          <>
+            <div style={styles.grid}>
+              {books.map((book, index) => (
+                <div key={`${book.id}-${index}`} className="book-card" style={styles.card} onClick={() => onBookSelect(book.id)}>
+                  <div style={{...styles.coverImage, background: `linear-gradient(135deg, ${getCoverColor(book.id)} 0%, #fff 100%)`}}>
+                    <span style={styles.coverTitle}>{book.title}</span>
                   </div>
-
-                  {(book.summary_hq || book.summaryHq) && <span style={styles.hqBadge}>✨ AI解説あり</span>}
+                  <div style={styles.cardContent}>
+                    <div style={styles.bookTitle}>{book.title}</div>
+                    <div style={styles.bookAuthor}>{book.authorName}</div>
+                    <div style={styles.bookSummary}>
+                      {(() => {
+                        const text = book.summary_hq || book.summaryHq || book.summaryText || book.summary_300 || book.summary300;
+                        if (!text) return <span style={{color: '#ccc'}}>要約準備中...</span>;
+                        return text.length > 50 ? text.substring(0, 50) + '...' : text;
+                      })()}
+                    </div>
+                    {((book.summary_hq && book.summary_hq.length > 50) || book.highQuality === true) && (
+                      <span style={styles.hqBadge}>✨ おすすめ</span>
+                    )}
+                  </div>
                 </div>
+              ))}
+            </div>
+
+            {/* もっと見るボタン */}
+            {hasMore && (
+              <div style={{textAlign: 'center', marginTop: '30px'}}>
+                <button 
+                  className="load-more-btn"
+                  onClick={loadMore} 
+                  disabled={listLoading}
+                  style={styles.loadMoreButton}
+                >
+                  {listLoading ? (
+                    <span style={{display:'flex', alignItems:'center', gap:'10px'}}>
+                      <div style={{...styles.spinner, width:'15px', height:'15px'}}></div> 読み込み中...
+                    </span>
+                  ) : (
+                    'もっと見る (+50件)'
+                  )}
+                </button>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         ) : ( 
           !loading && query && !error && (
             <div style={styles.emptyState}>
@@ -280,7 +319,7 @@ const BookSearch = ({ token, onBookSelect }) => {
   );
 };
 
-// スタイル定義
+// スタイル定義 (loadMoreButtonを追加)
 const styles = {
   container: { maxWidth: '900px', margin: '0 auto', padding: '20px' },
   headerArea: { textAlign: 'center', marginBottom: '30px' },
@@ -314,37 +353,21 @@ const styles = {
   rankingGrid: { display: 'flex', gap: '15px', overflowX: 'auto', paddingBottom: '10px', scrollSnapType: 'x mandatory', scrollBehavior: 'smooth' },
   rankingCard: { minWidth: '120px', maxWidth: '120px', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', cursor: 'pointer', border: '1px solid #f0f0f0', position: 'relative', flexShrink: 0, scrollSnapAlign: 'start' },
   rankBadge: { position: 'absolute', top: '5px', left: '5px', width: '24px', height: '24px', backgroundColor: '#FFD700', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px', zIndex: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.2)', textShadow: '0 1px 1px rgba(0,0,0,0.3)' },
-  scrollButton: {
-    position: 'absolute',
-    top: '50%',
-    transform: 'translateY(-50%)',
-    width: '40px',
-    height: '40px',
-    borderRadius: '50%',
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    border: '1px solid #e2e8f0',
-    boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+  scrollButton: { position: 'absolute', top: '50%', transform: 'translateY(-50%)', width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'rgba(255, 255, 255, 0.8)', border: '1px solid #e2e8f0', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 20, fontSize: '18px', color: '#4a5568', transition: 'all 0.2s' },
+  bookSummary: { fontSize: '12px', color: '#666', marginTop: '8px', marginBottom: '8px', lineHeight: '1.5', display: '-webkit-box', WebkitLineClamp: '3', WebkitBoxOrient: 'vertical', overflow: 'hidden', height: '4.5em' },
+  
+  // ★ 追加
+  loadMoreButton: {
+    padding: '12px 40px',
+    backgroundColor: '#3182ce',
+    color: 'white',
+    border: 'none',
+    borderRadius: '30px',
+    fontSize: '16px',
+    fontWeight: 'bold',
     cursor: 'pointer',
-    zIndex: 20,
-    fontSize: '18px',
-    color: '#4a5568',
     transition: 'all 0.2s',
-  },
-  // ★追加: 要約テキストのスタイル
-  bookSummary: {
-    fontSize: '12px',
-    color: '#666',
-    marginTop: '8px',
-    marginBottom: '8px',
-    lineHeight: '1.5',
-    display: '-webkit-box',
-    WebkitLineClamp: '3', // 3行まで
-    WebkitBoxOrient: 'vertical',
-    overflow: 'hidden',
-    height: '4.5em', // 高さ固定でレイアウト崩れを防ぐ
+    boxShadow: '0 4px 6px rgba(49, 130, 206, 0.3)'
   }
 };
 

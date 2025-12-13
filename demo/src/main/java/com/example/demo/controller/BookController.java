@@ -127,30 +127,52 @@ public class BookController {
             );
     }
 
- // --- 検索API ---
+    // --- 検索API (ページネーション・ソート対応版) ---
+    // ★修正: size -> limit に変更し、offsetとsortを追加
     @GetMapping("/search")
     public Flux<BookResponse> search(
             @RequestParam("q") String query,
-            @RequestParam(name = "size", defaultValue = "100") int size) { // sizeを受け取る
+            @RequestParam(name = "limit", defaultValue = "50") int limit,   // size -> limit
+            @RequestParam(name = "offset", defaultValue = "0") int offset,   // 追加: オフセット
+            @RequestParam(name = "sort", required = false) String sort) {    // 追加: ソート順
 
         if (query == null || query.trim().isEmpty()) return Flux.empty();
         String searchPattern = "%" + query.trim() + "%";
         
-        // ★修正: 第2引数に size を渡す
-        return workRepository.searchByKeyword(searchPattern, size).map(BookResponse::from);
+        // ソート指定が "length_desc" (文字数多い順) の場合
+        if ("length_desc".equals(sort)) {
+            // 文字数順メソッドを呼び出し
+            return workRepository.searchByKeywordOrderByLength(searchPattern, limit, offset)
+                    .map(BookResponse::from);
+        }
+
+        // 通常検索 (offset対応)
+        return workRepository.searchByKeyword(searchPattern, limit, offset)
+                .map(BookResponse::from);
     }
     
-    // --- ジャンル検索API ---
+    // --- ジャンル検索API (ページネーション・ソート対応版) ---
+    // ★修正: size -> limit に変更し、offsetとsortを追加
     @GetMapping("/search/genre")
     public Flux<BookResponse> searchByGenre(
             @RequestParam("q") String genre,
-            @RequestParam(name = "size", defaultValue = "100") int size) { // sizeを受け取る
+            @RequestParam(name = "limit", defaultValue = "50") int limit,   // size -> limit
+            @RequestParam(name = "offset", defaultValue = "0") int offset,   // 追加
+            @RequestParam(name = "sort", required = false) String sort) {    // 追加
 
         if (genre == null || genre.trim().isEmpty()) return Flux.empty();
         String searchPattern = "%" + genre.trim() + "%";
         
-        // ★修正: 第2引数に size を渡す
-        return workRepository.findByGenreTagContaining(searchPattern, size).map(BookResponse::from);
+        // ソート指定が "length_desc" (文字数多い順) の場合
+        if ("length_desc".equals(sort)) {
+            // 文字数順メソッドを呼び出し
+            return workRepository.findByGenreTagContainingOrderByLength(searchPattern, limit, offset)
+                    .map(BookResponse::from);
+        }
+        
+        // 通常検索 (offset対応)
+        return workRepository.findByGenreTagContaining(searchPattern, limit, offset)
+                .map(BookResponse::from);
     }
 
     // --- サジェスト検索API ---
@@ -161,11 +183,11 @@ public class BookController {
         return workRepository.suggestByKeyword(searchPattern).map(BookResponse::from);
     }
 
-    // --- ★修正: 詳細API (ここを他と同じ手動認証方式に変更！) ---
+    // --- 詳細API ---
     @GetMapping("/{workId}")
     public Mono<ResponseEntity<BookResponse>> getBookDetail(
             @PathVariable Integer workId,
-            @RequestHeader(value = "Authorization", required = false) String authHeader) { // ★修正
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
         
         String username = extractUser(authHeader);
         if (username == null) {
