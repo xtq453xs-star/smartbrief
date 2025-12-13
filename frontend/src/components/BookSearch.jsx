@@ -11,12 +11,16 @@ const BookSearch = ({ token, onBookSelect }) => {
   const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // --- 追加: ページネーション用ステート ---
+  // --- ページネーション用ステート ---
   const [offset, setOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(true); // まだ次があるか
+  const [hasMore, setHasMore] = useState(true);
   const [currentSearchType, setCurrentSearchType] = useState(null); // 'text' or 'genre'
-  const [lastSearchWord, setLastSearchWord] = useState(''); // 最後に検索した言葉
-  const LIMIT = 50; // 1回の取得件数
+  const [lastSearchWord, setLastSearchWord] = useState('');
+  
+  // ★ 追加: 現在のタブステート ('all' | 'translation')
+  const [activeTab, setActiveTab] = useState('all'); 
+
+  const LIMIT = 50; 
 
   const [searchParams] = useSearchParams(); 
   const [rankingBooks, setRankingBooks] = useState([]);
@@ -37,15 +41,14 @@ const BookSearch = ({ token, onBookSelect }) => {
     .catch(err => console.error(err));
   }, [token]);
 
-  // --- 共通検索関数 (新規・追加読み込み対応) ---
+  // --- 共通検索関数 ---
   const fetchBooks = async (type, word, newOffset, isAppend = false) => {
     if (!word) return;
     
-    // 追加読み込みでなければローディング表示、追加なら裏でリストローディング
     if (!isAppend) {
       setLoading(true);
       setListLoading(true);
-      setBooks([]); // クリア
+      setBooks([]);
     } else {
       setListLoading(true);
     }
@@ -54,7 +57,6 @@ const BookSearch = ({ token, onBookSelect }) => {
 
     try {
       let url = '';
-      // 文量の多い順 (sort=length_desc) はバックエンド対応が必要ですが、パラメータとして送っておきます
       const params = `limit=${LIMIT}&offset=${newOffset}&sort=length_desc`;
 
       if (type === 'text') {
@@ -70,17 +72,13 @@ const BookSearch = ({ token, onBookSelect }) => {
       if (!response.ok) throw new Error('検索に失敗しました');
       const data = await response.json();
 
-      // データ反映
       if (isAppend) {
-        setBooks(prev => [...prev, ...data]); // 既存リストに追加
+        setBooks(prev => [...prev, ...data]);
       } else {
-        setBooks(data); // 新規リスト
+        setBooks(data);
       }
 
-      // 次があるか判定 (取得数がLIMIT未満ならもう次はない)
       setHasMore(data.length === LIMIT);
-      
-      // ステート更新
       setOffset(newOffset);
       setCurrentSearchType(type);
       setLastSearchWord(word);
@@ -93,32 +91,44 @@ const BookSearch = ({ token, onBookSelect }) => {
     }
   };
 
-  // --- 検索実行 (新規) ---
   const executeSearch = (searchWord) => {
     if (!searchWord || !searchWord.trim()) return;
     setQuery(searchWord);
     setSuggestions([]); setShowSuggestions(false);
-    // Offset 0 で新規検索
+    setActiveTab('all'); // タブをALLに戻す
     fetchBooks('text', searchWord, 0, false);
   };
 
-  // --- ジャンル検索実行 (新規) ---
   const executeGenreSearch = (genreWord) => {
     if (!genreWord) return;
-    setQuery(`ジャンル: ${genreWord}`);
+    // クエリ欄には入れない、または専用表示にする
+    setQuery(''); 
     setSuggestions([]); setShowSuggestions(false);
-    // Offset 0 で新規検索
     fetchBooks('genre', genreWord, 0, false);
   };
 
-  // --- 「もっと見る」ボタン用 ---
+  // --- ★タブ切り替えハンドラ ---
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    if (tab === 'translation') {
+        // 「翻訳」または「海外」というタグで検索をかける
+        // ※DBの genre_tag に「翻訳」や「海外文学」が入っている前提
+        executeGenreSearch('翻訳');
+    } else {
+        // ALLに戻った時はリセットするか、デフォルト検索（例えば空検索できないので何もしないかランキング表示）
+        // ここでは便宜上リセット
+        setBooks([]);
+        setHasMore(false);
+        setQuery('');
+    }
+  };
+
   const loadMore = () => {
     if (!hasMore || listLoading) return;
     const nextOffset = offset + LIMIT;
-    fetchBooks(currentSearchType, lastSearchWord, nextOffset, true); // true = 追加読み込み
+    fetchBooks(currentSearchType, lastSearchWord, nextOffset, true);
   };
 
-  // --- URLパラメータ監視 ---
   useEffect(() => {
     const genreQuery = searchParams.get('genre');
     const textQuery = searchParams.get('q');
@@ -129,7 +139,6 @@ const BookSearch = ({ token, onBookSelect }) => {
 
   const handleSearchSubmit = (e) => { e.preventDefault(); executeSearch(query); };
 
-  // --- デバウンス処理 (サジェスト) ---
   useEffect(() => {
     if (!query.trim() || query.startsWith('ジャンル:')) { setSuggestions([]); return; }
     const delayDebounceFn = setTimeout(async () => {
@@ -181,7 +190,7 @@ const BookSearch = ({ token, onBookSelect }) => {
       </div>
 
       {/* ランキング */}
-      {rankingBooks.length > 0 && (
+      {rankingBooks.length > 0 && activeTab === 'all' && !query && (
         <div style={{marginBottom: '40px'}}>
           <h3 style={{fontSize: '18px', color: '#4a5568', marginBottom: '15px', display:'flex', alignItems:'center', gap:'8px'}}>
             <span>👑</span> 今週の人気ランキング
@@ -235,8 +244,24 @@ const BookSearch = ({ token, onBookSelect }) => {
         </button>
       </form>
 
-      {/* チップス */}
-      {authors.length > 0 && (
+      {/* ★ タブ切り替えボタン */}
+      <div style={styles.tabWrapper}>
+          <button 
+            style={activeTab === 'all' ? styles.activeTabBtn : styles.tabBtn} 
+            onClick={() => handleTabChange('all')}
+          >
+            すべて
+          </button>
+          <button 
+            style={activeTab === 'translation' ? styles.activeTabBtn : styles.tabBtn} 
+            onClick={() => handleTabChange('translation')}
+          >
+            🌍 海外翻訳作品
+          </button>
+      </div>
+
+      {/* チップス (ALLタブの時だけ表示) */}
+      {activeTab === 'all' && authors.length > 0 && (
         <div style={styles.authorSection}>
           <p style={styles.authorLabel}>👩‍🏫 人気の作家から探す:</p>
           <div style={styles.chipContainer}>
@@ -270,13 +295,15 @@ const BookSearch = ({ token, onBookSelect }) => {
                     <div style={styles.bookTitle}>{book.title}</div>
                     <div style={styles.bookAuthor}>{book.authorName}</div>
                     <div style={styles.bookSummary}>
+                      {/* ★修正: summaryText を優先表示 */}
                       {(() => {
-                        const text = book.summary_hq || book.summaryHq || book.summaryText || book.summary_300 || book.summary300;
+                        const text = book.summaryText || book.summary_hq || book.summary_300;
                         if (!text) return <span style={{color: '#ccc'}}>要約準備中...</span>;
                         return text.length > 50 ? text.substring(0, 50) + '...' : text;
                       })()}
                     </div>
-                    {((book.summary_hq && book.summary_hq.length > 50) || book.highQuality === true) && (
+                    {/* isHighQuality (boolean) が true ならバッジ表示 */}
+                    {book.highQuality && (
                       <span style={styles.hqBadge}>✨ おすすめ</span>
                     )}
                   </div>
@@ -284,7 +311,6 @@ const BookSearch = ({ token, onBookSelect }) => {
               ))}
             </div>
 
-            {/* もっと見るボタン */}
             {hasMore && (
               <div style={{textAlign: 'center', marginTop: '30px'}}>
                 <button 
@@ -305,7 +331,7 @@ const BookSearch = ({ token, onBookSelect }) => {
             )}
           </>
         ) : ( 
-          !loading && query && !error && (
+          !loading && (query || activeTab === 'translation') && !error && (
             <div style={styles.emptyState}>
               <p style={styles.noResult}>本が見つかりませんでした 😢</p>
               <p style={{fontSize: '14px'}}>別のキーワードを試してみてください</p>
@@ -319,7 +345,7 @@ const BookSearch = ({ token, onBookSelect }) => {
   );
 };
 
-// スタイル定義 (loadMoreButtonを追加)
+// スタイル定義
 const styles = {
   container: { maxWidth: '900px', margin: '0 auto', padding: '20px' },
   headerArea: { textAlign: 'center', marginBottom: '30px' },
@@ -355,20 +381,12 @@ const styles = {
   rankBadge: { position: 'absolute', top: '5px', left: '5px', width: '24px', height: '24px', backgroundColor: '#FFD700', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px', zIndex: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.2)', textShadow: '0 1px 1px rgba(0,0,0,0.3)' },
   scrollButton: { position: 'absolute', top: '50%', transform: 'translateY(-50%)', width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'rgba(255, 255, 255, 0.8)', border: '1px solid #e2e8f0', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 20, fontSize: '18px', color: '#4a5568', transition: 'all 0.2s' },
   bookSummary: { fontSize: '12px', color: '#666', marginTop: '8px', marginBottom: '8px', lineHeight: '1.5', display: '-webkit-box', WebkitLineClamp: '3', WebkitBoxOrient: 'vertical', overflow: 'hidden', height: '4.5em' },
+  loadMoreButton: { padding: '12px 40px', backgroundColor: '#3182ce', color: 'white', border: 'none', borderRadius: '30px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 6px rgba(49, 130, 206, 0.3)' },
   
-  // ★ 追加
-  loadMoreButton: {
-    padding: '12px 40px',
-    backgroundColor: '#3182ce',
-    color: 'white',
-    border: 'none',
-    borderRadius: '30px',
-    fontSize: '16px',
-    fontWeight: 'bold',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-    boxShadow: '0 4px 6px rgba(49, 130, 206, 0.3)'
-  }
+  // ★追加: タブUI用
+  tabWrapper: { display: 'flex', justifyContent: 'center', gap: '15px', marginBottom: '30px' },
+  tabBtn: { padding: '10px 20px', borderRadius: '25px', border: '1px solid #e2e8f0', backgroundColor: '#fff', color: '#718096', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s' },
+  activeTabBtn: { padding: '10px 20px', borderRadius: '25px', border: '1px solid #3182ce', backgroundColor: '#ebf8ff', color: '#3182ce', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(49,130,206,0.1)' }
 };
 
 export default BookSearch;
