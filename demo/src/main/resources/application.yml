@@ -24,10 +24,14 @@ spring:
 # ----------------------------------------------------
 aozora:
   r2dbc:
-    
     url: ${AOZORA_R2DBC_URL}
     username: ${AOZORA_R2DBC_USERNAME}
     password: ${AOZORA_R2DBC_PASSWORD}
+    # ★★★ ここを追加！ ★★★
+    pool:
+      initial-size: 5
+      max-size: 20       # これで20個以上は作らせない！
+      max-idle-time: 5m  # 5分放置したら切断
 
 # ----------------------------------------------------
 # 3. Stripe & JWT

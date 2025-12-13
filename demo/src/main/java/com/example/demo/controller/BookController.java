@@ -21,10 +21,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import com.example.demo.domain.User; // ★追加
+import com.example.demo.domain.User;
 import com.example.demo.domain.UserBookHistory;
 import com.example.demo.domain.UserFavorite;
-import com.example.demo.dto.BookResponse;
+import com.example.demo.domain.Work;
+import com.example.demo.repository.BookResponse;
 import com.example.demo.repository.UserBookHistoryRepository;
 import com.example.demo.repository.UserFavoriteRepository;
 import com.example.demo.repository.UserRepository;
@@ -47,20 +48,16 @@ public class BookController {
     private final JwtUtil jwtUtil;
     private final UserFavoriteRepository favoriteRepository;
 
-    // --- ★共通ヘルパー: Authヘッダーからプレミアム状態を判定 ---
+    // --- 共通ヘルパー: Authヘッダーからプレミアム状態を判定 ---
     private Mono<Boolean> checkPremiumStatus(String authHeader) {
         String username = extractUser(authHeader);
         if (username == null) {
-            return Mono.just(false); // 未ログインユーザーは無料会員扱い
+            return Mono.just(false);
         }
         return userRepository.findByUsername(username)
-            .map(user -> {
-                // User.Plan enumが存在し、SubscriptionExpiresAtがある前提
-                // もしUserエンティティが boolean premium しか持っていない場合は書き換えが必要
-                return User.Plan.PREMIUM.name().equals(user.getPlanType())
+            .map(user -> User.Plan.PREMIUM.name().equals(user.getPlanType())
                     && user.getSubscriptionExpiresAt() != null
-                    && user.getSubscriptionExpiresAt().isAfter(LocalDateTime.now());
-            })
+                    && user.getSubscriptionExpiresAt().isAfter(LocalDateTime.now()))
             .defaultIfEmpty(false);
     }
 
@@ -79,11 +76,11 @@ public class BookController {
                             return Flux.fromIterable(works);
                         });
                 })
-                .map(work -> BookResponse.from(work, isPremium)) // ★修正: statusを渡す
+                .map(work -> BookResponse.from(work, isPremium))
         );
     }
 
-    // --- 人気作家一覧API (トップ20) ---
+    // --- 人気作家一覧API ---
     @GetMapping("/authors")
     public Mono<List<String>> getAuthors() { 
         return workRepository.findTopAuthors().collectList(); 
@@ -118,7 +115,6 @@ public class BookController {
     // --- 閲覧履歴取得API ---
     @GetMapping("/history")
     public Flux<BookResponse> getHistory(@RequestHeader(value = "Authorization", required = false) String authHeader) {
-        // 履歴一覧でもHQ要約が見えるかどうかは制御すべきなので checkPremiumStatus を使う
         return checkPremiumStatus(authHeader).flatMapMany(isPremium -> {
             String username = extractUser(authHeader);
             if (username == null) return Flux.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
@@ -128,7 +124,7 @@ public class BookController {
                     historyRepository.findHistoryByUserId(user.getId())
                         .flatMap(history -> 
                             workRepository.findById(history.getBookId())
-                                .map(work -> BookResponse.from(work, isPremium)) // ★修正
+                                .map(work -> BookResponse.from(work, isPremium))
                         )
                 );
         });
@@ -146,7 +142,7 @@ public class BookController {
                     favoriteRepository.findByUserIdOrderByCreatedAtDesc(user.getId())
                         .flatMap(fav -> 
                             workRepository.findById(fav.getBookId())
-                                .map(work -> BookResponse.from(work, isPremium)) // ★修正
+                                .map(work -> BookResponse.from(work, isPremium))
                         )
                 );
         });
@@ -155,22 +151,42 @@ public class BookController {
     // --- 検索API ---
     @GetMapping("/search")
     public Flux<BookResponse> search(
-            @RequestParam("q") String query,
+            @RequestParam(name = "q", required = false) String query,
+            @RequestParam(name = "type", required = false) String type,
             @RequestParam(name = "limit", defaultValue = "50") int limit,
             @RequestParam(name = "offset", defaultValue = "0") int offset,
             @RequestParam(name = "sort", required = false) String sort,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
         
-        if (query == null || query.trim().isEmpty()) return Flux.empty();
-        String searchPattern = "%" + query.trim() + "%";
-        
         return checkPremiumStatus(authHeader).flatMapMany(isPremium -> {
-            if ("length_desc".equals(sort)) {
-                return workRepository.searchByKeywordOrderByLength(searchPattern, limit, offset)
-                        .map(work -> BookResponse.from(work, isPremium)); // ★修正
+            // ★修正1: 初期値として Flux.empty() を設定し、未初期化エラーを防ぐ
+            Flux<Work> worksFlux = Flux.empty();
+
+            if ("translation".equalsIgnoreCase(type)) {
+                // 海外翻訳（Gutenberg）のフィルタ処理
+                if ("length_desc".equals(sort)) {
+                    worksFlux = workRepository.findByCategoryOrderByLength("Gutenberg", limit, offset);
+                } else {
+                    worksFlux = workRepository.findByCategory("Gutenberg", limit, offset);
+                }
+            } else {
+                // ★修正箇所: 通常検索のロジック
+                if (query != null && !query.isEmpty()) {
+                    String searchPattern = "%" + query.trim() + "%";
+                    
+                    // 【修正前】 これだとサジェスト用なので10件しか出ない
+                    // worksFlux = workRepository.suggestByKeyword(searchPattern);
+                    
+                    // 【修正後】 limit（デフォルト50）とoffsetを使って検索する
+                    worksFlux = workRepository.searchByKeyword(searchPattern, limit, offset);
+                    
+                } else {
+                    // クエリなしの場合は空、または全件表示なら findAllBy... など
+                    worksFlux = Flux.empty();
+                }
             }
-            return workRepository.searchByKeyword(searchPattern, limit, offset)
-                    .map(work -> BookResponse.from(work, isPremium)); // ★修正
+            
+            return worksFlux.map(work -> BookResponse.from(work, isPremium));
         });
     }
     
@@ -189,10 +205,10 @@ public class BookController {
         return checkPremiumStatus(authHeader).flatMapMany(isPremium -> {
             if ("length_desc".equals(sort)) {
                 return workRepository.findByGenreTagContainingOrderByLength(searchPattern, limit, offset)
-                        .map(work -> BookResponse.from(work, isPremium)); // ★修正
+                        .map(work -> BookResponse.from(work, isPremium));
             }
             return workRepository.findByGenreTagContaining(searchPattern, limit, offset)
-                    .map(work -> BookResponse.from(work, isPremium)); // ★修正
+                    .map(work -> BookResponse.from(work, isPremium));
         });
     }
 
@@ -203,10 +219,9 @@ public class BookController {
         if (query == null || query.trim().isEmpty()) return Flux.empty();
         String searchPattern = query.trim() + "%";
         
-        // サジェストも念のため出し分け対応
         return checkPremiumStatus(authHeader).flatMapMany(isPremium ->
             workRepository.suggestByKeyword(searchPattern)
-                .map(work -> BookResponse.from(work, isPremium)) // ★修正
+                .map(work -> BookResponse.from(work, isPremium))
         );
     }
 
@@ -224,22 +239,16 @@ public class BookController {
         return userRepository.findByUsername(username)
             .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found")))
             .flatMap(user -> {
-                // プレミアム判定
                 boolean isPremium = User.Plan.PREMIUM.name().equals(user.getPlanType())
                         && user.getSubscriptionExpiresAt() != null
                         && user.getSubscriptionExpiresAt().isAfter(LocalDateTime.now());
-
                 if (isPremium) {
-                    // プレミアムなら回数制限なしで保存＆取得
                     return fetchAndSaveHistory(workId, user.getId(), true);
                 } else {
-                    // 無料会員の回数制限チェック
                     LocalDateTime todayStart = LocalDate.now().atStartOfDay();
                     return historyRepository.countByUserIdAndViewedAtAfter(user.getId(), todayStart)
                         .flatMap(count -> {
                             if (count >= 3) {
-                                // ただし、既に履歴にある（=60秒以内の再アクセス）の場合は許可したいが
-                                // ここでは厳密にカウント3以上なら弾く
                                 return Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "無料会員は1日3回までです。"));
                             }
                             return fetchAndSaveHistory(workId, user.getId(), false);
@@ -309,23 +318,19 @@ public class BookController {
         return null;
     }
 
-    // --- ★修正: 共通処理（履歴保存の重複防止＆DTO変換） ---
+    // --- 履歴保存とDTO返却の共通処理 ---
     private Mono<ResponseEntity<BookResponse>> fetchAndSaveHistory(Integer workId, Long userId, boolean isPremium) {
         return workRepository.findById(workId)
             .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "作品が見つかりません")))
             .flatMap(work -> {
-                // 1. 直近（60秒以内）のアクセスを確認
-                // ※ UserBookHistoryRepositoryに findFirstByUserIdAndBookIdOrderByViewedAtDesc メソッドが必要です
+                // 重複アクセス防止 (60秒以内なら保存しない)
                 return historyRepository.findFirstByUserIdAndBookIdOrderByViewedAtDesc(userId, workId)
-                    .flatMap(latestHistory -> {
-                        LocalDateTime now = LocalDateTime.now();
-                        // 60秒以内のアクセスなら保存スキップ
-                        if (latestHistory.getViewedAt().isAfter(now.minusSeconds(60))) {
-                            return Mono.just(work);
+                    .flatMap(latest -> {
+                        if (latest.getViewedAt().isAfter(LocalDateTime.now().minusSeconds(60))) {
+                            return Mono.just(work); // 保存スキップ
                         }
                         return Mono.empty();
                     })
-                    // 2. 履歴がない、または60秒以上経過していれば保存
                     .switchIfEmpty(Mono.defer(() -> {
                         UserBookHistory history = new UserBookHistory();
                         history.setUserId(userId);
@@ -335,10 +340,9 @@ public class BookController {
                         history.setViewedAt(LocalDateTime.now());
                         return historyRepository.save(history).thenReturn(work);
                     }))
-                    // 3. DTOに変換して返す (isPremiumを使って出し分け)
                     .map(savedWork -> {
-                        com.example.demo.domain.Work w = (com.example.demo.domain.Work) savedWork;
-                        return ResponseEntity.ok(BookResponse.from(w, isPremium));
+                        // キャスト (Work) を念のため明示していますが、Logic上は安全です
+                        return ResponseEntity.ok(BookResponse.from((Work) savedWork, isPremium));
                     });
             });
     }

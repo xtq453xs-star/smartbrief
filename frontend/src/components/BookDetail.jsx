@@ -73,32 +73,28 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
   };
 
   // --- 解析ロジック (バックエンドに合わせて修正) ---
-  const parseHqSummary = (text) => {
+  const parseSummary = (text) => {
     if (!text) return [];
-    // 300文字版などが来た場合、セクション分けされていないのでそのまま返す
-    if (!text.includes('【')) {
-        return [{ title: null, content: text }];
+    // 見出し【...】がある場合のパース
+    if (text.includes('【') && text.includes('】')) {
+        const parts = text.split(/(【[^】]+】)/).filter(Boolean);
+        const sections = [];
+        for (let i = 0; i < parts.length; i++) {
+          if (parts[i].match(/【[^】]+】/) && parts[i+1]) {
+            sections.push({
+              title: parts[i].replace(/[【】]/g, ''),
+              content: parts[i+1].trim()
+            });
+            i++;
+          }
+        }
+        if (sections.length > 0) return sections;
     }
-
-    const parts = text.split(/(【[^】]+】)/).filter(Boolean);
-    const sections = [];
-    
-    for (let i = 0; i < parts.length; i++) {
-      if (parts[i].match(/【[^】]+】/) && parts[i+1]) {
-        sections.push({
-          title: parts[i].replace(/[【】]/g, ''),
-          content: parts[i+1].trim()
-        });
-        i++;
-      }
-    }
-    if (sections.length === 0 && text) {
-        return [{ title: null, content: text }];
-    }
-    return sections;
+    // 見出しがない場合（300文字版など）はそのまま返す
+    return [{ title: null, content: text }];
   };
 
-  // --- タグ抽出ロジック ---
+  // --- キャッチフレーズ解析 ---
   const parseCatchphrase = (text) => {
       if (!text) return { tag: null, text: null };
       const match = text.match(/^(【[^】]+】)\s*(.*)/);
@@ -121,22 +117,20 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
   const accentColor = getAccentColor(bookId);
   const hasBodyText = !!book.bodyText;
   
-  // ★重要: バックエンドのレスポンスに合わせて判定
-  // isHighQuality: 作品としてHQデータを持っているか
-  // isLocked: ユーザーにとってロックされているか（無料会員など）
+  // ★ APIからのレスポンスを使用
   const isHQ = book.highQuality === true;
   const isLocked = book.locked === true; 
+  // カテゴリ判定
+  const isTranslation = book.category === 'Gutenberg' || book.category === 'TRANSLATION';
 
   const { tag: contentTag, text: displayCatchphrase } = parseCatchphrase(book.catchphrase);
   
-  // カテゴリ判定: TRANSLATION かどうか
-  const isTranslation = book.category === 'TRANSLATION';
-  const isFullTranslation = contentTag === '【完訳】' || isTranslation;
-  const isDigest = contentTag === '【長編ダイジェスト】' || contentTag?.includes('ダイジェスト');
+  // コンテンツタイプ判定
+  const isFullTranslation = contentTag && contentTag.includes('完訳');
+  const isDigest = contentTag && contentTag.includes('ダイジェスト');
 
-  // 要約データの準備
-  // isLockedの場合でも summaryText には "300文字版" が入っているのでそれを表示に使う
-  const summarySections = parseHqSummary(book.summaryText || "");
+  // 要約データの準備 (summaryTextを使用)
+  const summarySections = parseSummary(book.summaryText || "");
   const insightText = book.insight;
 
   return (
@@ -173,6 +167,7 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
                 </button>
             </h1>
             
+            {/* ★ 原題表示 */}
             {book.originalTitle && (
                 <p style={styles.originalTitle}>{book.originalTitle}</p>
             )}
@@ -181,27 +176,26 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
               <span style={styles.authorLabel}>著</span> {book.authorName}
             </div>
 
-            {/* HQかつロックされていない場合のみキャッチフレーズを強調表示 */}
-            {isHQ && !isLocked && displayCatchphrase && (
-               <div style={styles.hqCatchphrase}>
-                 ❝ {displayCatchphrase} ❞
+            {/* キャッチフレーズ */}
+            {displayCatchphrase && (
+               <div style={isTranslation ? styles.hqCatchphrase : styles.catchphrase}>
+                 {isTranslation && "❝ "}
+                 {displayCatchphrase}
+                 {isTranslation && " ❞"}
                </div>
-            )}
-            
-            {(!isHQ || isLocked) && book.catchphrase && (
-               <div style={styles.catchphrase}>{book.catchphrase}</div>
             )}
           </div>
         </header>
 
         <div style={styles.contentBody}>
           
+          {/* タブ切り替え */}
           <div style={styles.tabContainer}>
             <button 
               style={viewMode === 'summary' ? styles.activeTab : styles.tab}
               onClick={() => setViewMode('summary')}
             >
-              📖 解説・あらすじ
+              📖 {isTranslation ? '作品解説・あらすじ' : '解説・あらすじ'}
             </button>
             
             {(hasBodyText || book.aozoraUrl) && (
@@ -211,6 +205,7 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
                 >
                 {isFullTranslation ? '📄 全文を読む (完訳)' 
                     : isDigest ? '📄 物語を読む (ダイジェスト)' 
+                    : isTranslation ? '📄 翻訳を読む'
                     : '📄 本文を読む'}
                 </button>
             )}
@@ -219,12 +214,11 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
           <div style={styles.contentBox}>
              {viewMode === 'summary' ? (
                 <>
-                {/* --- ★ロック機能付き要約表示エリア --- */}
+                {/* --- 要約表示エリア (ロック機能付き) --- */}
                 <section style={{...styles.section, position: 'relative'}}>
                     <div style={styles.textBody}>
                       {summarySections.map((section, idx) => (
                         <div key={idx} style={styles.summaryBlock}>
-                           {/* ロック時はタイトルを出さない（300文字版なので） */}
                            {!isLocked && section.title && (
                              <h3 style={{...styles.subTitle, color: '#333', borderLeft: `4px solid ${accentColor}`}}>
                                {section.title}
@@ -237,7 +231,7 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
                       ))}
                     </div>
 
-                    {/* ★ロック時のオーバーレイ表示 */}
+                    {/* ★ ロック時のオーバーレイ */}
                     {isLocked && (
                         <div style={styles.lockOverlay}>
                             <div style={styles.lockMessage}>
@@ -246,7 +240,6 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
                                 <p style={{fontSize: '14px', color: '#718096', marginBottom: '20px'}}>
                                     この作品の深い考察と詳細な要約を読むには<br/>プレミアムプランへの登録が必要です。
                                 </p>
-                                {/* ここで設定ページや登録ページへ飛ばす */}
                                 <button style={styles.upgradeButton} onClick={() => alert('設定ページへ移動します')}>
                                     プレミアムプラン詳細へ
                                 </button>
@@ -255,11 +248,12 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
                     )}
                 </section>
 
-                {/* Insightはロックされていない場合のみ表示 */}
+                {/* Insight (ロック時は非表示) */}
                 {!isLocked && insightText && (
                     <section style={styles.insightSection}>
                         <div style={styles.insightHeader}>
-                            <span style={styles.insightIcon}>💡</span> 編集者の考察メモ
+                            <span style={styles.insightIcon}>💡</span> 
+                            {isTranslation ? '作品の背景・考察' : '編集者の考察メモ'}
                         </div>
                         <div style={styles.insightContent}>
                             {insightText.split('\n').map((line, i) => (
@@ -271,11 +265,11 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
                 </>
              ) : (
                 <>
-                {/* 本文タブの中身 */}
+                {/* 本文タブ */}
                 {hasBodyText ? (
                     <section style={styles.section}>
-                        <div style={isHQ ? styles.readerBox : styles.previewBox}>
-                             {isHQ && <h3 style={styles.readerTitle}>{book.title}</h3>}
+                        <div style={isHQ || isTranslation ? styles.readerBox : styles.previewBox}>
+                             {(isHQ || isTranslation) && <h3 style={styles.readerTitle}>{book.title}</h3>}
                              <div style={styles.textBody}>
                                  {book.bodyText.split('\n').map((line, i) => (
                                    line.trim() && <p key={i} style={styles.readerParagraph}>{line}</p>
@@ -288,7 +282,7 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
                     </section>
                 ) : (
                     <div style={styles.aozoraBox}>
-                        <p style={{marginBottom: '20px'}}>この作品は全文翻訳データがありません。<br/>青空文庫の公式サイトで原文を閲覧します。</p>
+                        <p style={{marginBottom: '20px'}}>この作品は全文データがありません。<br/>青空文庫の公式サイトで原文を閲覧します。</p>
                         {book.aozoraUrl ? (
                           <a href={book.aozoraUrl} target="_blank" rel="noopener noreferrer" style={styles.amazonButton}>
                             青空文庫で開く ↗
@@ -306,7 +300,7 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
             <div style={styles.footerRow}>
               <span style={styles.footerLabel}>カテゴリ</span>
               <span style={styles.footerValue}>
-                  {isTranslation ? '海外翻訳文学' : '日本文学'}
+                  {isTranslation ? '海外文学 / 翻訳' : '日本文学'}
               </span>
             </div>
             <div style={styles.footerRow}>
@@ -339,9 +333,7 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
   );
 };
 
-// --- スタイル定義 (lockOverlay等を追加) ---
 const styles = {
-  // 既存のスタイル...
   container: { maxWidth: '800px', margin: '0 auto', padding: '0 20px 60px', fontFamily: '"Noto Sans JP", sans-serif', color: '#333' },
   loadingContainer: { height: '60vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: '#718096' },
   spinner: { width: '40px', height: '40px', border: '4px solid #eee', borderRadius: '50%', borderTopColor: '#333', animation: 'spin 1s linear infinite' },
@@ -387,21 +379,21 @@ const styles = {
   footerValue: { fontSize: '14px', fontWeight: 'bold' },
   actionArea: { marginTop: '40px', textAlign: 'center' },
   amazonButton: { display: 'inline-block', backgroundColor: '#FF9900', color: '#fff', padding: '12px 30px', borderRadius: '50px', textDecoration: 'none', fontWeight: 'bold', boxShadow: '0 4px 10px rgba(255, 153, 0, 0.3)', transition: 'transform 0.2s' },
-
-  // ★ 新規追加: ロックオーバーレイ用スタイル
+  
+  // ★ ロック画面用スタイル
   lockOverlay: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: '250px', // 下部を覆う
+    height: '300px',
     background: 'linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 40%, rgba(255,255,255,1) 100%)',
     display: 'flex',
     alignItems: 'flex-end',
     justifyContent: 'center',
     paddingBottom: '40px',
     zIndex: 10,
-    pointerEvents: 'none' // クリックイベントを透過させないため、内部のボタンには pointer-events: auto が必要
+    pointerEvents: 'none'
   },
   lockMessage: {
     textAlign: 'center',
@@ -411,7 +403,7 @@ const styles = {
     boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
     border: '1px solid #edf2f7',
     maxWidth: '90%',
-    pointerEvents: 'auto' // これでボタンがクリック可能になる
+    pointerEvents: 'auto'
   },
   upgradeButton: {
     backgroundColor: '#3182ce',

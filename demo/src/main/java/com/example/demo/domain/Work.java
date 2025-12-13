@@ -4,72 +4,60 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
-import com.fasterxml.jackson.annotation.JsonProperty; // ★追加
-
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Data;
+import lombok.Data; // ★これが重要：Getter/Setterを自動生成する
 import lombok.NoArgsConstructor;
 
-@Data
+@Data // ★このアノテーションが getTitle() や getSummaryHq() を作ります
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @Table("works")
 public class Work {
-
     @Id
     @Column("work_id")
-    @JsonProperty("work_id") // JSONでの名前を指定
     private Integer id;
 
-    private String title;
+    private String title; // getTitle() の元
 
     @Column("author_name")
-    @JsonProperty("author_name")
     private String authorName;
 
     @Column("aozora_url")
-    @JsonProperty("aozora_url")
     private String aozoraUrl;
 
     @Column("summary_300")
-    @JsonProperty("summary_300")
     private String summary300;
 
-    // --- ここからPattern A用 ---
-
     @Column("summary_hq")
-    @JsonProperty("summary_hq") // ★これがないと React側で book.summary_hq が undefined になる
-    private String summaryHq;
+    private String summaryHq; // getSummaryHq() の元
 
     @Column("is_hq")
-    @JsonProperty("is_hq") // ★これがないと React側で book.is_hq が undefined になる
     private Boolean isHq; 
-    // ※注意: JavaでBooleanの場合、JSONは true/false になります。
-    // React側で `book.is_hq === 1` ではなく `!!book.is_hq` や `book.is_hq === true` で判定すると安全です。
 
     @Column("catchphrase")
-    // 名前が同じでも念のため @Column 推奨
     private String catchphrase;
 
     @Column("insight")
     private String insight;
 
-    // --- ここまで ---
-
     @Column("genre_tag")
-    @JsonProperty("genre_tag")
     private String genreTag;
     
+    // --- 以下、海外翻訳用に追加したカラム ---
     @Column("category")
     private String category;
 
     @Column("original_title")
-    @JsonProperty("original_title")
     private String originalTitle;
+    
+    @Column("summary_short")
+    private String summaryShort;
+
+    @Column("summary_long")
+    private String summaryLong;
 
     @Column("body_text")
-    @JsonProperty("body_text")
     private String bodyText;
 }

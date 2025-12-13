@@ -11,14 +11,12 @@ const BookSearch = ({ token, onBookSelect }) => {
   const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // --- ページネーション用ステート ---
+  // ページネーション・タブ用ステート
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
-  const [currentSearchType, setCurrentSearchType] = useState(null); // 'text' or 'genre'
+  const [currentSearchType, setCurrentSearchType] = useState(null); 
   const [lastSearchWord, setLastSearchWord] = useState('');
-  
-  // ★ 追加: 現在のタブステート ('all' | 'translation')
-  const [activeTab, setActiveTab] = useState('all'); 
+  const [activeTab, setActiveTab] = useState('all'); // 'all' or 'translation'
 
   const LIMIT = 50; 
 
@@ -28,7 +26,7 @@ const BookSearch = ({ token, onBookSelect }) => {
 
   const rankingScrollRef = useRef(null);
 
-  // --- 初期データ取得 ---
+  // 初期データ
   useEffect(() => {
     fetch('/api/v1/books/ranking?limit=20', { headers: { 'Authorization': `Bearer ${token}` } })
     .then(res => res.ok ? res.json() : [])
@@ -41,9 +39,10 @@ const BookSearch = ({ token, onBookSelect }) => {
     .catch(err => console.error(err));
   }, [token]);
 
-  // --- 共通検索関数 ---
+  // 検索関数
   const fetchBooks = async (type, word, newOffset, isAppend = false) => {
-    if (!word) return;
+    // 翻訳タブ以外は検索ワード必須
+    if (type !== 'translation' && !word) return;
     
     if (!isAppend) {
       setLoading(true);
@@ -63,6 +62,9 @@ const BookSearch = ({ token, onBookSelect }) => {
         url = `/api/v1/books/search?q=${encodeURIComponent(word)}&${params}`;
       } else if (type === 'genre') {
         url = `/api/v1/books/search/genre?q=${encodeURIComponent(word)}&${params}`;
+      } else if (type === 'translation') {
+        // ★ 海外翻訳フィルタ
+        url = `/api/v1/books/search?type=translation&${params}`;
       }
 
       const response = await fetch(url, {
@@ -95,31 +97,28 @@ const BookSearch = ({ token, onBookSelect }) => {
     if (!searchWord || !searchWord.trim()) return;
     setQuery(searchWord);
     setSuggestions([]); setShowSuggestions(false);
-    setActiveTab('all'); // タブをALLに戻す
+    setActiveTab('all');
     fetchBooks('text', searchWord, 0, false);
   };
 
   const executeGenreSearch = (genreWord) => {
     if (!genreWord) return;
-    // クエリ欄には入れない、または専用表示にする
     setQuery(''); 
     setSuggestions([]); setShowSuggestions(false);
+    // ジャンル検索時はタブをALLに戻すかはUI次第ですが、ここでは戻す
+    setActiveTab('all'); 
     fetchBooks('genre', genreWord, 0, false);
   };
 
-  // --- ★タブ切り替えハンドラ ---
+  // ★ タブ切り替え
   const handleTabChange = (tab) => {
     setActiveTab(tab);
     if (tab === 'translation') {
-        // 「翻訳」または「海外」というタグで検索をかける
-        // ※DBの genre_tag に「翻訳」や「海外文学」が入っている前提
-        executeGenreSearch('翻訳');
+        setQuery('');
+        fetchBooks('translation', null, 0, false);
     } else {
-        // ALLに戻った時はリセットするか、デフォルト検索（例えば空検索できないので何もしないかランキング表示）
-        // ここでは便宜上リセット
         setBooks([]);
         setHasMore(false);
-        setQuery('');
     }
   };
 
@@ -139,6 +138,7 @@ const BookSearch = ({ token, onBookSelect }) => {
 
   const handleSearchSubmit = (e) => { e.preventDefault(); executeSearch(query); };
 
+  // サジェスト
   useEffect(() => {
     if (!query.trim() || query.startsWith('ジャンル:')) { setSuggestions([]); return; }
     const delayDebounceFn = setTimeout(async () => {
@@ -189,7 +189,7 @@ const BookSearch = ({ token, onBookSelect }) => {
         <p style={styles.subText}>AIが要約した名作文学の世界へ</p>
       </div>
 
-      {/* ランキング */}
+      {/* ランキング (ALLタブ & 検索なしの時のみ表示) */}
       {rankingBooks.length > 0 && activeTab === 'all' && !query && (
         <div style={{marginBottom: '40px'}}>
           <h3 style={{fontSize: '18px', color: '#4a5568', marginBottom: '15px', display:'flex', alignItems:'center', gap:'8px'}}>
@@ -260,7 +260,7 @@ const BookSearch = ({ token, onBookSelect }) => {
           </button>
       </div>
 
-      {/* チップス (ALLタブの時だけ表示) */}
+      {/* チップス (ALLタブのみ) */}
       {activeTab === 'all' && authors.length > 0 && (
         <div style={styles.authorSection}>
           <p style={styles.authorLabel}>👩‍🏫 人気の作家から探す:</p>
@@ -295,14 +295,14 @@ const BookSearch = ({ token, onBookSelect }) => {
                     <div style={styles.bookTitle}>{book.title}</div>
                     <div style={styles.bookAuthor}>{book.authorName}</div>
                     <div style={styles.bookSummary}>
-                      {/* ★修正: summaryText を優先表示 */}
+                      {/* ★ 新しい summaryText を使用 */}
                       {(() => {
                         const text = book.summaryText || book.summary_hq || book.summary_300;
                         if (!text) return <span style={{color: '#ccc'}}>要約準備中...</span>;
                         return text.length > 50 ? text.substring(0, 50) + '...' : text;
                       })()}
                     </div>
-                    {/* isHighQuality (boolean) が true ならバッジ表示 */}
+                    {/* HQバッジ (APIが返すisHighQualityフラグを使用) */}
                     {book.highQuality && (
                       <span style={styles.hqBadge}>✨ おすすめ</span>
                     )}
@@ -345,7 +345,6 @@ const BookSearch = ({ token, onBookSelect }) => {
   );
 };
 
-// スタイル定義
 const styles = {
   container: { maxWidth: '900px', margin: '0 auto', padding: '20px' },
   headerArea: { textAlign: 'center', marginBottom: '30px' },
@@ -383,7 +382,7 @@ const styles = {
   bookSummary: { fontSize: '12px', color: '#666', marginTop: '8px', marginBottom: '8px', lineHeight: '1.5', display: '-webkit-box', WebkitLineClamp: '3', WebkitBoxOrient: 'vertical', overflow: 'hidden', height: '4.5em' },
   loadMoreButton: { padding: '12px 40px', backgroundColor: '#3182ce', color: 'white', border: 'none', borderRadius: '30px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 6px rgba(49, 130, 206, 0.3)' },
   
-  // ★追加: タブUI用
+  // ★ タブUI用スタイル
   tabWrapper: { display: 'flex', justifyContent: 'center', gap: '15px', marginBottom: '30px' },
   tabBtn: { padding: '10px 20px', borderRadius: '25px', border: '1px solid #e2e8f0', backgroundColor: '#fff', color: '#718096', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s' },
   activeTabBtn: { padding: '10px 20px', borderRadius: '25px', border: '1px solid #3182ce', backgroundColor: '#ebf8ff', color: '#3182ce', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(49,130,206,0.1)' }

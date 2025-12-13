@@ -55,4 +55,18 @@ public interface WorkRepository extends ReactiveCrudRepository<Work, Integer> {
     // 全ジャンルタグ (変更なし)
     @Query("SELECT genre_tag FROM works WHERE genre_tag IS NOT NULL")
     Flux<String> findAllGenreTags();
+ // ★★★ Task 2: カテゴリによるフィルタリング（翻訳作品検索用） ★★★
+    // LIMITとOFFSETに対応
+    @Query("SELECT * FROM works WHERE category = :category ORDER BY work_id DESC LIMIT :limit OFFSET :offset")
+    Flux<Work> findByCategory(String category, int limit, int offset);
+
+    // 文字数順で翻訳を探す場合
+    @Query("SELECT * FROM works WHERE category = :category ORDER BY LENGTH(body_text) DESC LIMIT :limit OFFSET :offset")
+    Flux<Work> findByCategoryOrderByLength(String category, int limit, int offset);
+
+    /* * もし category カラムがまだ空で、著者名（英字）で判定したい場合の予備クエリ (MySQL用)
+     * "NOT REGEXP '[ぁ-んァ-ン一-龥]'" -> 日本語を含まない＝英字作家
+     */
+    @Query("SELECT * FROM works WHERE author_name NOT REGEXP '[ぁ-んァ-ン一-龥]' LIMIT :limit OFFSET :offset")
+    Flux<Work> findByEnglishAuthor(int limit, int offset);
 }
