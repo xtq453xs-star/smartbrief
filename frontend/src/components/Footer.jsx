@@ -1,43 +1,58 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
-const Footer = ({ color = '#999', separatorColor = '#ddd' }) => {
+const Footer = ({ color = '#8d6e63', separatorColor = '#d7ccc8' }) => {
   return (
-    <div style={{ ...styles.container, color: color }}>
-      <Link to="/terms" style={{ ...styles.link, color: color }}>
-        利用規約
-      </Link>
-      
-      <span style={{ ...styles.sep, color: separatorColor }}>|</span>
-      
-      <Link to="/privacy" style={{ ...styles.link, color: color }}>
-        プライバシーポリシー
-      </Link>
-      
-      <span style={{ ...styles.sep, color: separatorColor }}>|</span>
-      
-      <Link to="/legal" style={{ ...styles.link, color: color }}>
-        特定商取引法に基づく表記
-      </Link>
-      
-      <p style={{ ...styles.copyright, color: color }}>© 2025 SmartBrief Library</p>
-    </div>
+    <footer style={styles.footer}>
+      <div style={styles.linkContainer}>
+        <Link to="/terms" target="_blank" rel="noopener noreferrer" style={{ ...styles.link, color }}>
+          利用規約
+        </Link>
+        <span style={{ ...styles.sep, color: separatorColor }}>|</span>
+        
+        {/* ★Stripe審査で最重要項目★ */}
+        <Link to="/legal" target="_blank" rel="noopener noreferrer" style={{ ...styles.link, color }}>
+          特定商取引法に基づく表記
+        </Link>
+        
+        <span style={{ ...styles.sep, color: separatorColor }}>|</span>
+        <Link to="/privacy" target="_blank" rel="noopener noreferrer" style={{ ...styles.link, color }}>
+          プライバシーポリシー
+        </Link>
+      </div>
+      <p style={{ ...styles.copyright, color }}>© 2025 SmartBrief Library</p>
+    </footer>
   );
 };
 
 const styles = {
-  container: { 
-    textAlign: 'center', fontSize: '11px', padding: '20px 0', 
-    fontFamily: '"Shippori Mincho", sans-serif' 
+  footer: {
+    padding: '30px 0',
+    textAlign: 'center',
+    borderTop: '1px solid rgba(0,0,0,0.05)',
+    marginTop: 'auto', // 最下部に固定
+    fontFamily: '"Shippori Mincho", "Yu Mincho", serif',
   },
-  link: { 
-    background: 'none', border: 'none', cursor: 'pointer', 
-    textDecoration: 'underline', fontSize: '11px', padding: '0 5px',
-    fontFamily: 'inherit',
-    display: 'inline-block' // リンクの挙動を安定させるため
+  linkContainer: {
+    marginBottom: '10px',
   },
-  sep: { margin: '0 5px' },
-  copyright: { marginTop: '10px', fontSize: '11px', opacity: 0.8, fontFamily: 'sans-serif' }
+  link: {
+    textDecoration: 'none',
+    fontSize: '12px',
+    cursor: 'pointer',
+    display: 'inline-block',
+    transition: 'opacity 0.2s',
+  },
+  sep: {
+    margin: '0 10px',
+    fontSize: '10px',
+  },
+  copyright: {
+    fontSize: '11px',
+    opacity: 0.8,
+    fontFamily: '"Noto Sans JP", sans-serif',
+    margin: 0,
+  }
 };
 
 export default Footer;

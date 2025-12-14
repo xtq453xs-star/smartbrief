@@ -1,20 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom';
 
+// --- コンポーネントの読み込み ---
+// ※ フォルダ構成: src/components/ にあるもの
+import Dashboard from './components/Dashboard';
 import BookSearch from './components/BookSearch';
 import BookDetail from './components/BookDetail';
-import Login from './Login';
-import PaymentSuccess from './components/PaymentSuccess';
-import Dashboard from './components/Dashboard';
 import AuthorList from './components/AuthorList';
 import GenreList from './components/GenreList';
+import PaymentSuccess from './components/PaymentSuccess';
 import ForgotPassword from './components/ForgotPassword';
 import ResetPassword from './components/ResetPassword';
 
-// ★追加: 規約ページ用コンポーネントのインポート
+// ※ 新しく作った規約系も components にあると仮定
 import Terms from './components/Terms';
 import Privacy from './components/Privacy';
 import Legal from './components/Legal';
+
+// ※ Login は src/ の直下にある
+import Login from './Login'; 
 
 function AppWrapper() {
   const [token, setToken] = useState(localStorage.getItem('authToken'));
@@ -44,7 +48,7 @@ function AppContent({ token, setToken }) {
     navigate(`/book/${bookId}`);
   };
 
-  // --- 課金処理 (Stripe Checkout) ---
+  // --- 課金処理 (Stripe) ---
   const handleCheckout = async () => {
     try {
       const response = await fetch('/api/v1/checkout/create-session', {
@@ -59,7 +63,7 @@ function AppContent({ token, setToken }) {
     } catch (err) { alert(`通信エラー: ${err.message}`); }
   };
 
-  // --- 契約管理 (Stripe Portal) ---
+  // --- 契約管理 ---
   const handleManageSubscription = async () => {
     try {
       const response = await fetch('/api/v1/billing/portal', {
@@ -78,18 +82,17 @@ function AppContent({ token, setToken }) {
 
   return (
     <Routes>
-      {/* 公開ルート: ログインしてなくても見れるページ */}
+      {/* 公開ページ (ログイン不要) */}
       <Route path="/login" element={ !token ? <Login onLogin={(t) => setToken(t)} /> : <Navigate to="/" /> } />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       
-      {/* ★追加: Stripe審査用 公開ページ (ここに追加！) */}
+      {/* ★ Stripe審査用リンク */}
       <Route path="/terms" element={<Terms />} />
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/legal" element={<Legal />} />
 
-
-      {/* 保護されたルート: ログイン必須 */}
+      {/* ログインが必要なページ */}
       <Route path="/" element={
         token ? (
           <Dashboard 
@@ -111,6 +114,7 @@ function AppContent({ token, setToken }) {
         ) : <Navigate to="/login" />
       } />
 
+      {/* ★ ここで AuthorList や GenreList を使います (これで警告が消えます) */}
       <Route path="/authors" element={ token ? <AuthorList token={token} onBack={() => navigate('/')} /> : <Navigate to="/login" /> } />
       <Route path="/genres" element={ token ? <GenreList token={token} onBack={() => navigate('/')} /> : <Navigate to="/login" /> } />
 
