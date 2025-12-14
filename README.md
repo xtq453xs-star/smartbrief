@@ -66,13 +66,17 @@ Web版の機能をLINEでも利用可能です。
 
 ## 📸 画面イメージ
 
+### ▼ 認証・ログイン画面（再送機能）
+新規登録後、メール認証が未完了の場合に表示されます。**メール再送機能**をボタン一つで実行でき、運用レベルでのセキュリティを確保していることを示します。
+<img width="1845" height="1669" alt="Image" src="https://github.com/user-attachments/assets/40b33828-75ec-4553-b4a0-e59f8890b5d8" />
+
 ### ▼ トップページ（ダッシュボード）
 読みかけの本へのアクセスや、お気に入り管理、多彩な検索機能が集約されたホーム画面です。
-<img src="https://github.com/user-attachments/assets/546c9128-bf0a-4205-ac0c-9bce38feed0d" width="100%" alt="トップページ" style="margin-bottom: 30px; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" />
+<img width="1880" height="1830" alt="Image" src="https://github.com/user-attachments/assets/139a4416-4cb8-43bd-8496-3ca9ef0edcd7" />
 
 ### ▼ 詳細ページ（翻訳リーダーモード）
 海外作品専用のビューアです。青空文庫へのリンクではなく、AIが翻訳した全文をアプリ内でシームレスに読むことができます。
-<img src="https://github.com/user-attachments/assets/f96aa13f-e051-4a75-8eb9-994771755177" width="100%" alt="詳細ページ" style="border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" />
+<img width="978" height="1900" alt="Image" src="https://github.com/user-attachments/assets/a0e319b4-0d02-4835-ba55-0110dea64535" />
 
 ---
 
