@@ -3,6 +3,7 @@ import Footer from './Footer';
 
 const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
   const [book, setBook] = useState(null);
+  // ... (中略: useState, useEffect, その他の関数は変更なし) ...
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isFavorite, setIsFavorite] = useState(false);
@@ -72,10 +73,8 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
       } catch (e) { console.error(e); } finally { setFavLoading(false); }
   };
 
-  // --- 解析ロジック (バックエンドに合わせて修正) ---
   const parseSummary = (text) => {
     if (!text) return [];
-    // 見出し【...】がある場合のパース
     if (text.includes('【') && text.includes('】')) {
         const parts = text.split(/(【[^】]+】)/).filter(Boolean);
         const sections = [];
@@ -90,11 +89,9 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
         }
         if (sections.length > 0) return sections;
     }
-    // 見出しがない場合（300文字版など）はそのまま返す
     return [{ title: null, content: text }];
   };
 
-  // --- キャッチフレーズ解析 ---
   const parseCatchphrase = (text) => {
       if (!text) return { tag: null, text: null };
       const match = text.match(/^(【[^】]+】)\s*(.*)/);
@@ -117,20 +114,17 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
   const accentColor = getAccentColor(bookId);
   const hasBodyText = !!book.bodyText;
   
-  // ★ APIからのレスポンスを使用
   const isHQ = book.highQuality === true;
   const isLocked = book.locked === true; 
-  // カテゴリ判定
   const isTranslation = book.category === 'Gutenberg' || book.category === 'TRANSLATION';
 
   const { tag: contentTag, text: displayCatchphrase } = parseCatchphrase(book.catchphrase);
   
-  // コンテンツタイプ判定
   const isFullTranslation = contentTag && contentTag.includes('完訳');
   const isDigest = contentTag && contentTag.includes('ダイジェスト');
 
-  // 要約データの準備 (summaryTextを使用)
-  const summarySections = parseSummary(book.summaryText || "");
+  const rawSummary = isLocked ? (book.summary_300 || book.summaryText) : book.summaryText;
+  const summarySections = parseSummary(rawSummary || "");
   const insightText = book.insight;
 
   return (
@@ -167,7 +161,6 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
                 </button>
             </h1>
             
-            {/* ★ 原題表示 */}
             {book.originalTitle && (
                 <p style={styles.originalTitle}>{book.originalTitle}</p>
             )}
@@ -176,7 +169,6 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
               <span style={styles.authorLabel}>著</span> {book.authorName}
             </div>
 
-            {/* キャッチフレーズ */}
             {displayCatchphrase && (
                <div style={isTranslation ? styles.hqCatchphrase : styles.catchphrase}>
                  {isTranslation && "❝ "}
@@ -189,7 +181,6 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
 
         <div style={styles.contentBody}>
           
-          {/* タブ切り替え */}
           <div style={styles.tabContainer}>
             <button 
               style={viewMode === 'summary' ? styles.activeTab : styles.tab}
@@ -214,8 +205,9 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
           <div style={styles.contentBox}>
              {viewMode === 'summary' ? (
                 <>
-                {/* --- 要約表示エリア (ロック機能付き) --- */}
-                <section style={{...styles.section, position: 'relative'}}>
+                {/* --- 要約表示エリア --- */}
+                {/* ★修正: position: relative と minHeight を削除 */}
+                <section style={styles.section}>
                     <div style={styles.textBody}>
                       {summarySections.map((section, idx) => (
                         <div key={idx} style={styles.summaryBlock}>
@@ -231,16 +223,16 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
                       ))}
                     </div>
 
-                    {/* ★ ロック時のオーバーレイ */}
+                    {/* ★修正: テキストの下に配置される通常のブロックに変更 */}
                     {isLocked && (
-                        <div style={styles.lockOverlay}>
+                        <div style={styles.lockWrapper}>
                             <div style={styles.lockMessage}>
                                 <div style={{fontSize: '40px', marginBottom: '10px'}}>🔒</div>
-                                <h3 style={{marginBottom: '10px', color: '#2d3748'}}>高品質な要約はプレミアム限定です</h3>
+                                <h3 style={{marginBottom: '10px', color: '#2d3748'}}>続きはプレミアムで</h3>
                                 <p style={{fontSize: '14px', color: '#718096', marginBottom: '20px'}}>
-                                    この作品の深い考察と詳細な要約を読むには<br/>プレミアムプランへの登録が必要です。
+                                    この作品の深い考察と完全な要約を読むには<br/>プレミアムプランへの登録が必要です。
                                 </p>
-                                <button style={styles.upgradeButton} onClick={() => alert('設定ページへ移動します')}>
+                                <button style={styles.upgradeButton} onClick={() => onLimitReached()}>
                                     プレミアムプラン詳細へ
                                 </button>
                             </div>
@@ -248,7 +240,6 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
                     )}
                 </section>
 
-                {/* Insight (ロック時は非表示) */}
                 {!isLocked && insightText && (
                     <section style={styles.insightSection}>
                         <div style={styles.insightHeader}>
@@ -265,7 +256,7 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
                 </>
              ) : (
                 <>
-                {/* 本文タブ */}
+                {/* ... (本文表示エリアは変更なし) ... */}
                 {hasBodyText ? (
                     <section style={styles.section}>
                         <div style={isHQ || isTranslation ? styles.readerBox : styles.previewBox}>
@@ -297,6 +288,7 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
           </div>
 
           <footer style={styles.bookFooter}>
+            {/* ... (フッター内容は変更なし) ... */}
             <div style={styles.footerRow}>
               <span style={styles.footerLabel}>カテゴリ</span>
               <span style={styles.footerValue}>
@@ -334,6 +326,7 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
 };
 
 const styles = {
+  // ... (既存のスタイルは変更なし) ...
   container: { maxWidth: '800px', margin: '0 auto', padding: '0 20px 60px', fontFamily: '"Noto Sans JP", sans-serif', color: '#333' },
   loadingContainer: { height: '60vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: '#718096' },
   spinner: { width: '40px', height: '40px', border: '4px solid #eee', borderRadius: '50%', borderTopColor: '#333', animation: 'spin 1s linear infinite' },
@@ -380,20 +373,13 @@ const styles = {
   actionArea: { marginTop: '40px', textAlign: 'center' },
   amazonButton: { display: 'inline-block', backgroundColor: '#FF9900', color: '#fff', padding: '12px 30px', borderRadius: '50px', textDecoration: 'none', fontWeight: 'bold', boxShadow: '0 4px 10px rgba(255, 153, 0, 0.3)', transition: 'transform 0.2s' },
   
-  // ★ ロック画面用スタイル
-  lockOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: '300px',
-    background: 'linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 40%, rgba(255,255,255,1) 100%)',
+  // ★修正: ロック画面用スタイル
+  // 名前を lockOverlay から lockWrapper に変更し、絶対配置をやめる
+  lockWrapper: {
+    marginTop: '40px', // テキストとの間に余白を空ける
     display: 'flex',
-    alignItems: 'flex-end',
     justifyContent: 'center',
-    paddingBottom: '40px',
-    zIndex: 10,
-    pointerEvents: 'none'
+    // position: absolute, bottom, left, right, height, background, zIndex, pointerEvents を削除
   },
   lockMessage: {
     textAlign: 'center',
@@ -403,7 +389,7 @@ const styles = {
     boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
     border: '1px solid #edf2f7',
     maxWidth: '90%',
-    pointerEvents: 'auto'
+    // pointerEvents: 'auto' は不要なので削除
   },
   upgradeButton: {
     backgroundColor: '#3182ce',

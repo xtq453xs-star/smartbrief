@@ -248,8 +248,13 @@ public class BookController {
                     LocalDateTime todayStart = LocalDate.now().atStartOfDay();
                     return historyRepository.countByUserIdAndViewedAtAfter(user.getId(), todayStart)
                         .flatMap(count -> {
-                            if (count >= 3) {
-                                return Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "無料会員は1日3回までです。"));
+                            // ★修正: 3 を 5 に変更します
+                            // count は「これまでに読んだ数」なので、
+                            // 0, 1, 2, 3, 4 (計5回) まではOK、
+                            // 5になったら (6回目を開こうとしたら) エラーになります。
+                            if (count >= 10) {
+                                // エラーメッセージも合わせて修正しておくと親切です
+                                return Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "無料会員は1日10回までです。"));
                             }
                             return fetchAndSaveHistory(workId, user.getId(), false);
                         });
