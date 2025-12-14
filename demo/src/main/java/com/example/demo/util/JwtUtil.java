@@ -1,5 +1,6 @@
 package com.example.demo.util;
 
+import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -26,8 +27,10 @@ public class JwtUtil {
 	@Value("${JWT_EXPIRATION}")
     private long expirationTime;
 
-    private SecretKey getSignInKey() {
-        return Keys.hmacShaKeyFor(secret.getBytes());
+	private SecretKey getSignInKey() {
+        // ★修正点: 秘密鍵を Base64 デコードして鍵を生成する
+        byte[] keyBytes = Base64.getDecoder().decode(secret); 
+        return Keys.hmacShaKeyFor(keyBytes); 
     }
 
     // 1. トークンからユーザー名を取得

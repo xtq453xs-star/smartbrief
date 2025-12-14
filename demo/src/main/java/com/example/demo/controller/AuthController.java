@@ -1,5 +1,6 @@
 package com.example.demo.controller;
 
+import java.security.Principal;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.UUID;
@@ -269,6 +270,31 @@ public class AuthController {
             // セキュリティ上、未登録メアドでも「送りました」風にするか迷う所ですが、
             // 今回は分かりやすさ優先でNOT_FOUNDを返します
             .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND).body("そのメールアドレスは登録されていません。")));
+    }
+    // --- ★追加: 自分のユーザー情報を取得するAPI ---
+    // App.jsx から呼ばれるエンドポイントです
+    @org.springframework.web.bind.annotation.GetMapping("/me")
+    public Mono<ResponseEntity<Map<String, Object>>> getMyInfo(Principal principal) { // ← ここを UserDetails から Principal に変更
+        
+        // 認証されていない場合は null になる
+        if (principal == null) {
+            return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+        }
+
+        // Principal からユーザー名を取得
+        String username = principal.getName();
+
+        return userRepository.findByUsername(username)
+            .map(user -> {
+                Map<String, Object> response = new java.util.HashMap<>();
+                response.put("username", user.getUsername());
+                response.put("email", user.getEmail());
+                response.put("plan", user.getPlanType()); 
+                response.put("isPremium", "PREMIUM".equalsIgnoreCase(user.getPlanType()));
+                
+                return ResponseEntity.ok(response);
+            })
+            .defaultIfEmpty(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
     }
 
     // --- DTO ---

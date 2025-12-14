@@ -1,4 +1,4 @@
-package com.example.demo; // パッケージ名は環境に合わせてください
+package com.example.demo;
 
 import java.util.List;
 
@@ -16,63 +16,72 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.reactive.CorsConfigurationSource;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 
+import com.example.demo.security.AuthenticationManager;
+import com.example.demo.security.SecurityContextRepository;
+
 @Configuration
 @EnableWebFluxSecurity
 public class SecurityConfig {
 
+    private final AuthenticationManager authenticationManager;
+    private final SecurityContextRepository securityContextRepository;
+
+    public SecurityConfig(AuthenticationManager authenticationManager, SecurityContextRepository securityContextRepository) {
+        this.authenticationManager = authenticationManager;
+        this.securityContextRepository = securityContextRepository;
+    }
+
     @Bean
     public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
         return http
-            // CSRF, Basic認証, フォームログインを無効化
             .csrf(ServerHttpSecurity.CsrfSpec::disable)
             .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
             .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
             
-            // ★ Basic認証ポップアップ防止設定
+            // 認証されていない場合の応答を 401 Unauthorized に設定
             .exceptionHandling(exceptionHandling -> exceptionHandling
                 .authenticationEntryPoint(new HttpStatusServerEntryPoint(HttpStatus.UNAUTHORIZED))
             )
 
-            // CORS設定を適用
+            // ★★★ 認証マネージャーとコンテキストリポジトリを適用 ★★★
+            // この設定が、ヘッダーからトークンを読み取り、検証する処理をフィルターチェーンに組み込みます。
+            .authenticationManager(authenticationManager)
+            .securityContextRepository(securityContextRepository)
+            // ★★★★★★★★★★★★★★★★★★★★★★★★★★★
+
+            // CORS設定
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             
+            // 認証・認可ルールの定義
             .authorizeExchange(exchanges -> exchanges
-                // 1. フロントエンドからの事前通信(OPTIONS)は全て許可
                 .pathMatchers(HttpMethod.OPTIONS).permitAll()
                 
-                // 2. ログイン・登録画面は許可
+                // 1. /me は認証が必要（認証が必要なAPIは、permitAllより先に書く！）
+                .pathMatchers("/api/v1/auth/me").authenticated()
+
+                // 2. その他の auth 系（ログイン、登録、リセット）は許可
                 .pathMatchers("/api/v1/auth/**").permitAll()
                 
-                // 3. Webhookも許可
+                // 3. Webhook/その他は許可
                 .pathMatchers("/api/v1/webhook/**").permitAll()
-                
-                // 4. 本のAPIも「許可」
                 .pathMatchers("/api/v1/books/**").permitAll()
-                
-                // 5. 決済APIも「許可」
                 .pathMatchers("/api/v1/checkout/**").permitAll()
-                
-                // ★★★ 追加: これがないと会員ステータスが見れません！ ★★★
                 .pathMatchers("/api/v1/billing/**").permitAll()
-                
-                // ★★★ これを追加！ n8nからのアクセスを許可 ★★★
                 .pathMatchers("/api/v1/line/**").permitAll()
                 
-                // それ以外は認証必要（念の為の蓋）
+                // 最後に残ったもの（念のため）は認証が必要
                 .anyExchange().authenticated()
             )
             .build();
     }
 
-    // CORS設定
+    // CORS設定はそのまま
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // 許可するフロントエンドのURL
         configuration.setAllowedOrigins(List.of(
             "http://localhost:5173", 
             "http://localhost:3000", 
-            "http://smartbrief.jp", 
             "https://smartbrief.jp"
         ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
@@ -84,7 +93,6 @@ public class SecurityConfig {
         return source;
     }
 
-    // パスワードハッシュ化用
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();

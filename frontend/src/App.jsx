@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom';
 
 // --- コンポーネントの読み込み ---
-// ※ フォルダ構成: src/components/ にあるもの
 import Dashboard from './components/Dashboard';
 import BookSearch from './components/BookSearch';
 import BookDetail from './components/BookDetail';
@@ -12,12 +11,10 @@ import PaymentSuccess from './components/PaymentSuccess';
 import ForgotPassword from './components/ForgotPassword';
 import ResetPassword from './components/ResetPassword';
 
-// ※ 新しく作った規約系も components にあると仮定
 import Terms from './components/Terms';
 import Privacy from './components/Privacy';
 import Legal from './components/Legal';
 
-// ※ Login は src/ の直下にある
 import Login from './Login'; 
 import VerifyEmail from './VerifyEmail';
 
@@ -38,12 +35,47 @@ function AppWrapper() {
 
 function AppContent({ token, setToken }) {
   const navigate = useNavigate();
+  const [isPremium, setIsPremium] = useState(false);
 
+  // ★ログアウト処理をここに関数化（useEffect内でも呼べるように）
   const handleLogout = () => {
     setToken(null);
     localStorage.removeItem('authToken');
+    setIsPremium(false);
     navigate('/login');
   };
+
+  // ★追加: ログイン時(tokenがある時)にプランを確認
+  useEffect(() => {
+    if (token) {
+      fetch('/api/v1/auth/me', { 
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      .then(res => {
+        // ★★★ 修正ポイント: 401エラー（トークン無効）なら強制ログアウト ★★★
+        if (res.status === 401) {
+            console.warn("トークンの有効期限が切れているか無効です。ログアウトします。");
+            handleLogout(); 
+            return null;
+        }
+        if (res.ok) return res.json();
+        return null;
+      })
+      .then(data => {
+        if (data && data.plan === 'PREMIUM') {
+          setIsPremium(true);
+        } else {
+          setIsPremium(false);
+        }
+      })
+      .catch(err => {
+        console.error("ユーザー情報の取得に失敗:", err);
+        setIsPremium(false);
+      });
+    } else {
+      setIsPremium(false);
+    }
+  }, [token]);
 
   const handleBookSelect = (bookId) => {
     navigate(`/book/${bookId}`);
@@ -60,6 +92,8 @@ function AppContent({ token, setToken }) {
       if (response.ok) {
         const data = await response.json();
         if (data.checkoutUrl) window.location.href = data.checkoutUrl; 
+      } else if (response.status === 401) {
+          handleLogout(); // ここでも401チェックを入れると親切
       }
     } catch (err) { alert(`通信エラー: ${err.message}`); }
   };
@@ -87,11 +121,8 @@ function AppContent({ token, setToken }) {
       <Route path="/login" element={ !token ? <Login onLogin={(t) => setToken(t)} /> : <Navigate to="/" /> } />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
-
-      {/* ★ ここに追加！ (メール認証画面はログイン前でも見れる必要があるため) */}
       <Route path="/verify" element={<VerifyEmail />} />
       
-      {/* ★ Stripe審査用リンク */}
       <Route path="/terms" element={<Terms />} />
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/legal" element={<Legal />} />
@@ -118,14 +149,14 @@ function AppContent({ token, setToken }) {
         ) : <Navigate to="/login" />
       } />
 
-      {/* ★ ここで AuthorList や GenreList を使います (これで警告が消えます) */}
       <Route path="/authors" element={ token ? <AuthorList token={token} onBack={() => navigate('/')} /> : <Navigate to="/login" /> } />
       <Route path="/genres" element={ token ? <GenreList token={token} onBack={() => navigate('/')} /> : <Navigate to="/login" /> } />
 
       <Route path="/book/:bookId" element={
         token ? (
           <div style={{padding: '20px', maxWidth: '900px', margin: '0 auto'}}>
-            <BookDetailWrapper token={token} navigate={navigate} />
+            {/* ここで isPremium を渡しているのは正しいです！ */}
+            <BookDetailWrapper token={token} navigate={navigate} isPremium={isPremium} />
           </div>
         ) : <Navigate to="/login" />
       } />
@@ -136,7 +167,8 @@ function AppContent({ token, setToken }) {
   );
 }
 
-const BookDetailWrapper = ({ token, navigate }) => {
+// Wrapperも正しいです
+const BookDetailWrapper = ({ token, navigate, isPremium }) => {
   const { bookId } = useParams();
   const handleLimitReached = () => {
       alert("無料枠の上限に達しました。ダッシュボードからアップグレードしてください。");
@@ -148,6 +180,7 @@ const BookDetailWrapper = ({ token, navigate }) => {
       token={token} 
       onBack={() => navigate(-1)}
       onLimitReached={handleLimitReached}
+      isPremium={isPremium} 
     />
   );
 };

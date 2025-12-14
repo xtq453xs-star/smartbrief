@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import Footer from './Footer';
 
-const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
+// ★修正: 引数に isPremium を追加
+const BookDetail = ({ bookId, token, onBack, onLimitReached, isPremium }) => {
   const [book, setBook] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -25,7 +26,6 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
 
         if (isMounted) {
           if (response.status === 403) {
-            // 制限に達した場合は親コンポーネントに通知して終了
             onLimitReached();
             return;
           }
@@ -109,15 +109,17 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
   );
   
   if (error) return <p style={styles.error}>{error}</p>;
-  if (!book) return null; // bookがない場合はここでリターン（isHQエラー防止）
+  if (!book) return null;
 
-  // --- 変数定義エリア (isHQエラー対策: ここで確実に定義) ---
   const accentColor = getAccentColor(bookId);
   const hasBodyText = !!book.bodyText;
   
   // フラグ定義
-  const isHQ = book.highQuality === true; // ★ここです！
-  const isPremiumUser = book.isPremium === true;
+  const isHQ = book.highQuality === true;
+  
+  // ★修正: 親から受け取った isPremium を使用して判定
+  const isPremiumUser = isPremium === true;
+
   const isDailyLimitReached = book.locked === true; 
   const isTranslation = book.category === 'Gutenberg' || book.category === 'TRANSLATION';
 
@@ -135,35 +137,26 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
   const isLimitLock = isDailyLimitReached;
 
   // 3. 総合判定
-  // ★修正: 要約も「翻訳ロック」または「回数制限ロック」の対象にする
   const isSummaryLocked = isTranslationLock || isLimitLock;
-  
-  // 本文も同様にロック
   const isReaderLocked = isTranslationLock || isLimitLock;
 
   // --- 表示データの加工 ---
 
-  // 要約データの処理
   const rawSummary = isSummaryLocked ? (book.summary_300 || book.summaryText) : book.summaryText;
   let summarySections = parseSummary(rawSummary || "");
   
-  // ★要約ロック時は「最初のセクション」の「5行目」までにして残りを捨てる
   if (isSummaryLocked && summarySections.length > 0) {
       summarySections = [summarySections[0]];
       const lines = summarySections[0].content.split('\n');
-      // 5行だけ残す
       summarySections[0].content = lines.slice(0, 5).join('\n');
   }
 
-  // 本文データの処理 (真っ白対策: 安全にsplitする)
   const allReaderLines = (book.bodyText || "").split('\n');
   let displayedReaderLines = allReaderLines;
 
   if (isTranslationLock) {
-      // 翻訳ロックなら0行 (何も見せない)
       displayedReaderLines = [];
   } else if (isLimitLock) {
-      // 回数制限なら10行 (チラ見せ)
       displayedReaderLines = allReaderLines.slice(0, 10);
   }
 
@@ -247,12 +240,10 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
           <div style={styles.contentBox}>
              {viewMode === 'summary' ? (
                 <>
-                {/* --- 要約表示エリア --- */}
                 <section style={styles.section}>
                     <div style={styles.textBody}>
                       {summarySections.map((section, idx) => (
                         <div key={idx} style={styles.summaryBlock}>
-                           {/* ロックされていない時のみ見出しを表示 */}
                            {!isSummaryLocked && section.title && (
                              <h3 style={{...styles.subTitle, color: '#333', borderLeft: `4px solid ${accentColor}`}}>
                                {section.title}
@@ -302,19 +293,16 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
                 </>
              ) : (
                 <>
-                {/* --- 本文表示エリア --- */}
                 {hasBodyText ? (
                     <section style={styles.section}>
                         <div style={isHQ || isTranslation ? styles.readerBox : styles.previewBox}>
                              {(isHQ || isTranslation) && <h3 style={styles.readerTitle}>{book.title}</h3>}
                              <div style={styles.textBody}>
-                                 {/* 計算済みの displayedReaderLines を使用 */}
                                  {displayedReaderLines.map((line, i) => (
                                      line.trim() && <p key={i} style={styles.readerParagraph}>{line}</p>
                                  ))}
                              </div>
                              
-                             {/* ロック画面 */}
                              {isReaderLocked ? (
                                 <div style={styles.lockWrapper}>
                                     <div style={styles.lockMessage}>
