@@ -3,7 +3,6 @@ import Footer from './Footer';
 
 const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
   const [book, setBook] = useState(null);
-  // ... (中略: useState, useEffect, その他の関数は変更なし) ...
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isFavorite, setIsFavorite] = useState(false);
@@ -26,6 +25,7 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
 
         if (isMounted) {
           if (response.status === 403) {
+            // 制限に達した場合は親コンポーネントに通知して終了
             onLimitReached();
             return;
           }
@@ -109,13 +109,16 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
   );
   
   if (error) return <p style={styles.error}>{error}</p>;
-  if (!book) return null;
+  if (!book) return null; // bookがない場合はここでリターン（isHQエラー防止）
 
+  // --- 変数定義エリア (isHQエラー対策: ここで確実に定義) ---
   const accentColor = getAccentColor(bookId);
   const hasBodyText = !!book.bodyText;
   
-  const isHQ = book.highQuality === true;
-  const isLocked = book.locked === true; 
+  // フラグ定義
+  const isHQ = book.highQuality === true; // ★ここです！
+  const isPremiumUser = book.isPremium === true;
+  const isDailyLimitReached = book.locked === true; 
   const isTranslation = book.category === 'Gutenberg' || book.category === 'TRANSLATION';
 
   const { tag: contentTag, text: displayCatchphrase } = parseCatchphrase(book.catchphrase);
@@ -123,8 +126,47 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
   const isFullTranslation = contentTag && contentTag.includes('完訳');
   const isDigest = contentTag && contentTag.includes('ダイジェスト');
 
-  const rawSummary = isLocked ? (book.summary_300 || book.summaryText) : book.summaryText;
-  const summarySections = parseSummary(rawSummary || "");
+  // --- ロック判定ロジック ---
+  
+  // 1. 翻訳作品ロック: 無料会員なら無条件でロック
+  const isTranslationLock = isTranslation && !isPremiumUser;
+  
+  // 2. 回数制限ロック: 無料会員が10回を超えたらロック
+  const isLimitLock = isDailyLimitReached;
+
+  // 3. 総合判定
+  // ★修正: 要約も「翻訳ロック」または「回数制限ロック」の対象にする
+  const isSummaryLocked = isTranslationLock || isLimitLock;
+  
+  // 本文も同様にロック
+  const isReaderLocked = isTranslationLock || isLimitLock;
+
+  // --- 表示データの加工 ---
+
+  // 要約データの処理
+  const rawSummary = isSummaryLocked ? (book.summary_300 || book.summaryText) : book.summaryText;
+  let summarySections = parseSummary(rawSummary || "");
+  
+  // ★要約ロック時は「最初のセクション」の「5行目」までにして残りを捨てる
+  if (isSummaryLocked && summarySections.length > 0) {
+      summarySections = [summarySections[0]];
+      const lines = summarySections[0].content.split('\n');
+      // 5行だけ残す
+      summarySections[0].content = lines.slice(0, 5).join('\n');
+  }
+
+  // 本文データの処理 (真っ白対策: 安全にsplitする)
+  const allReaderLines = (book.bodyText || "").split('\n');
+  let displayedReaderLines = allReaderLines;
+
+  if (isTranslationLock) {
+      // 翻訳ロックなら0行 (何も見せない)
+      displayedReaderLines = [];
+  } else if (isLimitLock) {
+      // 回数制限なら10行 (チラ見せ)
+      displayedReaderLines = allReaderLines.slice(0, 10);
+  }
+
   const insightText = book.insight;
 
   return (
@@ -206,12 +248,12 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
              {viewMode === 'summary' ? (
                 <>
                 {/* --- 要約表示エリア --- */}
-                {/* ★修正: position: relative と minHeight を削除 */}
                 <section style={styles.section}>
                     <div style={styles.textBody}>
                       {summarySections.map((section, idx) => (
                         <div key={idx} style={styles.summaryBlock}>
-                           {!isLocked && section.title && (
+                           {/* ロックされていない時のみ見出しを表示 */}
+                           {!isSummaryLocked && section.title && (
                              <h3 style={{...styles.subTitle, color: '#333', borderLeft: `4px solid ${accentColor}`}}>
                                {section.title}
                              </h3>
@@ -223,14 +265,18 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
                       ))}
                     </div>
 
-                    {/* ★修正: テキストの下に配置される通常のブロックに変更 */}
-                    {isLocked && (
+                    {isSummaryLocked && (
                         <div style={styles.lockWrapper}>
                             <div style={styles.lockMessage}>
                                 <div style={{fontSize: '40px', marginBottom: '10px'}}>🔒</div>
-                                <h3 style={{marginBottom: '10px', color: '#2d3748'}}>続きはプレミアムで</h3>
+                                <h3 style={{marginBottom: '10px', color: '#2d3748'}}>
+                                    {isTranslationLock ? 'プレミアム限定コンテンツ' : '続きはプレミアムで'}
+                                </h3>
                                 <p style={{fontSize: '14px', color: '#718096', marginBottom: '20px'}}>
-                                    この作品の深い考察と完全な要約を読むには<br/>プレミアムプランへの登録が必要です。
+                                    {isTranslationLock 
+                                        ? "詳細な解説と要約を読むには\nプレミアムプランへの登録が必要です。"
+                                        : "詳細な要約と解説を読むには\nプレミアムプランへの登録が必要です。"
+                                    }
                                 </p>
                                 <button style={styles.upgradeButton} onClick={() => onLimitReached()}>
                                     プレミアムプラン詳細へ
@@ -240,7 +286,7 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
                     )}
                 </section>
 
-                {!isLocked && insightText && (
+                {!isSummaryLocked && insightText && (
                     <section style={styles.insightSection}>
                         <div style={styles.insightHeader}>
                             <span style={styles.insightIcon}>💡</span> 
@@ -256,19 +302,42 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
                 </>
              ) : (
                 <>
-                {/* ... (本文表示エリアは変更なし) ... */}
+                {/* --- 本文表示エリア --- */}
                 {hasBodyText ? (
                     <section style={styles.section}>
                         <div style={isHQ || isTranslation ? styles.readerBox : styles.previewBox}>
                              {(isHQ || isTranslation) && <h3 style={styles.readerTitle}>{book.title}</h3>}
                              <div style={styles.textBody}>
-                                 {book.bodyText.split('\n').map((line, i) => (
-                                   line.trim() && <p key={i} style={styles.readerParagraph}>{line}</p>
+                                 {/* 計算済みの displayedReaderLines を使用 */}
+                                 {displayedReaderLines.map((line, i) => (
+                                     line.trim() && <p key={i} style={styles.readerParagraph}>{line}</p>
                                  ))}
                              </div>
-                             <div style={styles.readerFooter}>
-                                 {isFullTranslation ? '― 完 ―' : '― ダイジェスト版 終了 ―'}
-                             </div>
+                             
+                             {/* ロック画面 */}
+                             {isReaderLocked ? (
+                                <div style={styles.lockWrapper}>
+                                    <div style={styles.lockMessage}>
+                                        <div style={{fontSize: '40px', marginBottom: '10px'}}>🔒</div>
+                                        <h3 style={{marginBottom: '10px', color: '#2d3748'}}>
+                                            {isTranslationLock ? 'プレミアム限定コンテンツ' : '続きはプレミアムで'}
+                                        </h3>
+                                        <p style={{fontSize: '14px', color: '#718096', marginBottom: '20px'}}>
+                                            {isTranslationLock 
+                                                ? "この翻訳作品の全文を読むには\nプレミアムプランへの登録が必要です。"
+                                                : "無料会員の1日の閲覧上限に達しました。\n続きはプレミアムプランでお楽しみください。"
+                                            }
+                                        </p>
+                                        <button style={styles.upgradeButton} onClick={() => onLimitReached()}>
+                                            プレミアムプラン詳細へ
+                                        </button>
+                                    </div>
+                                </div>
+                             ) : (
+                                 <div style={styles.readerFooter}>
+                                     {isFullTranslation ? '― 完 ―' : '― ダイジェスト版 終了 ―'}
+                                 </div>
+                             )}
                         </div>
                     </section>
                 ) : (
@@ -288,7 +357,6 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
           </div>
 
           <footer style={styles.bookFooter}>
-            {/* ... (フッター内容は変更なし) ... */}
             <div style={styles.footerRow}>
               <span style={styles.footerLabel}>カテゴリ</span>
               <span style={styles.footerValue}>
@@ -326,7 +394,6 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached }) => {
 };
 
 const styles = {
-  // ... (既存のスタイルは変更なし) ...
   container: { maxWidth: '800px', margin: '0 auto', padding: '0 20px 60px', fontFamily: '"Noto Sans JP", sans-serif', color: '#333' },
   loadingContainer: { height: '60vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: '#718096' },
   spinner: { width: '40px', height: '40px', border: '4px solid #eee', borderRadius: '50%', borderTopColor: '#333', animation: 'spin 1s linear infinite' },
@@ -373,13 +440,11 @@ const styles = {
   actionArea: { marginTop: '40px', textAlign: 'center' },
   amazonButton: { display: 'inline-block', backgroundColor: '#FF9900', color: '#fff', padding: '12px 30px', borderRadius: '50px', textDecoration: 'none', fontWeight: 'bold', boxShadow: '0 4px 10px rgba(255, 153, 0, 0.3)', transition: 'transform 0.2s' },
   
-  // ★修正: ロック画面用スタイル
-  // 名前を lockOverlay から lockWrapper に変更し、絶対配置をやめる
+  // ロック画面用スタイル
   lockWrapper: {
-    marginTop: '40px', // テキストとの間に余白を空ける
+    marginTop: '40px',
     display: 'flex',
     justifyContent: 'center',
-    // position: absolute, bottom, left, right, height, background, zIndex, pointerEvents を削除
   },
   lockMessage: {
     textAlign: 'center',
@@ -389,7 +454,6 @@ const styles = {
     boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
     border: '1px solid #edf2f7',
     maxWidth: '90%',
-    // pointerEvents: 'auto' は不要なので削除
   },
   upgradeButton: {
     backgroundColor: '#3182ce',
