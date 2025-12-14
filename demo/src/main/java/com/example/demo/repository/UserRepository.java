@@ -27,4 +27,7 @@ public interface UserRepository extends ReactiveCrudRepository<User, Long> {
     
     // ★★★ 追加: リセットトークンでユーザーを検索 ★★★
     Mono<User> findByResetPasswordToken(String resetPasswordToken);
+    
+    // ★追加
+    Mono<User> findByVerificationToken(String verificationToken);
 }

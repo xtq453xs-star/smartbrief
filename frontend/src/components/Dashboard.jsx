@@ -148,8 +148,10 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
           <p style={styles.greeting}>{viewInfo.desc}</p>
         </header>
 
+        {/* コンテンツエリアの修正 */}    
         <div style={styles.contentArea}>
-          {activeView === 'history' && <BookList books={historyBooks} isLoading={loading} emptyMessage="まだ読んだ本はありません。" />}
+          {/* ★修正: .slice(0, 20) を追加して、表示数を最新20件に制限 */}
+          {activeView === 'history' && (<BookList books={historyBooks.slice(0, 20)} isLoading={loading} emptyMessage="まだ読んだ本はありません。" />         )}
           {activeView === 'ranking' && <BookList books={rankingBooks} isLoading={loading} emptyMessage="ランキングデータの取得中です..." />}
           {activeView === 'favorites' && <BookList books={favoriteBooks} isLoading={loading} emptyMessage="お気に入りはまだありません。" />}
         </div>

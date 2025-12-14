@@ -19,6 +19,7 @@ import Legal from './components/Legal';
 
 // ※ Login は src/ の直下にある
 import Login from './Login'; 
+import VerifyEmail from './VerifyEmail';
 
 function AppWrapper() {
   const [token, setToken] = useState(localStorage.getItem('authToken'));
@@ -86,6 +87,9 @@ function AppContent({ token, setToken }) {
       <Route path="/login" element={ !token ? <Login onLogin={(t) => setToken(t)} /> : <Navigate to="/" /> } />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+
+      {/* ★ ここに追加！ (メール認証画面はログイン前でも見れる必要があるため) */}
+      <Route path="/verify" element={<VerifyEmail />} />
       
       {/* ★ Stripe審査用リンク */}
       <Route path="/terms" element={<Terms />} />

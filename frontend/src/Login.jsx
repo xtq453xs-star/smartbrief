@@ -6,8 +6,6 @@ const Login = ({ onLogin }) => {
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState('login'); // 'login' or 'register'
   
-  // ... (state定義: username, email, password, agreed, message, isLoading はそのまま) ...
-  // ★ ここに元のコードの state 定義と handleLogin, handleRegister を入れてください ★
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -15,21 +13,41 @@ const Login = ({ onLogin }) => {
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  // ★追加: 再送ボタン制御用
+  const [showResendLink, setShowResendLink] = useState(false);
+  const [resendStatus, setResendStatus] = useState('');
+
+  // --- ログイン処理 ---
   const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
     setMessage('');
+    setShowResendLink(false); // 初期化
+    setResendStatus('');
+
     try {
       const response = await fetch('/api/v1/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }), 
       });
+
+      const data = await response.json(); // エラー時もメッセージを読むためにパース
+
       if (response.ok) {
-        const data = await response.json();
-        onLogin(data.token);
+        if (data.token) {
+            onLogin(data.token);
+            // navigate('/') は App.jsx 側の制御に任せても良いが、念のため
+            navigate('/');
+        }
       } else {
-        setMessage('IDまたはパスワードが正しくありません。');
+        // エラーメッセージを表示
+        setMessage(data.message || 'IDまたはパスワードが正しくありません。');
+
+        // ★追加: バックエンドから「認証」関連のエラーが来たら再送ボタンを出す
+        if (response.status === 401 && data.message && data.message.includes('認証')) {
+            setShowResendLink(true);
+        }
       }
     } catch (error) {
       setMessage('通信エラーが発生しました。');
@@ -38,12 +56,38 @@ const Login = ({ onLogin }) => {
     }
   };
 
+  // --- ★追加: 認証メール再送処理 ---
+  const handleResendEmail = async () => {
+    // 簡易チェック: 入力欄に @ がなければ警告
+    if (!username.includes('@')) {
+        setResendStatus('※上の入力欄に「メールアドレス」を入力してください。');
+        return;
+    }
+
+    setResendStatus('送信中...');
+
+    try {
+        const res = await fetch('/api/v1/auth/resend-verification', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: username }) // 入力欄の値をemailとして送信
+        });
+        
+        if (res.ok) {
+            setResendStatus('✅ 再送しました！迷惑メールフォルダも確認してください。');
+        } else {
+            setResendStatus('❌ 再送に失敗しました。メールアドレスを確認してください。');
+        }
+    } catch (err) {
+        setResendStatus('❌ 通信エラー');
+    }
+  };
+
+  // --- 新規登録処理 ---
   const handleRegister = async (e) => {
-    // ... (元の handleRegister の中身をここに) ...
-    // バリデーション等は元のコードを使用
     e.preventDefault();
     if (!agreed) { setMessage('規約への同意が必要です。'); return; }
-    // ... 省略 ...
+    
     setIsLoading(true);
     try {
         const response = await fetch('/api/v1/auth/register', {
@@ -52,13 +96,15 @@ const Login = ({ onLogin }) => {
             body: JSON.stringify({ username, email, password }),
         });
         if(response.ok) {
-            alert('登録完了！ログインしてください。');
+            alert('仮登録が完了しました！\n届いたメール内のリンクをクリックして認証してください。');
             setViewMode('login');
+            setMessage('');
         } else {
             const txt = await response.text();
-            setMessage(txt);
+            // JSONで返ってくる場合もあるので整形できればベターだが、一旦textで表示
+            setMessage(txt.replace(/["{}]/g, '')); 
         }
-    } catch(e) { setMessage('エラー'); } finally { setIsLoading(false); }
+    } catch(e) { setMessage('エラーが発生しました'); } finally { setIsLoading(false); }
   };
 
   // --- 入力フォーム部品 (共通) ---
@@ -82,7 +128,7 @@ const Login = ({ onLogin }) => {
       <div style={styles.container}>
         <div style={styles.contentGrid}>
           
-          {/* 左側: サービス紹介（Serendip風の清潔感） */}
+          {/* 左側: サービス紹介 */}
           <div style={styles.infoColumn}>
             <div style={styles.featureBox}>
               <h3 style={styles.featureTitle}>📚 SmartBriefとは？</h3>
@@ -117,9 +163,26 @@ const Login = ({ onLogin }) => {
               
               {viewMode === 'login' ? (
                 <form onSubmit={handleLogin} style={styles.form}>
-                  {renderInput('ユーザーID / Email', 'text', username, setUsername, '')}
+                  {renderInput('ユーザーID / Email', 'text', username, setUsername, 'user@example.com')}
                   {renderInput('パスワード', 'password', password, setPassword, '')}
+                  
                   {message && <p style={styles.error}>{message}</p>}
+
+                  {/* ★追加: 再送リンクエリア */}
+                  {showResendLink && (
+                    <div style={styles.resendArea}>
+                        <p style={{fontSize:'13px', marginBottom:'5px', color:'#e65100'}}>メールが届いていませんか？</p>
+                        <button 
+                            type="button" 
+                            onClick={handleResendEmail} 
+                            style={styles.resendBtn}
+                        >
+                            📩 認証メールを再送する
+                        </button>
+                        {resendStatus && <p style={styles.resendMsg}>{resendStatus}</p>}
+                    </div>
+                  )}
+
                   <button type="submit" style={styles.button} disabled={isLoading}>{isLoading ? '照会中...' : '入館する (ログイン)'}</button>
                   <div style={styles.formFooter}>
                     <p>初めての方はこちら</p>
@@ -166,7 +229,7 @@ const styles = {
   container: { flex: 1, maxWidth: '1000px', margin: '0 auto', width: '100%', padding: '40px 20px' },
   contentGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '40px', alignItems: 'start' },
   
-  // 左カラム（サービス紹介）
+  // 左カラム
   infoColumn: { paddingTop: '20px' },
   featureBox: { padding: '0 20px' },
   featureTitle: { fontSize: '20px', borderBottom: '2px solid #8d6e63', display: 'inline-block', marginBottom: '20px', paddingBottom: '5px' },
@@ -177,7 +240,7 @@ const styles = {
   priceValue: { fontSize: '28px', fontWeight: 'bold', color: '#3e2723' },
   priceNote: { fontSize: '12px', color: '#a1887f', marginTop: '10px' },
 
-  // 右カラム（フォーム）
+  // 右カラム
   formColumn: { },
   card: { backgroundColor: '#fff', padding: '40px', borderRadius: '8px', boxShadow: '0 10px 30px rgba(62, 39, 35, 0.08)', border: '1px solid #efebe9' },
   formTitle: { textAlign: 'center', fontSize: '18px', marginBottom: '30px', color: '#5d4037' },
@@ -185,11 +248,16 @@ const styles = {
   label: { display: 'block', marginBottom: '8px', fontSize: '13px', color: '#6d4c41' },
   input: { width: '100%', padding: '12px', borderRadius: '4px', border: '1px solid #d7ccc8', backgroundColor: '#fffcf5', fontSize: '16px', boxSizing: 'border-box' },
   button: { width: '100%', padding: '14px', backgroundColor: '#5d4037', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
-  error: { color: '#c62828', fontSize: '13px', marginBottom: '15px', textAlign: 'center' },
+  error: { color: '#c62828', fontSize: '13px', marginBottom: '15px', textAlign: 'center', whiteSpace: 'pre-wrap' },
   formFooter: { marginTop: '25px', textAlign: 'center', fontSize: '13px', color: '#8d6e63' },
   switchButton: { background: 'none', border: 'none', color: '#3e2723', textDecoration: 'underline', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' },
   forgotLink: { display: 'block', marginTop: '10px', background: 'none', border: 'none', color: '#a1887f', cursor: 'pointer', fontSize: '12px' },
   checkboxContainer: { display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '20px' },
+
+  // ★追加: 再送エリアのスタイル
+  resendArea: { backgroundColor: '#fff8e1', padding: '15px', borderRadius: '6px', border: '1px dashed #ffb74d', marginBottom: '15px', textAlign: 'center' },
+  resendBtn: { background: 'none', border: 'none', color: '#e65100', textDecoration: 'underline', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' },
+  resendMsg: { fontSize: '12px', marginTop: '8px', fontWeight: 'bold', color: '#333' }
 };
 
 export default Login;

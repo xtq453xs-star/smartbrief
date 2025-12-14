@@ -63,6 +63,13 @@ public class User implements UserDetails {
 
     @Column("reset_password_expires_at")
     private LocalDateTime resetPasswordExpiresAt;
+    
+    @Column("is_verified")
+    private Boolean isVerified; // true: 認証済み, false: 未認証
+    
+    // 認証用トークン
+    @Column("verification_token")
+    private String verificationToken;
 
     // --- Enum定義 ---
     public enum Plan {
@@ -100,8 +107,13 @@ public class User implements UserDetails {
     @Override
     public boolean isCredentialsNonExpired() { return true; }
     @Override
-    public boolean isEnabled() { return true; }
-    
+    public boolean isEnabled() {
+        // ★重要: メール認証が完了していないと「無効なアカウント」として扱う
+        // ※ nullの場合は古いユーザーとみなしてtrue (認証済み扱い) にするか、
+        //   SQLで全員trueにしたので基本は true/false のどちらかになるはず。
+        return isVerified != null && isVerified;
+    }
+        
     // 手動Setter (Lombokと共存させるためのヘルパー)
     public void setRolesList(List<String> rolesList) {
         if (rolesList != null && !rolesList.isEmpty()) {
