@@ -8,7 +8,7 @@ const FEATURED_AUTHORS = [
   { name: '宮本百合子', file: 'miyamoto_yuriko.png' },
   { name: '宮沢賢治', file: 'miyazawa_kenji.png' },
   { name: '小川未明', file: 'ogawa_mimei.png' },
-  { name: '芥川龍之介', file: 'akutagawa_ryunosuke.png' },
+  { name: '芥川竜之介', file: 'akutagawa_ryunosuke.png' },
   { name: '泉鏡花', file: 'izumi_kyoka.png' },
   { name: '萩原朔太郎', file: 'hagiwara_sakutarou.png' },
   { name: '牧野信一', file: 'makino_shinichi.png' },

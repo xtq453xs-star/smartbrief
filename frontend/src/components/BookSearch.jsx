@@ -18,7 +18,7 @@ const POPULAR_AUTHORS = [
   // --- グループB: 無頼・近代 ---
   { name: '太宰 治', file: 'dazai_osamu.png' },
   { name: '坂口 安吾', file: 'sakaguchi_ango.png' },
-  { name: '芥川 龍之介', file: 'akutagawa_ryunosuke.png' },
+  { name: '芥川 竜之介', file: 'akutagawa_ryunosuke.png' },
   { name: '夏目 漱石', file: 'natsume_soseki.png' },
   { name: '田山 録弥', file: 'tayama_rokuya.png' },
   { name: '菊池 寛', file: 'kikuchi_kan.png' },
