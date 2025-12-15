@@ -2,18 +2,69 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Footer from './Footer';
 
-// ★ Dashboardと同じ高品質カードコンポーネント（ランキング対応版）
+// ★追加: 人気作家データリスト（画像生成した38名分）
+const POPULAR_AUTHORS = [
+  // --- グループA: 幻想・ロマン ---
+  { name: '宮沢賢治', file: 'miyazawa_kenji.png' },
+  { name: '小川未明', file: 'ogawa_mimei.png' },
+  { name: '泉鏡花', file: 'izumi_kyoka.png' },
+  { name: '萩原朔太郎', file: 'hagiwara_sakutarou.png' },
+  { name: '堀辰雄', file: 'hori_tatsuo.png' },
+  { name: '中原中也', file: 'nakahara_chuya.png' },
+  { name: '牧野信一', file: 'makino_shinichi.png' },
+  { name: '豊島与志雄', file: 'toyoshima_toshio.png' },
+  
+  // --- グループB: 無頼・近代 ---
+  { name: '太宰治', file: 'dazai_osamu.png' },
+  { name: '坂口安吾', file: 'sakaguchi_ango.png' },
+  { name: '芥川龍之介', file: 'akutagawa_ryunosuke.png' },
+  { name: '夏目漱石', file: 'natsume_soseki.png' },
+  { name: '田山録弥', file: 'tayama_rokuya.png' },
+  { name: '菊池寛', file: 'kikuchi_kan.png' },
+  { name: '山本周五郎', file: 'yamamoto_shugorou.png' },
+  
+  // --- グループC: 科学・思想・芸術 ---
+  { name: '寺田寅彦', file: 'terada_torahiko.png' },
+  { name: '中谷宇吉郎', file: 'nakaya_ukichiro.png' },
+  { name: '北大路魯山人', file: 'kitaooji_rosannzin.png' },
+  { name: '岡本かの子', file: 'okamoto_kanoko.png' },
+  { name: '宮本百合子', file: 'miyamoto_yuriko.png' },
+  { name: '伊藤野枝', file: 'ito_noe.png' },
+  { name: '原民喜', file: 'hara_tamiki.png' },
+  { name: '岸田國士', file: 'kishida_kunio.png' },
+  { name: '折口信夫', file: 'origuchi_nobuo.png' },
+  
+  // --- グループD: エンタメ・ミステリー ---
+  { name: '江戸川乱歩', file: 'edogawa_ranpo.png' },
+  { name: '夢野久作', file: 'yumeno_kyusaku.png' },
+  { name: '海野十三', file: 'uno_juza.png' },
+  { name: '国枝史郎', file: 'kunieda_shiro.png' },
+  { name: '久生十蘭', file: 'hisao_juran.png' },
+  { name: '岡本綺堂', file: 'okamoto_kido.png' },
+  { name: '野村胡堂', file: 'nomura_kodou.png' },
+  { name: '吉川英治', file: 'yoshikawa_eiji.png' },
+  { name: '坂本竜馬', file: 'sakamoto_ryoma.png' },
+  { name: '永井荷風', file: 'nagai_kafu.png' },
+  { name: '新美南吉', file: 'niimi_nankichi.png' },
+  { name: '今野大力', file: 'konno_dairiki.png' },
+  { name: '佐藤垢石', file: 'sato_kaseki.png' },
+  { name: '田中貢太郎', file: 'tanaka_koutarou.png' },
+];
+
+// --- コンポーネント定義 ---
+
+// 通常の作品カード（※前回のsrc修正済み）
 const BookCardItem = ({ book, onClick, index, isRanking = false }) => {
   const [isHovered, setIsHovered] = useState(false);
 
-  // ランキング用のスタイル調整
+  // ランキング・作家カード用の共通スタイルベース
   const cardStyle = isRanking ? {
     ...styles.bookCard,
-    minWidth: '140px', // ランキングは少し小さめ固定
-    maxWidth: '140px',
+    minWidth: '120px', // ★少しコンパクトに
+    maxWidth: '120px',
     flexShrink: 0,
     scrollSnapAlign: 'start',
-    marginRight: '15px' // カード間の隙間
+    marginRight: '15px'
   } : styles.bookCard;
 
   const getCoverColor = (id) => {
@@ -25,24 +76,20 @@ const BookCardItem = ({ book, onClick, index, isRanking = false }) => {
     <div 
       style={{
         ...cardStyle,
-        ...(isHovered && !isRanking ? styles.bookCardHover : {}), // ランキング時は大きく浮かせない（横スクロールの邪魔になるため）
+        ...(isHovered && !isRanking ? styles.bookCardHover : {}),
         ...(isHovered && isRanking ? {transform: 'translateY(-4px)'} : {})
       }}
       onClick={onClick}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* ランキングバッジ */}
-      {isRanking && (
-        <div style={styles.rankBadge}>{index + 1}</div>
-      )}
+      {isRanking && <div style={styles.rankBadge}>{index + 1}</div>}
 
-      {/* 画像エリア */}
       <div style={styles.bookCover}>
          {book.image_url ? (
            <img 
-             src={book.image_url} 
-             alt={book.title} 
+             src={book.image_url} /* ★★★ ここが重要！前回の修正箇所 ★★★ */
+             alt={`${book.title} - ${book.authorName} の要約・あらすじ`}
              style={{
                ...styles.bookImage,
                ...(isHovered ? styles.bookImageHover : {})
@@ -50,30 +97,59 @@ const BookCardItem = ({ book, onClick, index, isRanking = false }) => {
            />
          ) : (
            <div style={{
-             width: '100%', 
-             height: '100%', 
+             width: '100%', height: '100%', 
              background: `linear-gradient(135deg, ${getCoverColor(book.id || index)} 0%, #fff 150%)`, 
-             display: 'flex', 
-             alignItems: 'center', 
-             justifyContent: 'center'
+             display: 'flex', alignItems: 'center', justifyContent: 'center'
            }}>
              <span style={{fontSize: isRanking ? '24px' : '40px'}}>📖</span>
            </div>
          )}
-         
-         {/* グラデーション（常時表示） */}
          <div style={styles.gradientOverlay}></div>
       </div>
 
-      {/* 情報エリア */}
       <div style={styles.bookInfo}>
-        <h4 style={{...styles.bookTitle, fontSize: isRanking ? '13px' : '15px'}}>{book.title}</h4>
-        <p style={{...styles.bookAuthor, fontSize: isRanking ? '11px' : '12px'}}>{book.authorName}</p>
-        
-        {/* HQバッジ (ランキング以外で表示) */}
-        {!isRanking && book.highQuality && (
-           <span style={styles.hqBadge}>✨ Pro Quality</span>
-        )}
+        <h4 style={{...styles.bookTitle, fontSize: isRanking ? '12px' : '15px'}}>{book.title}</h4>
+        <p style={{...styles.bookAuthor, fontSize: isRanking ? '10px' : '12px'}}>{book.authorName}</p>
+        {!isRanking && book.highQuality && <span style={styles.hqBadge}>✨ Pro</span>}
+      </div>
+    </div>
+  );
+};
+
+// ★新設: 作家カードコンポーネント
+const AuthorCardItem = ({ author, onClick }) => {
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <div 
+      style={{
+        ...styles.bookCard, // 基本スタイルは本と同じ
+        minWidth: '120px',
+        maxWidth: '120px',
+        flexShrink: 0,
+        scrollSnapAlign: 'start',
+        marginRight: '15px',
+        ...(isHovered ? {transform: 'translateY(-4px)'} : {})
+      }}
+      onClick={onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <div style={styles.bookCover}>
+         <img 
+             src={`https://assets.smartbrief.jp/${author.file}`}
+             alt={`${author.name}の作品一覧`}
+             style={{
+               ...styles.bookImage,
+               ...(isHovered ? styles.bookImageHover : {})
+             }} 
+         />
+         <div style={styles.gradientOverlay}></div>
+      </div>
+
+      <div style={styles.bookInfo}>
+        <p style={{...styles.bookAuthor, fontSize: '10px', color: '#ccc', marginBottom: '2px'}}>作家</p>
+        <h4 style={{...styles.bookTitle, fontSize: '13px', marginBottom: '5px'}}>{author.name}</h4>
       </div>
     </div>
   );
@@ -88,7 +164,6 @@ const BookSearch = ({ token, onBookSelect }) => {
   const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // ページネーション・タブ
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [currentSearchType, setCurrentSearchType] = useState(null); 
@@ -98,19 +173,16 @@ const BookSearch = ({ token, onBookSelect }) => {
   const LIMIT = 50; 
   const [searchParams] = useSearchParams(); 
   const [rankingBooks, setRankingBooks] = useState([]);
-  const [authors, setAuthors] = useState([]);
+  
+  // スクロール用Ref
   const rankingScrollRef = useRef(null);
+  const authorScrollRef = useRef(null);
 
   // 初期データ取得
   useEffect(() => {
     fetch('/api/v1/books/ranking?limit=20', { headers: { 'Authorization': `Bearer ${token}` } })
     .then(res => res.ok ? res.json() : [])
     .then(data => setRankingBooks(data))
-    .catch(err => console.error(err));
-
-    fetch('/api/v1/books/authors', { headers: { 'Authorization': `Bearer ${token}` } })
-    .then(res => res.ok ? res.json() : [])
-    .then(data => setAuthors(data))
     .catch(err => console.error(err));
   }, [token]);
 
@@ -172,6 +244,8 @@ const BookSearch = ({ token, onBookSelect }) => {
     setSuggestions([]); setShowSuggestions(false);
     setActiveTab('all');
     fetchBooks('text', searchWord, 0, false);
+    // 検索したらトップへスクロール
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const executeGenreSearch = (genreWord) => {
@@ -230,11 +304,11 @@ const BookSearch = ({ token, onBookSelect }) => {
     setQuery(book.title); setSuggestions([]); onBookSelect(book.id);
   };
 
-  const scrollRanking = (direction) => {
-    if (rankingScrollRef.current) {
-      const { current } = rankingScrollRef;
+  // 横スクロール関数
+  const scrollContainer = (ref, direction) => {
+    if (ref.current) {
       const amount = 300;
-      current.scrollBy({ left: direction === 'left' ? -amount : amount, behavior: 'smooth' });
+      ref.current.scrollBy({ left: direction === 'left' ? -amount : amount, behavior: 'smooth' });
     }
   };
 
@@ -242,8 +316,8 @@ const BookSearch = ({ token, onBookSelect }) => {
     <div style={styles.container}>
       <style>{`
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .ranking-scroll::-webkit-scrollbar { display: none; }
-        .ranking-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .scroll-btn:hover { background-color: rgba(255,255,255,1) !important; transform: scale(1.1); }
         .load-more-btn:hover { background-color: #2b6cb0 !important; }
         .load-more-btn:disabled { background-color: #cbd5e0 !important; cursor: not-allowed; }
@@ -254,15 +328,15 @@ const BookSearch = ({ token, onBookSelect }) => {
         <p style={styles.subText}>AIが要約した名作文学の世界へ</p>
       </div>
 
-      {/* ランキング */}
+      {/* --- ランキングセクション --- */}
       {rankingBooks.length > 0 && activeTab === 'all' && !query && (
         <div style={{marginBottom: '50px'}}>
           <h3 style={styles.sectionTitle}>
             <span>👑</span> 今週の人気ランキング
           </h3>
           <div style={{position: 'relative'}}>
-            <button className="scroll-btn" onClick={() => scrollRanking('left')} style={{...styles.scrollButton, left: '-20px'}}>&#10094;</button>
-            <div ref={rankingScrollRef} className="ranking-scroll" style={styles.rankingGrid}>
+            <button className="scroll-btn" onClick={() => scrollContainer(rankingScrollRef, 'left')} style={{...styles.scrollButton, left: '-20px'}}>&#10094;</button>
+            <div ref={rankingScrollRef} className="hide-scrollbar" style={styles.rankingGrid}>
               {rankingBooks.map((book, index) => (
                 <BookCardItem 
                   key={`rank-${book.id || index}`}
@@ -273,7 +347,29 @@ const BookSearch = ({ token, onBookSelect }) => {
                 />
               ))}
             </div>
-            <button className="scroll-btn" onClick={() => scrollRanking('right')} style={{...styles.scrollButton, right: '-20px'}}>&#10095;</button>
+            <button className="scroll-btn" onClick={() => scrollContainer(rankingScrollRef, 'right')} style={{...styles.scrollButton, right: '-20px'}}>&#10095;</button>
+          </div>
+        </div>
+      )}
+
+      {/* --- ★修正: 人気作家セクション (カード化) --- */}
+      {activeTab === 'all' && !query && (
+        <div style={{marginBottom: '50px'}}>
+          <h3 style={styles.sectionTitle}>
+            <span>✒️</span> 人気作家から探す
+          </h3>
+          <div style={{position: 'relative'}}>
+            <button className="scroll-btn" onClick={() => scrollContainer(authorScrollRef, 'left')} style={{...styles.scrollButton, left: '-20px'}}>&#10094;</button>
+            <div ref={authorScrollRef} className="hide-scrollbar" style={styles.rankingGrid}>
+              {POPULAR_AUTHORS.map((author, index) => (
+                <AuthorCardItem 
+                  key={`auth-${index}`}
+                  author={author}
+                  onClick={() => executeSearch(author.name)}
+                />
+              ))}
+            </div>
+            <button className="scroll-btn" onClick={() => scrollContainer(authorScrollRef, 'right')} style={{...styles.scrollButton, right: '-20px'}}>&#10095;</button>
           </div>
         </div>
       )}
@@ -321,20 +417,6 @@ const BookSearch = ({ token, onBookSelect }) => {
             🌍 海外翻訳作品
           </button>
       </div>
-
-      {/* 作家チップス */}
-      {activeTab === 'all' && authors.length > 0 && !query && (
-        <div style={styles.authorSection}>
-          <p style={styles.authorLabel}>人気の作家から探す</p>
-          <div style={styles.chipContainer}>
-            {authors.map((author, index) => (
-              <button key={index} style={styles.authorChip} onClick={() => executeSearch(author)}>
-                {author}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {error && <p style={styles.error}>{error}</p>}
 
@@ -434,25 +516,27 @@ const styles = {
     transition: 'transform 0.2s'
   },
   
-  // --- カードデザイン (Dashboardと完全統一) ---
+  // --- カードデザイン ---
   grid: { 
     display: 'grid', 
-    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', 
-    gap: '30px' 
+    // ★修正: ここを180pxから140pxに変更
+    gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', 
+    gap: '20px' // 隙間も少し狭めてもいいかもしれません（お好みで30pxのままでもOK）
   },
   
+  // 横スクロール用コンテナ
   rankingGrid: { display: 'flex', overflowX: 'auto', padding: '10px 5px 20px 5px', scrollSnapType: 'x mandatory', scrollBehavior: 'smooth' },
 
   bookCard: { 
     position: 'relative',
-    backgroundColor: '#000', // 画像ロード前
+    backgroundColor: '#000', 
     borderRadius: '12px', 
     overflow: 'hidden', 
     boxShadow: '0 8px 16px rgba(0,0,0,0.1)', 
     cursor: 'pointer', 
     transition: 'transform 0.3s ease, box-shadow 0.3s ease', 
     border: 'none',
-    aspectRatio: '2 / 3', // ★ 縦横比固定
+    aspectRatio: '2 / 3', 
   },
 
   bookCardHover: {
@@ -475,7 +559,7 @@ const styles = {
   },
 
   bookImageHover: {
-    transform: 'scale(1.08)', // ズーム
+    transform: 'scale(1.08)', 
   },
 
   gradientOverlay: {
@@ -494,7 +578,7 @@ const styles = {
     bottom: 0, 
     left: 0,
     width: '100%',
-    padding: '15px', 
+    padding: '10px', 
     zIndex: 2,
     boxSizing: 'border-box',
     display: 'flex',
@@ -536,7 +620,6 @@ const styles = {
 
   rankBadge: { position: 'absolute', top: '0', left: '0', width: '30px', height: '30px', backgroundColor: '#FFD700', color: '#4a3b32', borderBottomRightRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '14px', zIndex: 10, boxShadow: '2px 2px 5px rgba(0,0,0,0.2)' },
   
-  // --- その他パーツ ---
   scrollButton: { position: 'absolute', top: '50%', transform: 'translateY(-50%)', width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'rgba(255, 255, 255, 0.9)', border: 'none', boxShadow: '0 4px 8px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 20, fontSize: '18px', color: '#5d4037', transition: 'all 0.2s' },
   
   loadMoreButton: { padding: '12px 50px', backgroundColor: 'transparent', color: '#5d4037', border: '2px solid #5d4037', borderRadius: '30px', fontSize: '15px', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s' },
@@ -549,11 +632,6 @@ const styles = {
   suggestionItem: { padding: '12px 20px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f0f0f0' },
   suggestionTitle: { fontWeight: 'bold', color: '#2d3748' },
   suggestionAuthor: { fontSize: '12px', color: '#718096' },
-  
-  authorSection: { marginBottom: '40px', maxWidth: '800px', margin: '0 auto 40px auto', textAlign: 'center' },
-  authorLabel: { fontSize: '13px', color: '#8d6e63', marginBottom: '15px', fontWeight: 'bold', letterSpacing: '1px' },
-  chipContainer: { display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'center' },
-  authorChip: { padding: '8px 16px', borderRadius: '20px', border: '1px solid #d7ccc8', backgroundColor: '#fff', color: '#5d4037', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' },
   
   spinner: { width: '20px', height: '20px', border: '3px solid rgba(255,255,255,0.3)', borderRadius: '50%', borderTopColor: '#fff', animation: 'spin 0.8s linear infinite' },
   error: { color: '#e53e3e', textAlign: 'center' },

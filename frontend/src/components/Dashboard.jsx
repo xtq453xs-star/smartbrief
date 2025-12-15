@@ -1,8 +1,52 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Footer from './Footer'; 
 
-// ★追加: 1つのカードを管理するコンポーネント（ホバーアニメーション用）
+// ★全39名分の画像付き作家リスト
+const FEATURED_AUTHORS = [
+  // --- 第1弾 (20名) ---
+  { name: '宮本百合子', file: 'miyamoto_yuriko.png' },
+  { name: '宮沢賢治', file: 'miyazawa_kenji.png' },
+  { name: '小川未明', file: 'ogawa_mimei.png' },
+  { name: '芥川龍之介', file: 'akutagawa_ryunosuke.png' },
+  { name: '泉鏡花', file: 'izumi_kyoka.png' },
+  { name: '萩原朔太郎', file: 'hagiwara_sakutarou.png' },
+  { name: '牧野信一', file: 'makino_shinichi.png' },
+  { name: '豊島与志雄', file: 'toyoshima_toshio.png' },
+  { name: '太宰治', file: 'dazai_osamu.png' },
+  { name: '坂口安吾', file: 'sakaguchi_ango.png' },
+  { name: '岸田国士', file: 'kishida_kunio.png' },
+  { name: '折口信夫', file: 'origuchi_nobuo.png' },
+  { name: '寺田寅彦', file: 'terada_torahiko.png' },
+  { name: '中谷宇吉郎', file: 'nakaya_ukichiro.png' },
+  { name: '海野十三', file: 'uno_juza.png' },
+  { name: '北大路魯山人', file: 'kitaooji_rosannzin.png' },
+  { name: '岡本綺堂', file: 'okamoto_kido.png' },
+  { name: '野村胡堂', file: 'nomura_kodou.png' },
+  { name: '田中貢太郎', file: 'tanaka_koutarou.png' },
+  { name: '山本周五郎', file: 'yamamoto_shugorou.png' },
+  // --- 第2弾 (19名) ---
+  { name: '堀辰雄', file: 'hori_tatsuo.png' },
+  { name: '中原中也', file: 'nakahara_chuya.png' },
+  { name: '坂本竜馬', file: 'sakamoto_ryoma.png' },
+  { name: '原民喜', file: 'hara_tamiki.png' },
+  { name: '岡本かの子', file: 'okamoto_kanoko.png' },
+  { name: '永井荷風', file: 'nagai_kafu.png' },
+  { name: '吉川英治', file: 'yoshikawa_eiji.png' },
+  { name: '田山録弥', file: 'tayama_rokuya.png' },
+  { name: '国枝史郎', file: 'kunieda_shiro.png' },
+  { name: '新美南吉', file: 'niimi_nankichi.png' },
+  { name: '今野大力', file: 'konno_dairiki.png' },
+  { name: '夏目漱石', file: 'natsume_soseki.png' },
+  { name: '江戸川乱歩', file: 'edogawa_ranpo.png' },
+  { name: '夢野久作', file: 'yumeno_kyusaku.png' },
+  { name: '久生十蘭', file: 'hisao_juran.png' },
+  { name: '伊藤野枝', file: 'ito_noe.png' },
+  { name: '佐藤垢石', file: 'sato_kaseki.png' },
+  { name: '菊池寛', file: 'kikuchi_kan.png' },
+];
+
+// 本のカードコンポーネント
 const BookCardItem = ({ book, onClick, getBookColor }) => {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -19,8 +63,8 @@ const BookCardItem = ({ book, onClick, getBookColor }) => {
       <div style={styles.bookCover}>
          {book.image_url ? (
            <img 
-             src={book.image_url} 
-             alt={book.title} 
+             src={book.image_url}
+             alt={`${book.title} - ${book.authorName} の要約・あらすじ`}
              style={{
                ...styles.bookImage,
                ...(isHovered ? styles.bookImageHover : {})
@@ -38,14 +82,74 @@ const BookCardItem = ({ book, onClick, getBookColor }) => {
              <span style={{fontSize:'40px'}}>📖</span>
            </div>
          )}
-         
-         {/* グラデーションオーバーレイ（常時表示） */}
          <div style={styles.gradientOverlay}></div>
       </div>
 
       <div style={styles.bookInfo}>
         <h4 style={styles.bookTitle}>{book.title}</h4>
         <p style={styles.bookAuthor}>{book.authorName}</p>
+      </div>
+    </div>
+  );
+};
+
+// 作家カードコンポーネント
+const AuthorCardItem = ({ authorName, imageFile, onClick, isSlider = false }) => {
+  const [isHovered, setIsHovered] = useState(false);
+  
+  const cardStyle = isSlider ? {
+      ...styles.authorCard,
+      minWidth: '120px', 
+      maxWidth: '120px',
+      flexShrink: 0,
+      scrollSnapAlign: 'start',
+  } : {
+      ...styles.authorCard,
+      width: '100%',
+  };
+
+  const getFallbackColor = (name) => {
+    const colors = ['#5d4037', '#795548', '#8d6e63', '#455a64', '#37474f', '#263238'];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    return colors[Math.abs(hash) % colors.length];
+  };
+
+  return (
+    <div 
+      style={{
+        ...cardStyle,
+        ...(isHovered ? {transform: 'translateY(-4px)'} : {})
+      }}
+      onClick={onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <div style={styles.bookCover}>
+         {imageFile ? (
+           <img 
+               src={`https://assets.smartbrief.jp/${imageFile}`}
+               alt={authorName}
+               style={{
+                 ...styles.bookImage,
+                 ...(isHovered ? styles.bookImageHover : {})
+               }} 
+           />
+         ) : (
+           <div style={{
+             width: '100%', height: '100%',
+             background: getFallbackColor(authorName),
+             display: 'flex', alignItems: 'center', justifyContent: 'center',
+             flexDirection: 'column'
+           }}>
+             <span style={{fontSize: '32px', opacity: 0.8, color: '#fff'}}>✒️</span>
+           </div>
+         )}
+         <div style={styles.gradientOverlay}></div>
+      </div>
+      <div style={styles.bookInfo}>
+        <p style={{...styles.bookAuthor, fontSize: '10px', color: '#ccc', marginBottom: '2px'}}>作家</p>
+        <h4 style={{...styles.bookTitle, fontSize: '13px', marginBottom: '5px'}}>{authorName}</h4>
       </div>
     </div>
   );
@@ -58,10 +162,12 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
   const [historyBooks, setHistoryBooks] = useState([]);
   const [rankingBooks, setRankingBooks] = useState([]);
   const [favoriteBooks, setFavoriteBooks] = useState([]);
+  const [allAuthors, setAllAuthors] = useState([]);
+  
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // LINE設定
+  const authorScrollRef = useRef(null);
   const LINE_FRIEND_URL = 'https://lin.ee/xxxxx'; 
 
   const getBookColor = (id) => {
@@ -77,12 +183,20 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
         fetch('/api/v1/billing/status', { headers }).then(res => res.json()).catch(() => null),
         fetch('/api/v1/books/history', { headers }).then(res => res.json()).catch(() => []),
         fetch('/api/v1/books/ranking', { headers }).then(res => res.json()).catch(() => []),
-        fetch('/api/v1/books/favorites', { headers }).then(res => res.json()).catch(() => [])
-    ]).then(([user, history, ranking, favorites]) => {
+        fetch('/api/v1/books/favorites', { headers }).then(res => res.json()).catch(() => []),
+        
+        // ★修正箇所: 既存の全件取得APIを使用 (/authors/all)
+        fetch('/api/v1/books/authors/all', { headers }).then(res => res.json()).catch(() => [])
+        
+    ]).then(([user, history, ranking, favorites, authors]) => {
         setUserData(user);
         setHistoryBooks(history || []);
         setRankingBooks(ranking || []);
         setFavoriteBooks(favorites || []);
+        
+        const uniqueAuthors = [...new Set(authors || [])];
+        setAllAuthors(uniqueAuthors);
+        
         setLoading(false);
     });
   }, [token]);
@@ -92,10 +206,29 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
       case 'history': return { title: 'マイ・ライブラリ', desc: 'おかえりなさい。あなたが最近旅した物語です。' };
       case 'ranking': return { title: '人気ランキング', desc: '今、最も多くの人に読まれている名作たちです。' };
       case 'favorites': return { title: 'お気に入り', desc: 'あなたが心に残した、大切な作品コレクションです。' };
+      case 'authors': return { title: '作家一覧', desc: '日本文学を代表する文豪たちの世界へ。' };
       default: return { title: '', desc: '' };
     }
   };
   const viewInfo = getViewInfo();
+
+  const handleAuthorClick = (authorName) => {
+      navigate(`/search?q=${encodeURIComponent(authorName)}`);
+  };
+
+  const scrollContainer = (ref, direction) => {
+    if (ref.current) {
+      const amount = 300;
+      ref.current.scrollBy({ left: direction === 'left' ? -amount : amount, behavior: 'smooth' });
+    }
+  };
+
+  const getAuthorImage = (name) => {
+    if (!name) return null;
+    const cleanName = name.replace(/[\s　]/g, ''); 
+    const found = FEATURED_AUTHORS.find(a => a.name.replace(/[\s　]/g, '') === cleanName);
+    return found ? found.file : null;
+  };
 
   const BookList = ({ books, emptyMessage, isLoading }) => {
     if (isLoading) return <div style={{padding:'20px', color:'#8d6e63'}}>書架を整理中...</div>;
@@ -112,7 +245,6 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
     return (
       <div style={styles.bookGrid}>
         {books.map((book, index) => (
-          // ★修正: 新しいコンポーネントを使用
           <BookCardItem 
             key={index} 
             book={book} 
@@ -126,6 +258,12 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
 
   return (
     <div style={styles.wrapper}>
+      <style>{`
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .scroll-btn:hover { background-color: rgba(255,255,255,1) !important; transform: scale(1.1); }
+      `}</style>
+
       <aside style={styles.sidebar}>
         <div style={styles.logoArea}>
           <h1 style={styles.logoText}>SmartBrief</h1>
@@ -142,6 +280,9 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
           <button style={activeView === 'favorites' ? styles.navItemActive : styles.navItem} onClick={() => setActiveView('favorites')}>
             🔖 お気に入り
           </button>
+          <button style={activeView === 'authors' ? styles.navItemActive : styles.navItem} onClick={() => setActiveView('authors')}>
+            ✒️ 作家一覧
+          </button>
 
           <div style={styles.separator}></div>
 
@@ -150,9 +291,6 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
           </button>
           <button onClick={() => navigate('/genres')} style={styles.navItem}>
             🎨 ジャンル一覧
-          </button>
-          <button onClick={() => navigate('/authors')} style={styles.navItem}>
-            👥 作家一覧
           </button>
         </nav>
 
@@ -179,7 +317,6 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
           </div>
           
           <button onClick={onLogout} style={styles.logoutBtn}>ログアウト</button>
-
           <div style={{marginTop: '20px'}}>
              <Footer color="#a1887f" separatorColor="#4e342e" />
           </div>
@@ -194,8 +331,51 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
 
         <div style={styles.contentArea}>
           {activeView === 'history' && (<BookList books={historyBooks.slice(0, 20)} isLoading={loading} emptyMessage="まだ読んだ本はありません。" />)}
+          
           {activeView === 'ranking' && <BookList books={rankingBooks} isLoading={loading} emptyMessage="ランキングデータの取得中です..." />}
+
           {activeView === 'favorites' && <BookList books={favoriteBooks} isLoading={loading} emptyMessage="お気に入りはまだありません。" />}
+
+          {/* ★ 作家一覧ビュー */}
+          {activeView === 'authors' && (
+             <div>
+                {/* 1. 上段: ピックアップ（画像がある39名・横スライド） */}
+                <h3 style={styles.sectionHeading}>✨ Pick Up Authors (39)</h3>
+                <div style={{position: 'relative', marginBottom: '50px'}}>
+                    <button className="scroll-btn" onClick={() => scrollContainer(authorScrollRef, 'left')} style={{...styles.scrollButton, left: '-20px'}}>&#10094;</button>
+                    <div ref={authorScrollRef} className="hide-scrollbar" style={styles.authorScrollContainer}>
+                        {FEATURED_AUTHORS.map((author, index) => (
+                            <AuthorCardItem 
+                                key={`slide-${index}`} 
+                                authorName={author.name}
+                                imageFile={author.file}
+                                isSlider={true} 
+                                onClick={() => handleAuthorClick(author.name)} 
+                            />
+                        ))}
+                    </div>
+                    <button className="scroll-btn" onClick={() => scrollContainer(authorScrollRef, 'right')} style={{...styles.scrollButton, right: '-20px'}}>&#10095;</button>
+                </div>
+
+                {/* 2. 下段: 全作家リスト（API全件・グリッド表示） */}
+                <h3 style={styles.sectionHeading}>👥 All Authors ({allAuthors.length})</h3>
+                {loading ? (
+                    <div style={{padding:'20px', color:'#8d6e63'}}>作家リストを読み込み中...</div>
+                ) : (
+                    <div style={styles.bookGrid}>
+                        {allAuthors.map((authorName, index) => (
+                          <AuthorCardItem 
+                            key={`grid-${index}`} 
+                            authorName={authorName}
+                            imageFile={getAuthorImage(authorName)}
+                            isSlider={false} 
+                            onClick={() => handleAuthorClick(authorName)} 
+                          />
+                        ))}
+                    </div>
+                )}
+             </div>
+          )}
         </div>
       </main>
     </div>
@@ -236,59 +416,56 @@ const styles = {
   greeting: { fontSize: '14px', color: '#8d6e63', margin: 0 },
   contentArea: { paddingBottom: '20px' },
 
-  // --- 本のリスト表示 (Pro仕様に更新) ---
+  // --- 本・作家のグリッド表示 (スマホ2列対応) ---
   bookGrid: { 
     display: 'grid', 
-    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', 
-    gap: '30px' // 間隔を少し広げて優雅に
+    gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', 
+    gap: '20px'
   },
   
   bookCard: { 
     position: 'relative',
-    borderRadius: '12px', // 角丸を少し大きく
-    boxShadow: '0 10px 20px rgba(0,0,0,0.1)', // 影を深く、柔らかく
+    borderRadius: '12px',
+    boxShadow: '0 10px 20px rgba(0,0,0,0.1)',
     cursor: 'pointer', 
     transition: 'transform 0.3s ease, box-shadow 0.3s ease', 
     overflow: 'hidden', 
-    aspectRatio: '2 / 3', // ★重要: 縦横比を「本」らしく固定
-    backgroundColor: '#000', // 画像ロード前は黒
+    aspectRatio: '2 / 3',
+    backgroundColor: '#000',
   },
 
-  // ホバー時のカードスタイル
   bookCardHover: {
-    transform: 'translateY(-8px)', // ふわりと浮き上がる
-    boxShadow: '0 20px 40px rgba(0,0,0,0.2)', // 影が伸びる
+    transform: 'translateY(-8px)',
+    boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
   },
 
   bookCover: { 
     width: '100%',
     height: '100%',
     position: 'relative',
-    overflow: 'hidden', // 画像拡大時に枠からはみ出さないように
+    overflow: 'hidden',
   },
 
   bookImage: {
     width: '100%', 
     height: '100%', 
     objectFit: 'cover',
-    transition: 'transform 0.5s ease', // ゆっくりズームさせる
+    transition: 'transform 0.5s ease',
   },
 
-  // ホバー時の画像スタイル
   bookImageHover: {
-    transform: 'scale(1.08)', // 画像がじわっと近づいてくる
+    transform: 'scale(1.08)',
   },
 
-  // グラデーション専用レイヤー
   gradientOverlay: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     width: '100%',
-    height: '70%', // 下半分を中心に
+    height: '70%',
     background: 'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.6) 50%, transparent 100%)',
     zIndex: 1,
-    pointerEvents: 'none', // クリックを邪魔しない
+    pointerEvents: 'none',
   },
 
   bookInfo: { 
@@ -304,7 +481,7 @@ const styles = {
 
   bookTitle: { 
     margin: '0 0 6px 0', 
-    fontSize: '16px', // 少し大きく
+    fontSize: '16px', 
     fontWeight: 'bold', 
     lineHeight: '1.4', 
     color: '#fff', 
@@ -312,8 +489,8 @@ const styles = {
     WebkitLineClamp: 2, 
     WebkitBoxOrient: 'vertical', 
     overflow: 'hidden',
-    textShadow: '0 2px 8px rgba(0,0,0,0.8)', // 影を少し拡散させて上品に
-    letterSpacing: '0.5px', // 字間を少し空けて読みやすく
+    textShadow: '0 2px 8px rgba(0,0,0,0.8)',
+    letterSpacing: '0.5px',
   },
   
   bookAuthor: { 
@@ -321,8 +498,41 @@ const styles = {
     fontSize: '13px', 
     color: 'rgba(255,255,255,0.85)', 
     textShadow: '0 1px 4px rgba(0,0,0,0.8)',
-    fontFamily: '"sans-serif"', // 著者はゴシック体でもスッキリする
+    fontFamily: '"sans-serif"',
   },
+
+  // --- 作家カードスタイル ---
+  authorCard: {
+    position: 'relative',
+    borderRadius: '12px',
+    boxShadow: '0 8px 16px rgba(0,0,0,0.1)',
+    cursor: 'pointer', 
+    transition: 'transform 0.3s ease', 
+    overflow: 'hidden', 
+    aspectRatio: '2 / 3',
+    backgroundColor: '#000',
+  },
+
+  // --- スライド・セクションスタイル ---
+  sectionHeading: {
+    fontSize: '18px',
+    color: '#4e342e',
+    marginBottom: '15px',
+    fontWeight: 'bold',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
+  },
+  
+  authorScrollContainer: {
+    display: 'flex',
+    overflowX: 'auto',
+    gap: '15px',
+    paddingBottom: '10px',
+    scrollSnapType: 'x mandatory',
+  },
+  
+  scrollButton: { position: 'absolute', top: '50%', transform: 'translateY(-50%)', width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'rgba(255, 255, 255, 0.9)', border: 'none', boxShadow: '0 4px 8px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 20, fontSize: '18px', color: '#5d4037', transition: 'all 0.2s' },
 
   // --- 空の状態 ---
   emptyContainer: { textAlign: 'center', padding: '80px 0', opacity: 0.6 },
