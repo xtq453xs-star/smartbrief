@@ -34,7 +34,7 @@ public class SecurityContextRepository implements ServerSecurityContextRepositor
                 String authToken = authHeader.substring(7);
                 
                 // ★デバッグ用ログ: ここでトークンが見えていればフロントは送れている
-                System.out.println("🔍 [Repo] Checking Token: " + authToken.substring(0, Math.min(10, authToken.length())) + "...");
+                //System.out.println("🔍 [Repo] Checking Token: " + authToken.substring(0, Math.min(10, authToken.length())) + "...");
 
                 Authentication auth = new UsernamePasswordAuthenticationToken(authToken, authToken);
                 

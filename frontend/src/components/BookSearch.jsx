@@ -2,6 +2,83 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Footer from './Footer';
 
+// ★ Dashboardと同じ高品質カードコンポーネント（ランキング対応版）
+const BookCardItem = ({ book, onClick, index, isRanking = false }) => {
+  const [isHovered, setIsHovered] = useState(false);
+
+  // ランキング用のスタイル調整
+  const cardStyle = isRanking ? {
+    ...styles.bookCard,
+    minWidth: '140px', // ランキングは少し小さめ固定
+    maxWidth: '140px',
+    flexShrink: 0,
+    scrollSnapAlign: 'start',
+    marginRight: '15px' // カード間の隙間
+  } : styles.bookCard;
+
+  const getCoverColor = (id) => {
+    const colors = ['#FF9A9E', '#FECFEF', '#A18CD1', '#FBC2EB', '#8FD3F4', '#84FAB0', '#E0C3FC'];
+    return colors[id % colors.length];
+  };
+
+  return (
+    <div 
+      style={{
+        ...cardStyle,
+        ...(isHovered && !isRanking ? styles.bookCardHover : {}), // ランキング時は大きく浮かせない（横スクロールの邪魔になるため）
+        ...(isHovered && isRanking ? {transform: 'translateY(-4px)'} : {})
+      }}
+      onClick={onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      {/* ランキングバッジ */}
+      {isRanking && (
+        <div style={styles.rankBadge}>{index + 1}</div>
+      )}
+
+      {/* 画像エリア */}
+      <div style={styles.bookCover}>
+         {book.image_url ? (
+           <img 
+             src={book.image_url} 
+             alt={book.title} 
+             style={{
+               ...styles.bookImage,
+               ...(isHovered ? styles.bookImageHover : {})
+             }} 
+           />
+         ) : (
+           <div style={{
+             width: '100%', 
+             height: '100%', 
+             background: `linear-gradient(135deg, ${getCoverColor(book.id || index)} 0%, #fff 150%)`, 
+             display: 'flex', 
+             alignItems: 'center', 
+             justifyContent: 'center'
+           }}>
+             <span style={{fontSize: isRanking ? '24px' : '40px'}}>📖</span>
+           </div>
+         )}
+         
+         {/* グラデーション（常時表示） */}
+         <div style={styles.gradientOverlay}></div>
+      </div>
+
+      {/* 情報エリア */}
+      <div style={styles.bookInfo}>
+        <h4 style={{...styles.bookTitle, fontSize: isRanking ? '13px' : '15px'}}>{book.title}</h4>
+        <p style={{...styles.bookAuthor, fontSize: isRanking ? '11px' : '12px'}}>{book.authorName}</p>
+        
+        {/* HQバッジ (ランキング以外で表示) */}
+        {!isRanking && book.highQuality && (
+           <span style={styles.hqBadge}>✨ Pro Quality</span>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const BookSearch = ({ token, onBookSelect }) => {
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
@@ -11,22 +88,20 @@ const BookSearch = ({ token, onBookSelect }) => {
   const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // ページネーション・タブ用ステート
+  // ページネーション・タブ
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [currentSearchType, setCurrentSearchType] = useState(null); 
   const [lastSearchWord, setLastSearchWord] = useState('');
-  const [activeTab, setActiveTab] = useState('all'); // 'all' or 'translation'
+  const [activeTab, setActiveTab] = useState('all'); 
 
   const LIMIT = 50; 
-
   const [searchParams] = useSearchParams(); 
   const [rankingBooks, setRankingBooks] = useState([]);
   const [authors, setAuthors] = useState([]);
-
   const rankingScrollRef = useRef(null);
 
-  // 初期データ
+  // 初期データ取得
   useEffect(() => {
     fetch('/api/v1/books/ranking?limit=20', { headers: { 'Authorization': `Bearer ${token}` } })
     .then(res => res.ok ? res.json() : [])
@@ -41,7 +116,6 @@ const BookSearch = ({ token, onBookSelect }) => {
 
   // 検索関数
   const fetchBooks = async (type, word, newOffset, isAppend = false) => {
-    // 翻訳タブ以外は検索ワード必須
     if (type !== 'translation' && !word) return;
     
     if (!isAppend) {
@@ -63,7 +137,6 @@ const BookSearch = ({ token, onBookSelect }) => {
       } else if (type === 'genre') {
         url = `/api/v1/books/search/genre?q=${encodeURIComponent(word)}&${params}`;
       } else if (type === 'translation') {
-        // ★ 海外翻訳フィルタ
         url = `/api/v1/books/search?type=translation&${params}`;
       }
 
@@ -105,12 +178,10 @@ const BookSearch = ({ token, onBookSelect }) => {
     if (!genreWord) return;
     setQuery(''); 
     setSuggestions([]); setShowSuggestions(false);
-    // ジャンル検索時はタブをALLに戻すかはUI次第ですが、ここでは戻す
     setActiveTab('all'); 
     fetchBooks('genre', genreWord, 0, false);
   };
 
-  // ★ タブ切り替え
   const handleTabChange = (tab) => {
     setActiveTab(tab);
     if (tab === 'translation') {
@@ -159,11 +230,6 @@ const BookSearch = ({ token, onBookSelect }) => {
     setQuery(book.title); setSuggestions([]); onBookSelect(book.id);
   };
 
-  const getCoverColor = (id) => {
-    const colors = ['#FF9A9E', '#FECFEF', '#A18CD1', '#FBC2EB', '#8FD3F4', '#84FAB0', '#E0C3FC'];
-    return colors[id % colors.length];
-  };
-
   const scrollRanking = (direction) => {
     if (rankingScrollRef.current) {
       const { current } = rankingScrollRef;
@@ -176,7 +242,6 @@ const BookSearch = ({ token, onBookSelect }) => {
     <div style={styles.container}>
       <style>{`
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .book-card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
         .ranking-scroll::-webkit-scrollbar { display: none; }
         .ranking-scroll { -ms-overflow-style: none; scrollbar-width: none; }
         .scroll-btn:hover { background-color: rgba(255,255,255,1) !important; transform: scale(1.1); }
@@ -185,30 +250,27 @@ const BookSearch = ({ token, onBookSelect }) => {
       `}</style>
       
       <div style={styles.headerArea}>
-        <h2 style={styles.heading}>📚 本を探す</h2>
+        <h2 style={styles.heading}>📚 蔵書検索</h2>
         <p style={styles.subText}>AIが要約した名作文学の世界へ</p>
       </div>
 
-      {/* ランキング (ALLタブ & 検索なしの時のみ表示) */}
+      {/* ランキング */}
       {rankingBooks.length > 0 && activeTab === 'all' && !query && (
-        <div style={{marginBottom: '40px'}}>
-          <h3 style={{fontSize: '18px', color: '#4a5568', marginBottom: '15px', display:'flex', alignItems:'center', gap:'8px'}}>
+        <div style={{marginBottom: '50px'}}>
+          <h3 style={styles.sectionTitle}>
             <span>👑</span> 今週の人気ランキング
           </h3>
           <div style={{position: 'relative'}}>
             <button className="scroll-btn" onClick={() => scrollRanking('left')} style={{...styles.scrollButton, left: '-20px'}}>&#10094;</button>
             <div ref={rankingScrollRef} className="ranking-scroll" style={styles.rankingGrid}>
               {rankingBooks.map((book, index) => (
-                <div key={`rank-${book.id || index}`} style={styles.rankingCard} onClick={() => onBookSelect(book.id)}>
-                  <div style={styles.rankBadge}>{index + 1}</div>
-                  <div style={{...styles.coverImage, height: '100px', background: `linear-gradient(135deg, ${getCoverColor(book.id || index)} 0%, #fff 100%)`}}>
-                    <span style={{...styles.coverTitle, fontSize: '10px'}}>{book.title}</span>
-                  </div>
-                  <div style={{padding: '10px'}}>
-                    <div style={{...styles.bookTitle, fontSize: '12px'}}>{book.title}</div>
-                    <div style={{...styles.bookAuthor, fontSize: '10px'}}>{book.authorName}</div>
-                  </div>
-                </div>
+                <BookCardItem 
+                  key={`rank-${book.id || index}`}
+                  book={book}
+                  index={index}
+                  onClick={() => onBookSelect(book.id)}
+                  isRanking={true}
+                />
               ))}
             </div>
             <button className="scroll-btn" onClick={() => scrollRanking('right')} style={{...styles.scrollButton, right: '-20px'}}>&#10095;</button>
@@ -244,7 +306,7 @@ const BookSearch = ({ token, onBookSelect }) => {
         </button>
       </form>
 
-      {/* ★ タブ切り替えボタン */}
+      {/* タブ */}
       <div style={styles.tabWrapper}>
           <button 
             style={activeTab === 'all' ? styles.activeTabBtn : styles.tabBtn} 
@@ -260,10 +322,10 @@ const BookSearch = ({ token, onBookSelect }) => {
           </button>
       </div>
 
-      {/* チップス (ALLタブのみ) */}
-      {activeTab === 'all' && authors.length > 0 && (
+      {/* 作家チップス */}
+      {activeTab === 'all' && authors.length > 0 && !query && (
         <div style={styles.authorSection}>
-          <p style={styles.authorLabel}>👩‍🏫 人気の作家から探す:</p>
+          <p style={styles.authorLabel}>人気の作家から探す</p>
           <div style={styles.chipContainer}>
             {authors.map((author, index) => (
               <button key={index} style={styles.authorChip} onClick={() => executeSearch(author)}>
@@ -276,7 +338,7 @@ const BookSearch = ({ token, onBookSelect }) => {
 
       {error && <p style={styles.error}>{error}</p>}
 
-      {/* 検索結果 */}
+      {/* 検索結果グリッド */}
       <div className="book-grid-container" style={{marginBottom: '40px'}}>
         {loading ? (
           <div style={styles.loadingContainer}>
@@ -287,32 +349,17 @@ const BookSearch = ({ token, onBookSelect }) => {
           <>
             <div style={styles.grid}>
               {books.map((book, index) => (
-                <div key={`${book.id}-${index}`} className="book-card" style={styles.card} onClick={() => onBookSelect(book.id)}>
-                  <div style={{...styles.coverImage, background: `linear-gradient(135deg, ${getCoverColor(book.id)} 0%, #fff 100%)`}}>
-                    <span style={styles.coverTitle}>{book.title}</span>
-                  </div>
-                  <div style={styles.cardContent}>
-                    <div style={styles.bookTitle}>{book.title}</div>
-                    <div style={styles.bookAuthor}>{book.authorName}</div>
-                    <div style={styles.bookSummary}>
-                      {/* ★ 新しい summaryText を使用 */}
-                      {(() => {
-                        const text = book.summaryText || book.summary_hq || book.summary_300;
-                        if (!text) return <span style={{color: '#ccc'}}>要約準備中...</span>;
-                        return text.length > 50 ? text.substring(0, 50) + '...' : text;
-                      })()}
-                    </div>
-                    {/* HQバッジ (APIが返すisHighQualityフラグを使用) */}
-                    {book.highQuality && (
-                      <span style={styles.hqBadge}>✨ おすすめ</span>
-                    )}
-                  </div>
-                </div>
+                <BookCardItem 
+                  key={`${book.id}-${index}`} 
+                  book={book} 
+                  index={index}
+                  onClick={() => onBookSelect(book.id)} 
+                />
               ))}
             </div>
 
             {hasMore && (
-              <div style={{textAlign: 'center', marginTop: '30px'}}>
+              <div style={{textAlign: 'center', marginTop: '40px'}}>
                 <button 
                   className="load-more-btn"
                   onClick={loadMore} 
@@ -324,7 +371,7 @@ const BookSearch = ({ token, onBookSelect }) => {
                       <div style={{...styles.spinner, width:'15px', height:'15px'}}></div> 読み込み中...
                     </span>
                   ) : (
-                    'もっと見る (+50件)'
+                    'もっと見る'
                   )}
                 </button>
               </div>
@@ -333,8 +380,9 @@ const BookSearch = ({ token, onBookSelect }) => {
         ) : ( 
           !loading && (query || activeTab === 'translation') && !error && (
             <div style={styles.emptyState}>
-              <p style={styles.noResult}>本が見つかりませんでした 😢</p>
-              <p style={{fontSize: '14px'}}>別のキーワードを試してみてください</p>
+              <div style={{fontSize: '48px', marginBottom: '10px'}}>🤔</div>
+              <p style={styles.noResult}>本が見つかりませんでした</p>
+              <p style={{fontSize: '14px'}}>キーワードを変えるか、作家名で検索してみてください</p>
             </div>
           )
         )}
@@ -345,47 +393,173 @@ const BookSearch = ({ token, onBookSelect }) => {
   );
 };
 
+// --- Styles (Dashboardと共通化) ---
 const styles = {
-  container: { maxWidth: '900px', margin: '0 auto', padding: '20px' },
-  headerArea: { textAlign: 'center', marginBottom: '30px' },
-  heading: { fontSize: '28px', color: '#1a202c', marginBottom: '10px' },
-  subText: { color: '#718096', fontSize: '16px' },
-  form: { display: 'flex', gap: '10px', marginBottom: '20px', maxWidth: '600px', margin: '0 auto 20px auto', position: 'relative' },
+  container: { maxWidth: '1000px', margin: '0 auto', padding: '40px 20px', fontFamily: '"Shippori Mincho", "Yu Mincho", serif', color: '#4a3b32' },
+  headerArea: { textAlign: 'center', marginBottom: '40px' },
+  heading: { fontSize: '32px', color: '#2d2420', marginBottom: '10px', fontWeight: 'bold' },
+  subText: { color: '#8d6e63', fontSize: '15px', letterSpacing: '1px' },
+  
+  sectionTitle: { fontSize: '20px', color: '#4a3b32', marginBottom: '20px', display:'flex', alignItems:'center', gap:'10px', fontWeight: 'bold' },
+
+  // --- 検索フォーム ---
+  form: { display: 'flex', gap: '10px', marginBottom: '30px', maxWidth: '600px', margin: '0 auto 30px auto', position: 'relative' },
   inputWrapper: { flex: 1, position: 'relative' },
-  input: { width: '100%', padding: '15px 20px', fontSize: '16px', border: '2px solid #edf2f7', borderRadius: '50px', outline: 'none', boxSizing: 'border-box', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' },
-  button: { padding: '0 30px', backgroundColor: '#3182ce', color: 'white', border: 'none', borderRadius: '50px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', minWidth: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(49, 130, 206, 0.2)' },
-  suggestionList: { position: 'absolute', top: '100%', left: '10px', right: '10px', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '12px', listStyle: 'none', padding: '5px 0', margin: '5px 0 0 0', zIndex: 1000, boxShadow: '0 10px 15px rgba(0,0,0,0.1)' },
-  suggestionItem: { padding: '12px 20px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  input: { 
+    width: '100%', 
+    padding: '16px 24px', 
+    fontSize: '16px', 
+    border: '1px solid #d7ccc8', 
+    borderRadius: '50px', 
+    outline: 'none', 
+    boxSizing: 'border-box', 
+    transition: 'all 0.2s', 
+    boxShadow: '0 4px 10px rgba(0,0,0,0.05)',
+    fontFamily: '"Noto Sans JP", sans-serif'
+  },
+  button: { 
+    padding: '0 30px', 
+    backgroundColor: '#5d4037', 
+    color: 'white', 
+    border: 'none', 
+    borderRadius: '50px', 
+    cursor: 'pointer', 
+    fontWeight: 'bold', 
+    fontSize: '16px', 
+    minWidth: '100px', 
+    display: 'flex', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    boxShadow: '0 4px 6px rgba(0,0,0,0.2)',
+    transition: 'transform 0.2s'
+  },
+  
+  // --- カードデザイン (Dashboardと完全統一) ---
+  grid: { 
+    display: 'grid', 
+    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', 
+    gap: '30px' 
+  },
+  
+  rankingGrid: { display: 'flex', overflowX: 'auto', padding: '10px 5px 20px 5px', scrollSnapType: 'x mandatory', scrollBehavior: 'smooth' },
+
+  bookCard: { 
+    position: 'relative',
+    backgroundColor: '#000', // 画像ロード前
+    borderRadius: '12px', 
+    overflow: 'hidden', 
+    boxShadow: '0 8px 16px rgba(0,0,0,0.1)', 
+    cursor: 'pointer', 
+    transition: 'transform 0.3s ease, box-shadow 0.3s ease', 
+    border: 'none',
+    aspectRatio: '2 / 3', // ★ 縦横比固定
+  },
+
+  bookCardHover: {
+    transform: 'translateY(-8px)',
+    boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
+  },
+
+  bookCover: { 
+    height: '100%', 
+    width: '100%',
+    position: 'relative',
+    overflow: 'hidden'
+  },
+
+  bookImage: {
+    width: '100%', 
+    height: '100%', 
+    objectFit: 'cover',
+    transition: 'transform 0.5s ease',
+  },
+
+  bookImageHover: {
+    transform: 'scale(1.08)', // ズーム
+  },
+
+  gradientOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    width: '100%',
+    height: '70%', 
+    background: 'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.6) 50%, transparent 100%)',
+    zIndex: 1,
+    pointerEvents: 'none',
+  },
+
+  bookInfo: { 
+    position: 'absolute', 
+    bottom: 0, 
+    left: 0,
+    width: '100%',
+    padding: '15px', 
+    zIndex: 2,
+    boxSizing: 'border-box',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'flex-end',
+    textAlign: 'left'
+  },
+
+  bookTitle: { 
+    margin: '0 0 5px 0',
+    fontWeight: 'bold', 
+    color: '#fff', 
+    lineHeight: '1.4',
+    textShadow: '0 2px 8px rgba(0,0,0,0.8)',
+    display: '-webkit-box', 
+    WebkitLineClamp: 2, 
+    WebkitBoxOrient: 'vertical', 
+    overflow: 'hidden',
+  },
+  
+  bookAuthor: { 
+    margin: 0,
+    color: 'rgba(255,255,255,0.85)', 
+    textShadow: '0 1px 4px rgba(0,0,0,0.8)',
+    fontFamily: '"sans-serif"'
+  },
+
+  hqBadge: {
+    marginTop: '6px',
+    alignSelf: 'flex-start',
+    fontSize: '10px',
+    backgroundColor: '#FFD700',
+    color: '#000',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    fontWeight: 'bold',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
+  },
+
+  rankBadge: { position: 'absolute', top: '0', left: '0', width: '30px', height: '30px', backgroundColor: '#FFD700', color: '#4a3b32', borderBottomRightRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '14px', zIndex: 10, boxShadow: '2px 2px 5px rgba(0,0,0,0.2)' },
+  
+  // --- その他パーツ ---
+  scrollButton: { position: 'absolute', top: '50%', transform: 'translateY(-50%)', width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'rgba(255, 255, 255, 0.9)', border: 'none', boxShadow: '0 4px 8px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 20, fontSize: '18px', color: '#5d4037', transition: 'all 0.2s' },
+  
+  loadMoreButton: { padding: '12px 50px', backgroundColor: 'transparent', color: '#5d4037', border: '2px solid #5d4037', borderRadius: '30px', fontSize: '15px', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s' },
+  
+  tabWrapper: { display: 'flex', justifyContent: 'center', gap: '15px', marginBottom: '30px' },
+  tabBtn: { padding: '10px 24px', borderRadius: '25px', border: '1px solid #d7ccc8', backgroundColor: 'transparent', color: '#8d6e63', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s', fontSize: '14px' },
+  activeTabBtn: { padding: '10px 24px', borderRadius: '25px', border: 'none', backgroundColor: '#5d4037', color: '#fff', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 6px rgba(93, 64, 55, 0.3)', fontSize: '14px' },
+
+  suggestionList: { position: 'absolute', top: '100%', left: '10px', right: '10px', backgroundColor: 'white', border: 'none', borderRadius: '12px', listStyle: 'none', padding: '10px 0', margin: '10px 0 0 0', zIndex: 1000, boxShadow: '0 10px 25px rgba(0,0,0,0.1)' },
+  suggestionItem: { padding: '12px 20px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f0f0f0' },
   suggestionTitle: { fontWeight: 'bold', color: '#2d3748' },
   suggestionAuthor: { fontSize: '12px', color: '#718096' },
+  
+  authorSection: { marginBottom: '40px', maxWidth: '800px', margin: '0 auto 40px auto', textAlign: 'center' },
+  authorLabel: { fontSize: '13px', color: '#8d6e63', marginBottom: '15px', fontWeight: 'bold', letterSpacing: '1px' },
+  chipContainer: { display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'center' },
+  authorChip: { padding: '8px 16px', borderRadius: '20px', border: '1px solid #d7ccc8', backgroundColor: '#fff', color: '#5d4037', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' },
+  
   spinner: { width: '20px', height: '20px', border: '3px solid rgba(255,255,255,0.3)', borderRadius: '50%', borderTopColor: '#fff', animation: 'spin 0.8s linear infinite' },
   error: { color: '#e53e3e', textAlign: 'center' },
-  loadingContainer: { textAlign: 'center', padding: '50px' },
-  emptyState: { textAlign: 'center', padding: '50px', color: '#718096' },
-  noResult: { fontSize: '18px', fontWeight: 'bold', marginBottom: '10px' },
-  authorSection: { marginBottom: '40px', maxWidth: '800px', margin: '0 auto 40px auto', textAlign: 'center' },
-  authorLabel: { fontSize: '13px', color: '#7f8c8d', marginBottom: '10px', fontWeight: 'bold' },
-  chipContainer: { display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' },
-  authorChip: { padding: '8px 16px', borderRadius: '20px', border: '1px solid #e2e8f0', backgroundColor: '#fff', color: '#4a5568', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '24px' },
-  card: { backgroundColor: 'white', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', cursor: 'pointer', transition: 'all 0.3s ease', border: '1px solid #f0f0f0', display: 'flex', flexDirection: 'column' },
-  coverImage: { height: '140px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', textAlign: 'center', color: '#1a202c', position: 'relative' },
-  coverTitle: { fontSize: '14px', fontWeight: 'bold', opacity: 0.7, maxHeight: '100%', overflow: 'hidden' },
-  cardContent: { padding: '15px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' },
-  bookTitle: { fontWeight: 'bold', fontSize: '15px', color: '#2d3748', marginBottom: '5px', lineHeight: '1.4' },
-  bookAuthor: { color: '#718096', fontSize: '13px', marginBottom: '10px' },
-  hqBadge: { fontSize: '11px', backgroundColor: '#FFFBEB', color: '#D97706', padding: '2px 8px', borderRadius: '10px', border: '1px solid #FCD34D', alignSelf: 'flex-start', fontWeight: 'bold' },
-  rankingGrid: { display: 'flex', gap: '15px', overflowX: 'auto', paddingBottom: '10px', scrollSnapType: 'x mandatory', scrollBehavior: 'smooth' },
-  rankingCard: { minWidth: '120px', maxWidth: '120px', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', cursor: 'pointer', border: '1px solid #f0f0f0', position: 'relative', flexShrink: 0, scrollSnapAlign: 'start' },
-  rankBadge: { position: 'absolute', top: '5px', left: '5px', width: '24px', height: '24px', backgroundColor: '#FFD700', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px', zIndex: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.2)', textShadow: '0 1px 1px rgba(0,0,0,0.3)' },
-  scrollButton: { position: 'absolute', top: '50%', transform: 'translateY(-50%)', width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'rgba(255, 255, 255, 0.8)', border: '1px solid #e2e8f0', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 20, fontSize: '18px', color: '#4a5568', transition: 'all 0.2s' },
-  bookSummary: { fontSize: '12px', color: '#666', marginTop: '8px', marginBottom: '8px', lineHeight: '1.5', display: '-webkit-box', WebkitLineClamp: '3', WebkitBoxOrient: 'vertical', overflow: 'hidden', height: '4.5em' },
-  loadMoreButton: { padding: '12px 40px', backgroundColor: '#3182ce', color: 'white', border: 'none', borderRadius: '30px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 6px rgba(49, 130, 206, 0.3)' },
-  
-  // ★ タブUI用スタイル
-  tabWrapper: { display: 'flex', justifyContent: 'center', gap: '15px', marginBottom: '30px' },
-  tabBtn: { padding: '10px 20px', borderRadius: '25px', border: '1px solid #e2e8f0', backgroundColor: '#fff', color: '#718096', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s' },
-  activeTabBtn: { padding: '10px 20px', borderRadius: '25px', border: '1px solid #3182ce', backgroundColor: '#ebf8ff', color: '#3182ce', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(49,130,206,0.1)' }
+  loadingContainer: { textAlign: 'center', padding: '60px' },
+  emptyState: { textAlign: 'center', padding: '60px', color: '#8d6e63' },
+  noResult: { fontSize: '18px', fontWeight: 'bold', marginBottom: '10px', color: '#5d4037' },
 };
 
 export default BookSearch;

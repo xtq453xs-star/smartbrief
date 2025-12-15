@@ -25,7 +25,7 @@ import com.example.demo.domain.User;
 import com.example.demo.domain.UserBookHistory;
 import com.example.demo.domain.UserFavorite;
 import com.example.demo.domain.Work;
-import com.example.demo.repository.BookResponse;
+import com.example.demo.dto.BookResponse;
 import com.example.demo.repository.UserBookHistoryRepository;
 import com.example.demo.repository.UserFavoriteRepository;
 import com.example.demo.repository.UserRepository;
@@ -38,6 +38,7 @@ import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping("/api/v1/books")
+// CORS設定: 本番環境のドメインに合わせて調整してください
 @CrossOrigin(origins = {"http://localhost:5173", "http://localhost:3000", "https://smartbrief.jp"})
 @RequiredArgsConstructor
 public class BookController {
@@ -72,6 +73,7 @@ public class BookController {
                     return workRepository.findAllById(ids)
                         .collectList()
                         .flatMapMany(works -> {
+                            // IDリストの順序通りに並べ替え
                             works.sort(Comparator.comparingInt(w -> ids.indexOf(w.getId())));
                             return Flux.fromIterable(works);
                         });
@@ -98,6 +100,7 @@ public class BookController {
         return workRepository.findAllGenreTags()
             .collectList()
             .map(allTagsList -> {
+                // カンマ区切りのタグを集計して多い順に返す
                 Map<String, Long> tagCounts = allTagsList.stream()
                     .filter(str -> str != null)
                     .flatMap(str -> Arrays.stream(str.split(",")))
@@ -148,7 +151,7 @@ public class BookController {
         });
     }
 
-    // --- 検索API ---
+    // --- 検索API (強化版: 翻訳、ソート、ページネーション対応) ---
     @GetMapping("/search")
     public Flux<BookResponse> search(
             @RequestParam(name = "q", required = false) String query,
@@ -159,8 +162,7 @@ public class BookController {
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
         
         return checkPremiumStatus(authHeader).flatMapMany(isPremium -> {
-            // ★修正1: 初期値として Flux.empty() を設定し、未初期化エラーを防ぐ
-            Flux<Work> worksFlux = Flux.empty();
+            Flux<Work> worksFlux;
 
             if ("translation".equalsIgnoreCase(type)) {
                 // 海外翻訳（Gutenberg）のフィルタ処理
@@ -170,18 +172,17 @@ public class BookController {
                     worksFlux = workRepository.findByCategory("Gutenberg", limit, offset);
                 }
             } else {
-                // ★修正箇所: 通常検索のロジック
+                // 通常検索のロジック
                 if (query != null && !query.isEmpty()) {
                     String searchPattern = "%" + query.trim() + "%";
-                    
-                    // 【修正前】 これだとサジェスト用なので10件しか出ない
-                    // worksFlux = workRepository.suggestByKeyword(searchPattern);
-                    
-                    // 【修正後】 limit（デフォルト50）とoffsetを使って検索する
-                    worksFlux = workRepository.searchByKeyword(searchPattern, limit, offset);
-                    
+                    // limitとoffsetを使った新しい検索メソッドを使用
+                    if ("length_desc".equals(sort)) {
+                        worksFlux = workRepository.searchByKeywordOrderByLength(searchPattern, limit, offset);
+                    } else {
+                        worksFlux = workRepository.searchByKeyword(searchPattern, limit, offset);
+                    }
                 } else {
-                    // クエリなしの場合は空、または全件表示なら findAllBy... など
+                    // クエリなしの場合は空
                     worksFlux = Flux.empty();
                 }
             }
@@ -190,7 +191,7 @@ public class BookController {
         });
     }
     
-    // --- ジャンル検索API ---
+    // --- ジャンル検索API (強化版) ---
     @GetMapping("/search/genre")
     public Flux<BookResponse> searchByGenre(
             @RequestParam("q") String genre,
@@ -225,7 +226,7 @@ public class BookController {
         );
     }
 
-    // --- 詳細API ---
+    // --- 詳細API (閲覧履歴保存・制限チェック付き) ---
     @GetMapping("/{workId}")
     public Mono<ResponseEntity<BookResponse>> getBookDetail(
             @PathVariable Integer workId,
@@ -242,18 +243,15 @@ public class BookController {
                 boolean isPremium = User.Plan.PREMIUM.name().equals(user.getPlanType())
                         && user.getSubscriptionExpiresAt() != null
                         && user.getSubscriptionExpiresAt().isAfter(LocalDateTime.now());
+                
                 if (isPremium) {
                     return fetchAndSaveHistory(workId, user.getId(), true);
                 } else {
                     LocalDateTime todayStart = LocalDate.now().atStartOfDay();
                     return historyRepository.countByUserIdAndViewedAtAfter(user.getId(), todayStart)
                         .flatMap(count -> {
-                            // ★修正: 3 を 5 に変更します
-                            // count は「これまでに読んだ数」なので、
-                            // 0, 1, 2, 3, 4 (計5回) まではOK、
-                            // 5になったら (6回目を開こうとしたら) エラーになります。
+                            // 無料会員の制限 (10回)
                             if (count >= 10) {
-                                // エラーメッセージも合わせて修正しておくと親切です
                                 return Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "無料会員は1日10回までです。"));
                             }
                             return fetchAndSaveHistory(workId, user.getId(), false);
@@ -282,14 +280,17 @@ public class BookController {
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
         String username = extractUser(authHeader);
         if (username == null) return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        
         return userRepository.findByUsername(username)
             .flatMap(user -> 
                 favoriteRepository.existsByUserIdAndBookId(user.getId(), workId)
                     .flatMap(exists -> {
                         if (exists) {
+                            // 解除
                             return favoriteRepository.deleteByUserIdAndBookId(user.getId(), workId)
                                     .thenReturn(ResponseEntity.ok(Map.of("isFavorite", false)));
                         } else {
+                            // 登録
                             return workRepository.findById(workId)
                                 .flatMap(work -> {
                                     UserFavorite fav = UserFavorite.builder()
@@ -323,20 +324,22 @@ public class BookController {
         return null;
     }
 
-    // --- 履歴保存とDTO返却の共通処理 ---
+    // --- 履歴保存とDTO返却の共通処理 (重複保存防止付き) ---
     private Mono<ResponseEntity<BookResponse>> fetchAndSaveHistory(Integer workId, Long userId, boolean isPremium) {
         return workRepository.findById(workId)
             .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "作品が見つかりません")))
             .flatMap(work -> {
                 // 重複アクセス防止 (60秒以内なら保存しない)
+                // 新しいリポジトリメソッドを使用
                 return historyRepository.findFirstByUserIdAndBookIdOrderByViewedAtDesc(userId, workId)
                     .flatMap(latest -> {
                         if (latest.getViewedAt().isAfter(LocalDateTime.now().minusSeconds(60))) {
-                            return Mono.just(work); // 保存スキップ
+                            return Mono.just(work); // 保存スキップ (Workをそのまま返す)
                         }
-                        return Mono.empty();
+                        return Mono.empty(); // 古い場合はEmptyを返してswitchIfEmptyへ
                     })
                     .switchIfEmpty(Mono.defer(() -> {
+                        // 履歴を新規保存
                         UserBookHistory history = new UserBookHistory();
                         history.setUserId(userId);
                         history.setBookId(work.getId()); 
@@ -346,7 +349,6 @@ public class BookController {
                         return historyRepository.save(history).thenReturn(work);
                     }))
                     .map(savedWork -> {
-                        // キャスト (Work) を念のため明示していますが、Logic上は安全です
                         return ResponseEntity.ok(BookResponse.from((Work) savedWork, isPremium));
                     });
             });

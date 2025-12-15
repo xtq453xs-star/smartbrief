@@ -23,6 +23,11 @@ public class Work {
 
     @Column("author_name")
     private String authorName;
+    
+    // ★★★ ここに追加してください！ ★★★
+    @Column("image_url")
+    private String imageUrl;
+    // ★★★★★★★★★★★★★★★★★★★★★★
 
     @Column("aozora_url")
     private String aozoraUrl;

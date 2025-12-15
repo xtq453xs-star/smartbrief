@@ -1,7 +1,55 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-// ★追加: Footerを読み込み (パスは作成場所に合わせる。例: ./Footer)
 import Footer from './Footer'; 
+
+// ★追加: 1つのカードを管理するコンポーネント（ホバーアニメーション用）
+const BookCardItem = ({ book, onClick, getBookColor }) => {
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <div 
+      style={{
+        ...styles.bookCard,
+        ...(isHovered ? styles.bookCardHover : {})
+      }}
+      onClick={onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <div style={styles.bookCover}>
+         {book.image_url ? (
+           <img 
+             src={book.image_url} 
+             alt={book.title} 
+             style={{
+               ...styles.bookImage,
+               ...(isHovered ? styles.bookImageHover : {})
+             }} 
+           />
+         ) : (
+           <div style={{
+             width: '100%', 
+             height: '100%', 
+             background: `linear-gradient(135deg, ${getBookColor(book.id)} 10%, #fff 150%)`, 
+             display: 'flex', 
+             alignItems: 'center', 
+             justifyContent: 'center'
+           }}>
+             <span style={{fontSize:'40px'}}>📖</span>
+           </div>
+         )}
+         
+         {/* グラデーションオーバーレイ（常時表示） */}
+         <div style={styles.gradientOverlay}></div>
+      </div>
+
+      <div style={styles.bookInfo}>
+        <h4 style={styles.bookTitle}>{book.title}</h4>
+        <p style={styles.bookAuthor}>{book.authorName}</p>
+      </div>
+    </div>
+  );
+};
 
 const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
   const navigate = useNavigate();
@@ -14,7 +62,7 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
   const [loading, setLoading] = useState(true);
 
   // LINE設定
-  const LINE_FRIEND_URL = 'https://lin.ee/xxxxx'; // ★あなたのIDに書き換えてください
+  const LINE_FRIEND_URL = 'https://lin.ee/xxxxx'; 
 
   const getBookColor = (id) => {
     const colors = ['#FF9A9E', '#FECFEF', '#A18CD1', '#FBC2EB', '#8FD3F4', '#84FAB0', '#E0C3FC', '#4facfe'];
@@ -64,15 +112,13 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
     return (
       <div style={styles.bookGrid}>
         {books.map((book, index) => (
-          <div key={index} style={styles.bookCard} onClick={() => onBookSelect(book.id)}>
-            <div style={{...styles.bookCover, background: `linear-gradient(135deg, ${getBookColor(book.id)} 10%, #fff 150%)`}}>
-              <span style={{fontSize:'40px'}}>📖</span>
-            </div>
-            <div style={styles.bookInfo}>
-              <h4 style={styles.bookTitle}>{book.title}</h4>
-              <p style={styles.bookAuthor}>{book.authorName}</p>
-            </div>
-          </div>
+          // ★修正: 新しいコンポーネントを使用
+          <BookCardItem 
+            key={index} 
+            book={book} 
+            onClick={() => onBookSelect(book.id)} 
+            getBookColor={getBookColor}
+          />
         ))}
       </div>
     );
@@ -110,7 +156,6 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
           </button>
         </nav>
 
-        {/* LINE友だち追加エリア */}
         <div style={styles.lineArea}>
           <p style={styles.lineText}>スマホで読むなら</p>
           <a href={LINE_FRIEND_URL} target="_blank" rel="noopener noreferrer" style={styles.lineButton}>
@@ -135,7 +180,6 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
           
           <button onClick={onLogout} style={styles.logoutBtn}>ログアウト</button>
 
-          {/* ★修正: 共通Footerを使用 (文字色をサイドバー用に調整) */}
           <div style={{marginTop: '20px'}}>
              <Footer color="#a1887f" separatorColor="#4e342e" />
           </div>
@@ -148,10 +192,8 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
           <p style={styles.greeting}>{viewInfo.desc}</p>
         </header>
 
-        {/* コンテンツエリアの修正 */}    
         <div style={styles.contentArea}>
-          {/* ★修正: .slice(0, 20) を追加して、表示数を最新20件に制限 */}
-          {activeView === 'history' && (<BookList books={historyBooks.slice(0, 20)} isLoading={loading} emptyMessage="まだ読んだ本はありません。" />         )}
+          {activeView === 'history' && (<BookList books={historyBooks.slice(0, 20)} isLoading={loading} emptyMessage="まだ読んだ本はありません。" />)}
           {activeView === 'ranking' && <BookList books={rankingBooks} isLoading={loading} emptyMessage="ランキングデータの取得中です..." />}
           {activeView === 'favorites' && <BookList books={favoriteBooks} isLoading={loading} emptyMessage="お気に入りはまだありません。" />}
         </div>
@@ -161,9 +203,12 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
 };
 
 const styles = {
-  // 既存のデザイン定義 (変更なし)
+  // --- 基本レイアウト ---
   wrapper: { display: 'flex', minHeight: '100vh', backgroundColor: '#f4f1ea', fontFamily: '"Shippori Mincho", "Yu Mincho", serif', color: '#4a3b32' },
   sidebar: { width: '260px', backgroundColor: '#2d2420', color: '#efebe9', display: 'flex', flexDirection: 'column', padding: '30px 20px', boxShadow: '4px 0 10px rgba(0,0,0,0.05)', flexShrink: 0 },
+  main: { flex: 1, padding: '40px 60px', overflowY: 'auto' },
+  
+  // --- ロゴ・ナビゲーション ---
   logoArea: { marginBottom: '30px', textAlign: 'center' },
   logoText: { margin: 0, fontSize: '24px', letterSpacing: '2px', fontWeight: 'bold', fontFamily: '"Shippori Mincho", serif' },
   logoSub: { margin: 0, fontSize: '12px', opacity: 0.7, letterSpacing: '4px' },
@@ -171,6 +216,8 @@ const styles = {
   navItem: { background: 'transparent', border: 'none', color: '#a1887f', padding: '12px 15px', textAlign: 'left', fontSize: '14px', cursor: 'pointer', transition: '0.2s', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '10px' },
   navItemActive: { background: 'rgba(255,255,255,0.08)', border: 'none', color: '#efebe9', padding: '12px 15px', textAlign: 'left', fontSize: '14px', cursor: 'default', borderRadius: '4px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' },
   separator: { height: '1px', backgroundColor: 'rgba(255,255,255,0.1)', margin: '10px 0' },
+
+  // --- LINE・ユーザーエリア ---
   lineArea: { marginTop: '20px', padding: '15px', backgroundColor: 'rgba(6, 199, 85, 0.1)', borderRadius: '8px', textAlign: 'center', border: '1px solid rgba(6, 199, 85, 0.3)' },
   lineText: { fontSize: '12px', color: '#a1887f', marginBottom: '8px', fontWeight: 'bold' },
   lineButton: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '10px', backgroundColor: '#06c755', color: '#fff', borderRadius: '4px', textDecoration: 'none', fontSize: '13px', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.2)', transition: 'opacity 0.2s', boxSizing: 'border-box' },
@@ -182,19 +229,105 @@ const styles = {
   upgradeBtnSmall: { marginTop: '10px', width: '100%', padding: '8px', fontSize: '12px', backgroundColor: '#5d4037', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' },
   manageBtnSmall: { marginTop: '10px', width: '100%', padding: '8px', fontSize: '12px', backgroundColor: '#6c757d', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' },
   contactBtn: {display: 'block',marginTop: '10px', width: '100%', padding: '8px', fontSize: '11px',backgroundColor: 'transparent', color: '#a1887f',border: '1px dashed #a1887f', borderRadius: '4px',textAlign: 'center', textDecoration: 'none',cursor: 'pointer', transition: '0.2s',boxSizing: 'border-box'},
-  main: { flex: 1, padding: '40px 60px', overflowY: 'auto' },
+
+  // --- ヘッダー・コンテンツ ---
   header: { marginBottom: '40px', borderBottom: '1px solid #d7ccc8', paddingBottom: '20px' },
   pageTitle: { fontSize: '28px', margin: '0 0 10px 0', color: '#4e342e', fontWeight: 'bold', fontFamily: '"Shippori Mincho", serif' },
   greeting: { fontSize: '14px', color: '#8d6e63', margin: 0 },
-  bookGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '25px' },
-  bookCard: { backgroundColor: '#fff', borderRadius: '4px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', cursor: 'pointer', transition: 'all 0.3s ease', border: '1px solid #efebe9', overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '280px' },
-  bookCover: { flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' },
-  bookInfo: { flex: 1, padding: '15px', backgroundColor: '#fff', display: 'flex', flexDirection: 'column', justifyContent: 'center' },
-  bookTitle: { margin: '0 0 5px 0', fontSize: '15px', fontWeight: 'bold', lineHeight: '1.4', color: '#3e2723', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' },
-  bookAuthor: { margin: 0, fontSize: '12px', color: '#a1887f' },
-  emptyContainer: { textAlign: 'center', padding: '60px 0', opacity: 0.6 },
-  emptyIcon: { fontSize: '48px', marginBottom: '20px', filter: 'grayscale(100%)' },
-  emptyText: { fontSize: '16px', color: '#8d6e63' },
+  contentArea: { paddingBottom: '20px' },
+
+  // --- 本のリスト表示 (Pro仕様に更新) ---
+  bookGrid: { 
+    display: 'grid', 
+    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', 
+    gap: '30px' // 間隔を少し広げて優雅に
+  },
+  
+  bookCard: { 
+    position: 'relative',
+    borderRadius: '12px', // 角丸を少し大きく
+    boxShadow: '0 10px 20px rgba(0,0,0,0.1)', // 影を深く、柔らかく
+    cursor: 'pointer', 
+    transition: 'transform 0.3s ease, box-shadow 0.3s ease', 
+    overflow: 'hidden', 
+    aspectRatio: '2 / 3', // ★重要: 縦横比を「本」らしく固定
+    backgroundColor: '#000', // 画像ロード前は黒
+  },
+
+  // ホバー時のカードスタイル
+  bookCardHover: {
+    transform: 'translateY(-8px)', // ふわりと浮き上がる
+    boxShadow: '0 20px 40px rgba(0,0,0,0.2)', // 影が伸びる
+  },
+
+  bookCover: { 
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+    overflow: 'hidden', // 画像拡大時に枠からはみ出さないように
+  },
+
+  bookImage: {
+    width: '100%', 
+    height: '100%', 
+    objectFit: 'cover',
+    transition: 'transform 0.5s ease', // ゆっくりズームさせる
+  },
+
+  // ホバー時の画像スタイル
+  bookImageHover: {
+    transform: 'scale(1.08)', // 画像がじわっと近づいてくる
+  },
+
+  // グラデーション専用レイヤー
+  gradientOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    width: '100%',
+    height: '70%', // 下半分を中心に
+    background: 'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.6) 50%, transparent 100%)',
+    zIndex: 1,
+    pointerEvents: 'none', // クリックを邪魔しない
+  },
+
+  bookInfo: { 
+    position: 'absolute', 
+    bottom: 0, 
+    left: 0,
+    width: '100%',
+    padding: '20px 15px', 
+    zIndex: 2,
+    boxSizing: 'border-box',
+    textAlign: 'left',
+  },
+
+  bookTitle: { 
+    margin: '0 0 6px 0', 
+    fontSize: '16px', // 少し大きく
+    fontWeight: 'bold', 
+    lineHeight: '1.4', 
+    color: '#fff', 
+    display: '-webkit-box', 
+    WebkitLineClamp: 2, 
+    WebkitBoxOrient: 'vertical', 
+    overflow: 'hidden',
+    textShadow: '0 2px 8px rgba(0,0,0,0.8)', // 影を少し拡散させて上品に
+    letterSpacing: '0.5px', // 字間を少し空けて読みやすく
+  },
+  
+  bookAuthor: { 
+    margin: 0, 
+    fontSize: '13px', 
+    color: 'rgba(255,255,255,0.85)', 
+    textShadow: '0 1px 4px rgba(0,0,0,0.8)',
+    fontFamily: '"sans-serif"', // 著者はゴシック体でもスッキリする
+  },
+
+  // --- 空の状態 ---
+  emptyContainer: { textAlign: 'center', padding: '80px 0', opacity: 0.6 },
+  emptyIcon: { fontSize: '56px', marginBottom: '20px', filter: 'grayscale(100%)' },
+  emptyText: { fontSize: '16px', color: '#8d6e63', letterSpacing: '1px' },
 };
 
 export default Dashboard;

@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.example.demo.domain.User;
 import com.example.demo.domain.UserBookHistory;
 import com.example.demo.domain.Work;
-import com.example.demo.repository.BookResponse; // ★修正: 正しいパッケージ(dto)からインポート
+import com.example.demo.dto.BookResponse;
 import com.example.demo.repository.UserBookHistoryRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.repository.WorkRepository;
@@ -35,17 +35,16 @@ public class LineController {
     private final UserBookHistoryRepository historyRepository;
     private final PasswordEncoder passwordEncoder;
 
-    // --- 1. アカウント連携API (JSONを返す) ---
+    // --- 1. アカウント連携API ---
     @PostMapping("/link")
     @Transactional
     public Mono<ResponseEntity<Map<String, String>>> linkAccount(@RequestBody LinkRequest request) {
         return userRepository.findByUsername(request.getUsername())
                 .filter(user -> passwordEncoder.matches(request.getPassword(), user.getPassword()))
                 .flatMap(user -> {
-                    // LINE ID を保存
                     user.setLineUserId(request.getLineUserId());
                     return userRepository.save(user)
-                            .map(saved -> ResponseEntity.ok(Map.of("message", "連携に成功しました！\nWebの課金状況がLINEに反映されます。")));
+                            .map(saved -> ResponseEntity.ok(Map.of("message", "連携に成功しました！\nWebのプレミアム機能がLINEでも有効になります。")));
                 })
                 .defaultIfEmpty(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                         .body(Map.of("message", "IDまたはパスワードが間違っています。")));
@@ -60,24 +59,24 @@ public class LineController {
                 .flatMap(user -> {
                     return workRepository.findById(request.getBookId())
                         .flatMap(work -> {
-                            // プラン判定 (Userエンティティの実装に合わせて調整してください)
-                            // 例: User.Plan.PREMIUM.name() と比較するなど
+                            // プレミアム判定
                             boolean isPremium = "PREMIUM".equalsIgnoreCase(user.getPlanType())
                                     && user.getSubscriptionExpiresAt() != null
                                     && user.getSubscriptionExpiresAt().isAfter(LocalDateTime.now());
 
                             if (isPremium) {
-                                // ★修正: isPremiumフラグ(true)を渡す
+                                // プレミアム会員: 制限なし
                                 return recordHistoryAndResponse(user, work, true);
                             } else {
+                                // 無料会員: 1日3回制限チェック
                                 LocalDateTime todayStart = LocalDate.now().atStartOfDay();
                                 return historyRepository.countByUserIdAndViewedAtAfter(user.getId(), todayStart)
                                     .flatMap(count -> {
                                         if (count >= 3) {
                                             return Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN)
-                                                    .body((Object)Map.of("message", "無料プランの1日の閲覧制限（3回）に達しました。\nWebでプレミアムプランに登録すると無制限で読めます！")));
+                                                    .body((Object)Map.of("message", "無料プランの1日の閲覧制限（3回）に達しました。\n\nWebでプレミアムプランに登録すると無制限で読めます！\n👇\nhttps://smartbrief.jp")));
                                         }
-                                        // ★修正: isPremiumフラグ(false)を渡す
+                                        // 制限内
                                         return recordHistoryAndResponse(user, work, false);
                                     });
                             }
@@ -86,19 +85,33 @@ public class LineController {
                 .onErrorResume(e -> {
                     if ("NOT_LINKED".equals(e.getMessage())) {
                         return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                                .body(Map.of("message", "アカウントが連携されていません。\nメニューの「連携する」から設定してください。")));
+                                .body(Map.of("message", "アカウントが連携されていません。\nメニューの「連携する」からログイン情報を入力してください。")));
                     }
                     return Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND)
                             .body(Map.of("message", "作品が見つかりません。")));
                 });
     }
 
-    // ★修正: isPremiumを受け取るように変更
+ // ★改良: 重複履歴の防止ロジックを追加
     private Mono<ResponseEntity<Object>> recordHistoryAndResponse(User user, Work work, boolean isPremium) {
-        // 重複閲覧のチェック (直近60秒以内なら履歴保存しない) をここにも入れるとベターですが、
-        // 今回はとりあえずコンパイルを通すためにシンプルな実装にします。
-        // 必要であれば BookController と同様の重複チェックロジックを追加してください。
+        // 直近の履歴を取得し、1分以内なら「保存せずに」レスポンスだけ返す
+        return historyRepository.findFirstByUserIdAndBookIdOrderByViewedAtDesc(user.getId(), work.getId())
+                .flatMap(latestHistory -> {
+                    // 直近1分以内に見た履歴がある場合
+                    if (latestHistory.getViewedAt().isAfter(LocalDateTime.now().minusMinutes(1))) {
+                        // DB保存をスキップして結果だけ返す
+                        // ★修正点: (Object) キャストを追加して ResponseEntity<Object> 型に合わせる
+                        return Mono.just(ResponseEntity.ok((Object) BookResponse.from(work, isPremium)));
+                    }
+                    // 1分以上前なら新規保存
+                    return saveNewHistory(user, work, isPremium);
+                })
+                // 履歴が一件もない場合も新規保存
+                .switchIfEmpty(saveNewHistory(user, work, isPremium));
+    }
 
+    // 履歴保存の共通メソッド
+    private Mono<ResponseEntity<Object>> saveNewHistory(User user, Work work, boolean isPremium) {
         UserBookHistory history = new UserBookHistory();
         history.setUserId(user.getId());
         history.setBookId(work.getId());
@@ -107,10 +120,9 @@ public class LineController {
         history.setViewedAt(LocalDateTime.now());
 
         return historyRepository.save(history)
-                // ★修正: BookResponse.from に work と isPremium を渡す
-                .thenReturn(ResponseEntity.ok(BookResponse.from(work, isPremium)));
+                // ★修正点: こちらも念のため (Object) キャストを入れて型を統一
+                .map(saved -> ResponseEntity.ok((Object) BookResponse.from(work, isPremium)));
     }
-
     @Data
     static class LinkRequest {
         private String username;
