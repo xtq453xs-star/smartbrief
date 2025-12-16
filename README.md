@@ -20,6 +20,7 @@
 - **セキュアな認証フロー**: JWT認証、環境変数による機密情報の分離に加え、**認証メールの再送機能を含む堅牢な認証フロー**を完備。
 - **SaaS運用**: **Stripeサブスクリプションと連携を完了**し、決済状態（無料 / プレミアム）に基づいた厳密な権限管理と解約フローを完全自動化。
 - **法規準拠**: 特定商取引法に基づく表記や利用規約を整備し、**商用利用を想定した**実運用レベルの構成。
+- **エンタープライズ水準のセキュリティ**: Cloudflare Zero Trustによるオリジン遮蔽に加え、HSTS、CSPなどのセキュリティヘッダを完備。外部評価機関（Qualys SSL Labs）にて**最高評価「A+」**を獲得し、商用利用に耐えうる堅牢な通信基盤を構築。
 
 ### 🌐 ライブデモ & テストアカウント
 
@@ -97,8 +98,16 @@ Web版の機能をLINEでも利用可能です。
 - Java の最新フレームワーク **Spring Boot 3 (WebFlux)** と **R2DBC** を採用。
 - I/O待ちが多いAPI処理においてもスレッドをブロックしにくい構成とし、リソース効率と応答性能を意識した設計を行いました。
 
-#### 堅牢なセキュリティと運用設計
-
+#### 鉄壁のセキュリティアーキテクチャ (Defense in Depth)
+- 個人開発の域を超え、商用SaaSとして求められる多層防御を実装しました。
+#### オリジン隠蔽 (Zero Trust): 
+- Cloudflare Tunnel を採用し、サーバーのインバウンドポートを全閉鎖。
+- 外部からの攻撃対象領域（Attack Surface）を最小化しています。
+#### 世界標準の暗号化設定:
+- TLS 1.3の強制、HSTS（6ヶ月）の適用により、**Qualys SSL Labsにて最高評価「A+」**を獲得。
+- クライアントサイド防御: 厳密に設計したCSP (Content Security Policy) や 
+- X-Content-Type-Options: - - -nosniff などのヘッダ制御により、
+- XSSやMIMEスニフィングなどの攻撃をブラウザレベルで無効化しています。
 - **JWT (JSON Web Token)** を用いたステートレス認証。
 - **Cloudflare Tunnel** を使用し、自宅サーバー等の環境でもインバウンドポートを開放せずに安全に外部公開。
 - **メール配信基盤:** Javaからn8nのWebhookを呼び出し、Gmail API (OAuth2) 経由でメールを配信するマイクロサービス的な疎結合構成を採用。**新規登録、再送、パスワードリセット**など、重要な通知を確実に行える基盤を構築。
@@ -113,6 +122,7 @@ Web版の機能をLINEでも利用可能です。
 | **Backend** | Java 17, Spring Boot 3 (WebFlux), Spring Security |
 | **Database** | MySQL 8.0 (Docker Container, Multi-Schema) |
 | **Infra** | Docker, Docker Compose, Cloudflare Tunnel |
+| **Security** |	HSTS, CSP, JWT, WAF (Cloudflare), Page Shield
 | **AI / Batch** | n8n, Google Vertex AI (Gemini), OpenAI API |
 | **Payment** | Stripe API (Checkout & Portal) |
 | **Messaging** | LINE Messaging API |
