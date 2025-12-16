@@ -104,13 +104,15 @@ Web版の機能をLINEでも利用可能です。
 - Cloudflare Tunnel を採用し、サーバーのインバウンドポートを全閉鎖。
 - 外部からの攻撃対象領域（Attack Surface）を最小化しています。
 #### 世界標準の暗号化設定:
-- TLS 1.3の強制、HSTS（6ヶ月）の適用により、**Qualys SSL Labsにて最高評価「A+」**を獲得。
-- クライアントサイド防御: 厳密に設計したCSP (Content Security Policy) や 
-- X-Content-Type-Options: - - -nosniff などのヘッダ制御により、
-- XSSやMIMEスニフィングなどの攻撃をブラウザレベルで無効化しています。
+- TLS 1.3の強制、HSTS（6ヶ月）の適用により、Qualys SSL Labsにて最高評価「A+」を獲得。
+- クライアントサイド防御: 厳密に設計したCSP (Content Security Policy) や<br> 
+  X-Content-Type-Options: - - -nosniff などのヘッダ制御により、<br>
+  XSSやMIMEスニフィングなどの攻撃をブラウザレベルで無効化しています。
 - **JWT (JSON Web Token)** を用いたステートレス認証。
 - **Cloudflare Tunnel** を使用し、自宅サーバー等の環境でもインバウンドポートを開放せずに安全に外部公開。
-- **メール配信基盤:** Javaからn8nのWebhookを呼び出し、Gmail API (OAuth2) 経由でメールを配信するマイクロサービス的な疎結合構成を採用。**新規登録、再送、パスワードリセット**など、重要な通知を確実に行える基盤を構築。
+- **メール配信基盤:** Javaからn8nのWebhookを呼び出し、Gmail API (OAuth2) 経由でメールを配信する<br>
+                     マイクロサービス的な疎結合構成を採用。**新規登録、再送、パスワードリセット**など、<br>
+                     重要な通知を確実に行える基盤を構築。
 
 ---
 
