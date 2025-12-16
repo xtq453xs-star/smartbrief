@@ -175,7 +175,7 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
   const [loading, setLoading] = useState(true);
 
   const authorScrollRef = useRef(null);
-  const LINE_FRIEND_URL = 'https://lin.ee/xxxxx'; 
+  const LINE_FRIEND_URL = 'https://lin.ee/FSfu49T'; 
 
   // 画面サイズ監視
   useEffect(() => {
