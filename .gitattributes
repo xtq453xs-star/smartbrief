@@ -1,13 +1,14 @@
-# すべてのJSとJSXを「ライブラリ（自分で書いてない）」扱いにして、統計から完全に除外する
-*.js  linguist-vendored
-*.jsx linguist-vendored
-*.ts  linguist-vendored
-*.tsx linguist-vendored
+# Dockerfileも統計から除外
+Dockerfile linguist-vendored
 
-# ついでにCSSやHTMLも除外
-*.css  linguist-vendored
-*.html linguist-vendored
+# ついでに設定ファイル系も全部除外
+*.xml linguist-vendored
+*.yml linguist-vendored
+*.yaml linguist-vendored
+*.properties linguist-vendored
+*.json linguist-vendored
+*.md linguist-vendored
 
-# Javaだけは「絶対に検出して、これはプログラミング言語だ！」と叫ぶ
+# Javaだけは「絶対に出す」設定（念押し）
 *.java linguist-detectable=true
 *.java linguist-language=Java
