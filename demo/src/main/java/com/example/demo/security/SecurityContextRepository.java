@@ -11,6 +11,13 @@ import org.springframework.web.server.ServerWebExchange;
 
 import reactor.core.publisher.Mono;
 
+/**
+ * セキュリティコンテキストリポジトリ
+ * 
+ * HTTP リクエストのヘッダーから JWT トークンを抽出し、
+ * 認証マネージャーで検証後、SecurityContext を作成します。
+ * WebFlux 環境でのリアクティブな認証処理を担当します。
+ */
 @Component
 public class SecurityContextRepository implements ServerSecurityContextRepository {
 

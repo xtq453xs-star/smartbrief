@@ -22,6 +22,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
+/**
+ * Stripe ウェブフック コントローラー
+ * 
+ * Stripe からの webhook イベントを受信・処理します。
+ * 主にチェックアウトセッション完了イベントを処理し、
+ * ユーザーの購読情報をデータベースに保存します。
+ */
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/webhook")

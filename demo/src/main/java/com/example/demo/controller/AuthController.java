@@ -23,6 +23,12 @@ import com.example.demo.util.JwtUtil;
 
 import reactor.core.publisher.Mono;
 
+/**
+ * 認証 API コントローラー
+ * 
+ * ユーザーログイン、新規登録、パスワードリセット、メール認証などの
+ * 認証関連の REST API エンドポイントを提供します。
+ */
 @RestController
 @RequestMapping("/api/v1/auth")
 public class AuthController {

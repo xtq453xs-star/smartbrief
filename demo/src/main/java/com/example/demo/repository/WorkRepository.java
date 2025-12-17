@@ -7,6 +7,13 @@ import com.example.demo.domain.Work;
 
 import reactor.core.publisher.Flux;
 
+/**
+ * 書籍リポジトリ
+ * 
+ * Work エンティティに対するデータベース操作を行う
+ * リアクティブリポジトリです。
+ * キーワード検索、ジャンル検索、著者検索、ページネーション対応クエリなどを提供します。
+ */
 public interface WorkRepository extends ReactiveCrudRepository<Work, Integer> {
 
     // -------------------------------------------------------------------------

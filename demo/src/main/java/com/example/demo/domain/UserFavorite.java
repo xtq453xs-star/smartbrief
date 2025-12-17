@@ -11,6 +11,12 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * ユーザーお気に入りエンティティ
+ * 
+ * ユーザーがお気に入り登録した書籍情報を保持します。
+ * ユーザーID、書籍 ID、タイトル、著者名、作成日時などを含みます。
+ */
 @Data
 @Builder
 @NoArgsConstructor

@@ -8,6 +8,13 @@ import com.example.demo.domain.UserFavorite;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+/**
+ * ユーザーお気に入りリポジトリ
+ * 
+ * UserFavorite エンティティに対するデータベース操作を行う
+ * リアクティブリポジトリです。
+ * お気に入りの登録、削除、検索などのクエリを提供します。
+ */
 public interface UserFavoriteRepository extends ReactiveCrudRepository<UserFavorite, Long> {
     
     // 特定ユーザーのお気に入り一覧 (登録が新しい順)

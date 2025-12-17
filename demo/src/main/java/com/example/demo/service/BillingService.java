@@ -13,6 +13,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
+/**
+ * 課金サービス
+ * 
+ * ユーザーの課金情報を管理します。
+ * 課金ステータスの取得、Stripe Webhook からの更新処理などを行います。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor

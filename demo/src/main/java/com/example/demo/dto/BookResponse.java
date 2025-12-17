@@ -5,6 +5,13 @@ import com.fasterxml.jackson.annotation.JsonProperty; // 追加
 
 import lombok.Data;
 
+/**
+ * 書籍レスポンス DTO (Data Transfer Object)
+ * 
+ * クライアント（Web/LINE）に返す書籍情報です。
+ * Work エンティティから変換され、プレミアム状態に応じて
+ * 表示内容が制御される書籍データを保持します。
+ */
 @Data
 public class BookResponse {
     private Integer id;

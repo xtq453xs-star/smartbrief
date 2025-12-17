@@ -9,6 +9,12 @@ import org.springframework.data.relational.core.mapping.Table;
 import lombok.Data;
 import lombok.NoArgsConstructor; // 追加
 
+/**
+ * ユーザー書籍閲覧履歴エンティティ
+ * 
+ * ユーザーが閲覧した書籍の履歴を記録します。
+ * ユーザーID、書籍 ID、タイトル、著者名、閲覧時刻などを保持します。
+ */
 @Table("user_book_history")
 @Data
 @NoArgsConstructor // 引数なしコンストラクタがあると安心

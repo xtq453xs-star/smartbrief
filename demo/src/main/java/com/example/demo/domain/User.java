@@ -19,6 +19,14 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * ユーザーエンティティ
+ * 
+ * このクラスは、アプリケーションのユーザー情報を表します。
+ * ユーザーID、ユーザー名、メールアドレス、パスワード、課金プラン、
+ * LINE 連携情報、Stripe 顧客 ID などを保持します。
+ * UserDetails インターフェースを実装し、Spring Security と統合します。
+ */
 @Data
 @Builder
 @NoArgsConstructor

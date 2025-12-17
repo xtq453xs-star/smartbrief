@@ -9,6 +9,13 @@ import lombok.Builder;
 import lombok.Data; // ★これが重要：Getter/Setterを自動生成する
 import lombok.NoArgsConstructor;
 
+/**
+ * 書籍エンティティ
+ * 
+ * 青空文庫および海外翻訳作品の書籍情報を表します。
+ * タイトル、著者名、サマリー、ジャンル、画像 URL、
+ * 本文、カテゴリなどの書籍の詳細情報を保持します。
+ */
 @Data // ★このアノテーションが getTitle() や getSummaryHq() を作ります
 @Builder
 @NoArgsConstructor

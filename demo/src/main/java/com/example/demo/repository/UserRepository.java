@@ -8,6 +8,14 @@ import com.example.demo.domain.User;
 
 import reactor.core.publisher.Mono;
 
+/**
+ * ユーザーリポジトリ
+ * 
+ * User エンティティに対するデータベース操作を行う
+ * リアクティブリポジトリです。
+ * ユーザー検索（名前、メール、LINE ID など）や認証情報の取得などの
+ * クエリを提供します。
+ */
 @Repository
 public interface UserRepository extends ReactiveCrudRepository<User, Long> {
     

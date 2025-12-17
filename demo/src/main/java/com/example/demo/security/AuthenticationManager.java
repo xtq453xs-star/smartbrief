@@ -13,6 +13,13 @@ import com.example.demo.util.JwtUtil;
 
 import reactor.core.publisher.Mono;
 
+/**
+ * リアクティブ認証マネージャー
+ * 
+ * JWT トークンを検証し、ユーザーの認証を行います。
+ * トークンからユーザー名を抽出し、トークンの有効性を確認した上で
+ * Authentication オブジェクトを返します。
+ */
 @Component
 public class AuthenticationManager implements ReactiveAuthenticationManager {
 

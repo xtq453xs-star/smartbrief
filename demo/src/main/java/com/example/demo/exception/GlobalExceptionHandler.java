@@ -9,6 +9,13 @@ import org.springframework.web.server.ResponseStatusException;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
+/**
+ * グローバル例外ハンドラー
+ * 
+ * アプリケーション全体で発生した例外を一元管理します。
+ * ResponseStatusException などの Spring Security 関連の例外を
+ * 適切なステータスコードと共にクライアントに返します。
+ */
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {

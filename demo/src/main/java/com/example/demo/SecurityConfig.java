@@ -19,6 +19,12 @@ import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 import com.example.demo.security.AuthenticationManager;
 import com.example.demo.security.SecurityContextRepository;
 
+/**
+ * Spring Security 設定クラス
+ * 
+ * WebFlux ベースのリアクティブなセキュリティ設定を行います。
+ * JWT トークン認証、CORS 設定、認可ルール定義などを含みます。
+ */
 @Configuration
 @EnableWebFluxSecurity
 public class SecurityConfig {

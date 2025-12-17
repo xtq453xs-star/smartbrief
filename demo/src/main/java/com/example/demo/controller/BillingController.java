@@ -27,6 +27,12 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+/**
+ * 課金・請求 API コントローラー
+ * 
+ * Stripe を利用した課金管理機能を提供します。
+ * ユーザーの課金ステータス確認、顧客ポータルの作成などを行います。
+ */
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/billing")

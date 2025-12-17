@@ -36,6 +36,13 @@ import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+/**
+ * 書籍 API コントローラー
+ * 
+ * 書籍情報の検索、ランキング、ジャンル検索、お気に入り管理など、
+ * 書籍関連の REST API エンドポイントを提供します。
+ * プレミアムユーザーと無料ユーザーで表示内容を制御します。
+ */
 @RestController
 @RequestMapping("/api/v1/books")
 // CORS設定: 本番環境のドメインに合わせて調整してください

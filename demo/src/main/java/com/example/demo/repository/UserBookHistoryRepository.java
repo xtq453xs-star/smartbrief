@@ -11,6 +11,13 @@ import com.example.demo.domain.UserBookHistory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+/**
+ * ユーザー書籍閲覧履歴リポジトリ
+ * 
+ * UserBookHistory エンティティに対するデータベース操作を行う
+ * リアクティブリポジトリです。
+ * 閲覧履歴の保存、検索、ランキング集計などのクエリを提供します。
+ */
 @Repository
 public interface UserBookHistoryRepository extends R2dbcRepository<UserBookHistory, Long> {
 

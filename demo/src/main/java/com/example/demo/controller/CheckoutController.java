@@ -24,6 +24,12 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+/**
+ * チェックアウト API コントローラー
+ * 
+ * Stripe チェックアウトセッションの作成を担当します。
+ * ユーザーの購読プランの決済処理をサポートします。
+ */
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/checkout")

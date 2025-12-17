@@ -16,6 +16,12 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 
+/**
+ * JWT ユーティリティクラス
+ * 
+ * JWT トークンの生成、検証、ユーザー情報抽出を行うユーティリティです。
+ * トークンの署名作成、有効期限の確認、ペイロードからのクレーム抽出などを提供します。
+ */
 @Component
 public class JwtUtil {
 

@@ -25,6 +25,13 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Mono;
 
+/**
+ * LINE 連携 API コントローラー
+ * 
+ * LINE プラットフォームとのアカウント連携機能を提供します。
+ * LINE ユーザーが Web で登録したアカウントと連携し、
+ * LINE チャネルから書籍の閲覧が可能になります。
+ */
 @RestController
 @RequestMapping("/api/v1/line")
 @RequiredArgsConstructor

@@ -10,6 +10,12 @@ import com.example.demo.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Mono;
 
+/**
+ * カスタムユーザー詳細サービス
+ * 
+ * ユーザー名からユーザー情報を取得し、UserDetails オブジェクトを返します。
+ * Spring Security の認証プロセスで使用される UserDetailsService の実装です。
+ */
 @Service
 @RequiredArgsConstructor
 public class CustomUserDetailsService implements ReactiveUserDetailsService {
