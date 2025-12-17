@@ -1,11 +1,14 @@
-# 設定ファイルやドキュメントを統計から除外（これでJavaとJSが浮き上がる）
-Dockerfile linguist-vendored
+# 1. HTML, Dockerfile, SQL などを完全に統計から除外（これでJSとの一騎打ちにする）
 *.html linguist-vendored
+Dockerfile linguist-vendored
 *.sql linguist-vendored
 *.txt linguist-vendored
 *.json linguist-vendored
 
-# JavaとJS/JSXは統計に含める（明示的に指定）
+# 2. Java が「データ」と誤認されないよう、明示的に「プログラミング言語」として宣言
+*.java linguist-language=Java
 *.java linguist-detectable=true
-*.js linguist-detectable=true
-*.jsx linguist-detectable=true
+
+# 3. JS/JSX も言語として認める（これで「Java と JS」の両方が出るはず）
+*.js linguist-language=JavaScript
+*.jsx linguist-language=JavaScript
