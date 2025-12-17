@@ -1,14 +1,16 @@
-# Dockerfileも統計から除外
-Dockerfile linguist-vendored
+# 巨大なライブラリ群を統計から完全に除外する
+node_modules/** linguist-vendored
+**/node_modules/** linguist-vendored
+.next/** linguist-vendored
+dist/** linguist-vendored
+build/** linguist-vendored
 
-# ついでに設定ファイル系も全部除外
-*.xml linguist-vendored
-*.yml linguist-vendored
-*.yaml linguist-vendored
-*.properties linguist-vendored
-*.json linguist-vendored
-*.md linguist-vendored
+# 拡張子ごとの除外（念押し）
+*.js linguist-vendored
+*.jsx linguist-vendored
+*.html linguist-vendored
+*.css linguist-vendored
 
-# Javaだけは「絶対に出す」設定（念押し）
+# Javaを唯一のプログラミング言語として認識させる
 *.java linguist-detectable=true
 *.java linguist-language=Java
