@@ -1,15 +1,13 @@
-# すべてのファイルを一旦リセットせず、特定の拡張子だけ「データ」として除外
-*.sql linguist-vendored
-*.txt linguist-vendored
-*.sqlite linguist-vendored
-*.csv linguist-vendored
-*.log linguist-vendored
+# すべてのJSとJSXを「ライブラリ（自分で書いてない）」扱いにして、統計から完全に除外する
+*.js  linguist-vendored
+*.jsx linguist-vendored
+*.ts  linguist-vendored
+*.tsx linguist-vendored
 
-# JavaとJSを「これはプログラミング言語だ」と明示
-*.java linguist-detectable=true
-*.js linguist-detectable=true
-*.jsx linguist-detectable=true
-
-# DockerfileやHTMLも、バーを邪魔するなら除外
-Dockerfile linguist-vendored
+# ついでにCSSやHTMLも除外
+*.css  linguist-vendored
 *.html linguist-vendored
+
+# Javaだけは「絶対に検出して、これはプログラミング言語だ！」と叫ぶ
+*.java linguist-detectable=true
+*.java linguist-language=Java
