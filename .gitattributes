@@ -1,11 +1,11 @@
-# 巨大なデータファイルを統計から除外する
+# 設定ファイルやドキュメントを統計から除外（これでJavaとJSが浮き上がる）
+Dockerfile linguist-vendored
+*.html linguist-vendored
 *.sql linguist-vendored
 *.txt linguist-vendored
-*.sqlite linguist-vendored
-*.csv linguist-vendored
-*.log linguist-vendored
-
-# もしReactなどを使っているなら、JSXもJavaより優先されないように除外
-*.jsx linguist-vendored
-*.js linguist-vendored
 *.json linguist-vendored
+
+# JavaとJS/JSXは統計に含める（明示的に指定）
+*.java linguist-detectable=true
+*.js linguist-detectable=true
+*.jsx linguist-detectable=true
