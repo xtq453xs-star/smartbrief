@@ -6,11 +6,13 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.lang.NonNull;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -38,14 +40,12 @@ import reactor.core.publisher.Mono;
 
 /**
  * 書籍 API コントローラー
- * 
- * 書籍情報の検索、ランキング、ジャンル検索、お気に入り管理など、
+ * * 書籍情報の検索、ランキング、ジャンル検索、お気に入り管理など、
  * 書籍関連の REST API エンドポイントを提供します。
  * プレミアムユーザーと無料ユーザーで表示内容を制御します。
  */
 @RestController
 @RequestMapping("/api/v1/books")
-// CORS設定: 本番環境のドメインに合わせて調整してください
 @CrossOrigin(origins = {"http://localhost:5173", "http://localhost:3000", "https://smartbrief.jp"})
 @RequiredArgsConstructor
 public class BookController {
@@ -80,7 +80,6 @@ public class BookController {
                     return workRepository.findAllById(ids)
                         .collectList()
                         .flatMapMany(works -> {
-                            // IDリストの順序通りに並べ替え
                             works.sort(Comparator.comparingInt(w -> ids.indexOf(w.getId())));
                             return Flux.fromIterable(works);
                         });
@@ -107,7 +106,6 @@ public class BookController {
         return workRepository.findAllGenreTags()
             .collectList()
             .map(allTagsList -> {
-                // カンマ区切りのタグを集計して多い順に返す
                 Map<String, Long> tagCounts = allTagsList.stream()
                     .filter(str -> str != null)
                     .flatMap(str -> Arrays.stream(str.split(",")))
@@ -133,7 +131,7 @@ public class BookController {
                 .flatMapMany(user -> 
                     historyRepository.findHistoryByUserId(user.getId())
                         .flatMap(history -> 
-                            workRepository.findById(history.getBookId())
+                            workRepository.findById(Objects.requireNonNull(history.getBookId()))
                                 .map(work -> BookResponse.from(work, isPremium))
                         )
                 );
@@ -151,14 +149,14 @@ public class BookController {
                 .flatMapMany(user -> 
                     favoriteRepository.findByUserIdOrderByCreatedAtDesc(user.getId())
                         .flatMap(fav -> 
-                            workRepository.findById(fav.getBookId())
+                            workRepository.findById(Objects.requireNonNull(fav.getBookId()))
                                 .map(work -> BookResponse.from(work, isPremium))
                         )
                 );
         });
     }
 
-    // --- 検索API (強化版: 翻訳、ソート、ページネーション対応) ---
+    // --- 検索API ---
     @GetMapping("/search")
     public Flux<BookResponse> search(
             @RequestParam(name = "q", required = false) String query,
@@ -172,24 +170,20 @@ public class BookController {
             Flux<Work> worksFlux;
 
             if ("translation".equalsIgnoreCase(type)) {
-                // 海外翻訳（Gutenberg）のフィルタ処理
                 if ("length_desc".equals(sort)) {
                     worksFlux = workRepository.findByCategoryOrderByLength("Gutenberg", limit, offset);
                 } else {
                     worksFlux = workRepository.findByCategory("Gutenberg", limit, offset);
                 }
             } else {
-                // 通常検索のロジック
                 if (query != null && !query.isEmpty()) {
                     String searchPattern = "%" + query.trim() + "%";
-                    // limitとoffsetを使った新しい検索メソッドを使用
                     if ("length_desc".equals(sort)) {
                         worksFlux = workRepository.searchByKeywordOrderByLength(searchPattern, limit, offset);
                     } else {
                         worksFlux = workRepository.searchByKeyword(searchPattern, limit, offset);
                     }
                 } else {
-                    // クエリなしの場合は空
                     worksFlux = Flux.empty();
                 }
             }
@@ -198,7 +192,7 @@ public class BookController {
         });
     }
     
-    // --- ジャンル検索API (強化版) ---
+    // --- ジャンル検索API ---
     @GetMapping("/search/genre")
     public Flux<BookResponse> searchByGenre(
             @RequestParam("q") String genre,
@@ -233,7 +227,7 @@ public class BookController {
         );
     }
 
-    // --- 詳細API (閲覧履歴保存・制限チェック付き) ---
+    // --- 詳細API ---
     @GetMapping("/{workId}")
     public Mono<ResponseEntity<BookResponse>> getBookDetail(
             @PathVariable Integer workId,
@@ -252,16 +246,15 @@ public class BookController {
                         && user.getSubscriptionExpiresAt().isAfter(LocalDateTime.now());
                 
                 if (isPremium) {
-                    return fetchAndSaveHistory(workId, user.getId(), true);
+                    return fetchAndSaveHistory(Objects.requireNonNull(workId), Objects.requireNonNull(user.getId()), true);
                 } else {
                     LocalDateTime todayStart = LocalDate.now().atStartOfDay();
                     return historyRepository.countByUserIdAndViewedAtAfter(user.getId(), todayStart)
                         .flatMap(count -> {
-                            // 無料会員の制限 (10回)
                             if (count >= 10) {
                                 return Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "無料会員は1日10回までです。"));
                             }
-                            return fetchAndSaveHistory(workId, user.getId(), false);
+                            return fetchAndSaveHistory(Objects.requireNonNull(workId), Objects.requireNonNull(user.getId()), false);
                         });
                 }
             });
@@ -293,21 +286,21 @@ public class BookController {
                 favoriteRepository.existsByUserIdAndBookId(user.getId(), workId)
                     .flatMap(exists -> {
                         if (exists) {
-                            // 解除
                             return favoriteRepository.deleteByUserIdAndBookId(user.getId(), workId)
                                     .thenReturn(ResponseEntity.ok(Map.of("isFavorite", false)));
                         } else {
-                            // 登録
-                            return workRepository.findById(workId)
+                            // ★修正: workId を Objects.requireNonNull でラップ
+                            return workRepository.findById(Objects.requireNonNull(workId))
                                 .flatMap(work -> {
                                     UserFavorite fav = UserFavorite.builder()
-                                        .userId(user.getId())
-                                        .bookId(work.getId())
-                                        .bookTitle(work.getTitle())
-                                        .authorName(work.getAuthorName())
+                                        .userId(Objects.requireNonNull(user.getId()))
+                                        .bookId(Objects.requireNonNull(work.getId()))
+                                        .bookTitle(Objects.requireNonNull(work.getTitle()))
+                                        .authorName(Objects.requireNonNull(work.getAuthorName()))
                                         .createdAt(LocalDateTime.now())
                                         .build();
-                                    return favoriteRepository.save(fav)
+                                    // ★修正: fav を Objects.requireNonNull でラップ
+                                    return favoriteRepository.save(Objects.requireNonNull(fav))
                                         .thenReturn(ResponseEntity.ok(Map.of("isFavorite", true)));
                                 });
                         }
@@ -331,25 +324,26 @@ public class BookController {
         return null;
     }
 
-    // --- 履歴保存とDTO返却の共通処理 (重複保存防止付き) ---
-    private Mono<ResponseEntity<BookResponse>> fetchAndSaveHistory(Integer workId, Long userId, boolean isPremium) {
+    // --- 履歴保存とDTO返却の共通処理 ---
+    private Mono<ResponseEntity<BookResponse>> fetchAndSaveHistory(
+            @NonNull Integer workId, 
+            @NonNull Long userId, 
+            boolean isPremium) {
+        
         return workRepository.findById(workId)
             .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "作品が見つかりません")))
             .flatMap(work -> {
-                // 重複アクセス防止 (60秒以内なら保存しない)
-                // 新しいリポジトリメソッドを使用
                 return historyRepository.findFirstByUserIdAndBookIdOrderByViewedAtDesc(userId, workId)
                     .flatMap(latest -> {
                         if (latest.getViewedAt().isAfter(LocalDateTime.now().minusSeconds(60))) {
-                            return Mono.just(work); // 保存スキップ (Workをそのまま返す)
+                            return Mono.just(work); 
                         }
-                        return Mono.empty(); // 古い場合はEmptyを返してswitchIfEmptyへ
+                        return Mono.empty(); 
                     })
                     .switchIfEmpty(Mono.defer(() -> {
-                        // 履歴を新規保存
                         UserBookHistory history = new UserBookHistory();
                         history.setUserId(userId);
-                        history.setBookId(work.getId()); 
+                        history.setBookId(Objects.requireNonNull(work.getId())); 
                         history.setBookTitle(work.getTitle());
                         history.setAuthorName(work.getAuthorName());
                         history.setViewedAt(LocalDateTime.now());

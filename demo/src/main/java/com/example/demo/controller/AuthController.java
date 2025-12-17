@@ -3,17 +3,19 @@ package com.example.demo.controller;
 import java.security.Principal;
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.lang.NonNull;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam; // ★追加
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -25,9 +27,9 @@ import reactor.core.publisher.Mono;
 
 /**
  * 認証 API コントローラー
- * 
- * ユーザーログイン、新規登録、パスワードリセット、メール認証などの
- * 認証関連の REST API エンドポイントを提供します。
+ * * VS Codeの厳格なNullチェック警告（Unchecked conversion to @NonNull Object）を
+ * 回避するため、WebClient.bodyValue や ResponseEntity の引数を
+ * Objects.requireNonNull() でラップして型安全性を保証しています。
  */
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -37,11 +39,9 @@ public class AuthController {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     
-    // n8nのメール配信用Webhook URL (パスワードリセット用)
     @Value("${n8n.webhook.email:https://n8n.smartbrief.jp/webhook/send-email}")
     private String n8nEmailWebhookUrl;
 
-    // ★追加: n8nの新規登録認証用Webhook URL (デフォルト値を設定しています)
     @Value("${n8n.webhook.verify:https://n8n.smartbrief.jp/webhook/webhook/verify-email}")
     private String n8nVerifyEmailWebhookUrl;
 
@@ -51,62 +51,57 @@ public class AuthController {
         this.jwtUtil = jwtUtil;
     }
 
-    // --- 1. ログイン処理 (ID or Email) ---
+    // --- 1. ログイン処理 ---
     @PostMapping("/login")
-    public Mono<ResponseEntity<Map<String, String>>> login(@RequestBody AuthRequest request) {
+    public Mono<ResponseEntity<Map<String, String>>> login(@RequestBody @NonNull AuthRequest request) {
         return userRepository.findByUsernameOrEmail(request.getUsername()) 
             .filter(user -> passwordEncoder.matches(request.getPassword(), user.getPassword()))
             .flatMap(user -> {
-                // ★追加: メール認証チェック
-                // nullの場合(古いデータ)も考慮して Boolean.TRUE.equals を使用
                 if (!Boolean.TRUE.equals(user.getIsVerified())) {
-                     return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                             // フロントエンドでこのメッセージを表示します
-                             .body(Map.of("message", "メールアドレスの認証が完了していません。受信トレイを確認してください。")));
+                    return Mono.just(new ResponseEntity<>(
+                        Objects.requireNonNull(Map.of("message", "メールアドレスの認証が完了していません。受信トレイを確認してください。")),
+                        HttpStatus.UNAUTHORIZED
+                    ));
                 }
 
-                // 認証OKならトークン発行
                 String token = jwtUtil.generateToken(user.getUsername());
-                return Mono.just(ResponseEntity.ok(Map.of("token", token)));
+                return Mono.just(new ResponseEntity<>(
+                    Objects.requireNonNull(Map.of("token", token)),
+                    HttpStatus.OK
+                ));
             })
-            // ユーザーが見つからない、パスワード違い、または上記でUNAUTHORIZEDを返した場合のハンドリング
-            .defaultIfEmpty(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+            .defaultIfEmpty(new ResponseEntity<>(HttpStatus.UNAUTHORIZED));
     }
 
-    // --- 2. 新規会員登録処理 (Email対応) ---
+    // --- 2. 新規会員登録処理 ---
     @PostMapping("/register")
-    public Mono<ResponseEntity<String>> register(@RequestBody AuthRequest request) {
+    public Mono<ResponseEntity<String>> register(@RequestBody @NonNull AuthRequest request) {
         
         String username = request.getUsername();
         String email = request.getEmail();
         String password = request.getPassword();
 
-        // 1. バリデーション
         if (username == null || email == null || password == null) {
-             return Mono.just(ResponseEntity.badRequest().body("必須項目（ID, Email, Password）が入力されていません。"));
+             return Mono.just(new ResponseEntity<>(Objects.requireNonNull("必須項目（ID, Email, Password）が入力されていません。"), HttpStatus.BAD_REQUEST));
         }
         if (username.equals(password)) {
-            return Mono.just(ResponseEntity.badRequest().body("IDと同じパスワードは使用できません。"));
+            return Mono.just(new ResponseEntity<>(Objects.requireNonNull("IDと同じパスワードは使用できません。"), HttpStatus.BAD_REQUEST));
         }
-        // 簡易メールチェック
         if (!email.contains("@") || !email.contains(".")) {
-             return Mono.just(ResponseEntity.badRequest().body("有効なメールアドレスを入力してください。"));
+             return Mono.just(new ResponseEntity<>(Objects.requireNonNull("有効なメールアドレスを入力してください。"), HttpStatus.BAD_REQUEST));
         }
         
-        // パスワード強度チェック
         String regex = "^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*]).{8,}$";
         if (!password.matches(regex)) {
-             return Mono.just(ResponseEntity.badRequest().body("パスワードは8文字以上で、大文字・小文字・数字・記号(!@#$%^&*)を含めてください。"));
+             return Mono.just(new ResponseEntity<>(Objects.requireNonNull("パスワードは8文字以上で、大文字・小文字・数字・記号(!@#$%^&*)を含めてください。"), HttpStatus.BAD_REQUEST));
         }
 
-        // 2. 重複チェック
         return userRepository.findByUsername(username)
-            .flatMap(u -> Mono.just(ResponseEntity.badRequest().body("このユーザーIDは既に使用されています")))
+            .flatMap(u -> Mono.just(new ResponseEntity<>(Objects.requireNonNull("このユーザーIDは既に使用されています"), HttpStatus.BAD_REQUEST)))
             .switchIfEmpty(
                 userRepository.findByEmail(email)
-                    .flatMap(u -> Mono.just(ResponseEntity.badRequest().body("このメールアドレスは既に登録されています")))
+                    .flatMap(u -> Mono.just(new ResponseEntity<>(Objects.requireNonNull("このメールアドレスは既に登録されています"), HttpStatus.BAD_REQUEST)))
                     .switchIfEmpty(Mono.defer(() -> {
-                        // 3. ユーザー作成
                         User newUser = new User();
                         newUser.setUsername(username);
                         newUser.setEmail(email);
@@ -114,180 +109,165 @@ public class AuthController {
                         newUser.setRoles("ROLE_USER");
                         newUser.setPlanType("FREE");
                         
-                        // ★変更: 未認証状態で保存 & トークン生成
                         newUser.setIsVerified(false);
                         String token = UUID.randomUUID().toString();
                         newUser.setVerificationToken(token);
                         
                         return userRepository.save(newUser)
                             .flatMap(savedUser -> {
-                                // ★追加: n8n へ認証メール送信リクエスト (非同期で送信)
                                 WebClient.create()
                                     .post()
-                                    .uri(n8nVerifyEmailWebhookUrl)
-                                    .contentType(MediaType.APPLICATION_JSON)
-                                    .bodyValue(Map.of(
+                                    .uri(Objects.requireNonNull(n8nVerifyEmailWebhookUrl))
+                                    .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
+                                    .bodyValue(Objects.requireNonNull(Map.of(
                                         "email", savedUser.getEmail(),
                                         "username", savedUser.getUsername(),
                                         "verification_token", token
-                                    ))
+                                    )))
                                     .retrieve()
                                     .toBodilessEntity()
-                                    .subscribe(); // 結果を待たずに送信処理を開始（レスポンス速度優先）
+                                    .subscribe();
 
-                                return Mono.just(ResponseEntity.ok("仮登録が完了しました。送信されたメール内のリンクをクリックして認証を完了してください。"));
+                                return Mono.just(new ResponseEntity<>(Objects.requireNonNull("仮登録が完了しました。送信されたメール内のリンクをクリックして認証を完了してください。"), HttpStatus.OK));
                             });
                     }))
             );
     }
 
-    // --- ★追加: メール認証実行API (フロントエンドから呼ばれる) ---
+    // --- メール認証実行API ---
     @PostMapping("/verify-email")
-    public Mono<ResponseEntity<String>> verifyEmail(@RequestParam("token") String token) {
-        if (token == null || token.isEmpty()) {
-            return Mono.just(ResponseEntity.badRequest().body("トークンが無効です"));
+    public Mono<ResponseEntity<String>> verifyEmail(@RequestParam("token") @NonNull String token) {
+        if (token.isEmpty()) {
+            return Mono.just(new ResponseEntity<>(Objects.requireNonNull("トークンが無効です"), HttpStatus.BAD_REQUEST));
         }
 
-        // トークンでユーザーを検索
         return userRepository.findByVerificationToken(token) 
             .flatMap(user -> {
                 if (Boolean.TRUE.equals(user.getIsVerified())) {
-                    return Mono.just(ResponseEntity.ok("既に認証済みです。ログインしてください。"));
+                    return Mono.just(new ResponseEntity<>(Objects.requireNonNull("既に認証済みです。ログインしてください。"), HttpStatus.OK));
                 }
                 
-                // 認証完了処理
                 user.setIsVerified(true);
-                user.setVerificationToken(null); // 使い終わったトークンはクリア
+                user.setVerificationToken(null);
 
                 return userRepository.save(user)
-                    .map(saved -> ResponseEntity.ok("メール認証が完了しました！"));
+                    .map(saved -> new ResponseEntity<>(Objects.requireNonNull("メール認証が完了しました！"), HttpStatus.OK));
             })
-            .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body("無効なトークンか、期限切れです。")));
+            .switchIfEmpty(Mono.just(new ResponseEntity<>(Objects.requireNonNull("無効なトークンか、期限切れです。"), HttpStatus.BAD_REQUEST)));
     }
     
-    // --- 3. パスワードリセット要求 (トークン発行 & n8nへ送信) ---
+    // --- 3. パスワードリセット要求 ---
     @PostMapping("/forgot-password")
-    public Mono<ResponseEntity<String>> forgotPassword(@RequestBody Map<String, String> request) {
+    public Mono<ResponseEntity<String>> forgotPassword(@RequestBody @NonNull Map<String, String> request) {
         String email = request.get("email");
         if (email == null || email.isEmpty()) {
-            return Mono.just(ResponseEntity.badRequest().body("メールアドレスを入力してください"));
+            return Mono.just(new ResponseEntity<>(Objects.requireNonNull("メールアドレスを入力してください"), HttpStatus.BAD_REQUEST));
         }
 
         return userRepository.findByEmail(email)
             .flatMap(user -> {
-                // トークン生成 (UUID)
                 String token = UUID.randomUUID().toString();
-                // 有効期限 (1時間後)
                 user.setResetPasswordToken(token);
                 user.setResetPasswordExpiresAt(LocalDateTime.now().plusHours(1));
 
                 return userRepository.save(user)
                     .flatMap(savedUser -> {
-                        // n8n にメール送信を依頼する
                         return WebClient.create()
                             .post()
-                            .uri(n8nEmailWebhookUrl)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .bodyValue(Map.of(
+                            .uri(Objects.requireNonNull(n8nEmailWebhookUrl))
+                            .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
+                            .bodyValue(Objects.requireNonNull(Map.of(
                                 "email", savedUser.getEmail(),
                                 "username", savedUser.getUsername(),
                                 "resetToken", token
-                            ))
+                            )))
                             .retrieve()
                             .toBodilessEntity()
-                            .thenReturn(ResponseEntity.ok("パスワード再設定メールを送信しました。"));
+                            .thenReturn(new ResponseEntity<>(Objects.requireNonNull("パスワード再設定メールを送信しました。"), HttpStatus.OK));
                     });
             })
-            .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND).body("そのメールアドレスは登録されていません。")));
+            .switchIfEmpty(Mono.just(new ResponseEntity<>(Objects.requireNonNull("そのメールアドレスは登録されていません。"), HttpStatus.NOT_FOUND)));
     }
 
-    // --- 4. パスワードリセット実行 (新しいパスワード設定) ---
+    // --- 4. パスワードリセット実行 ---
     @PostMapping("/reset-password")
-    public Mono<ResponseEntity<String>> resetPassword(@RequestBody Map<String, String> request) {
+    public Mono<ResponseEntity<String>> resetPassword(@RequestBody @NonNull Map<String, String> request) {
         String token = request.get("token");
         String newPassword = request.get("password");
 
         if (token == null || newPassword == null) {
-            return Mono.just(ResponseEntity.badRequest().body("情報が不足しています"));
+            return Mono.just(new ResponseEntity<>(Objects.requireNonNull("情報が不足しています"), HttpStatus.BAD_REQUEST));
         }
         
-        // パスワード強度チェック
         String regex = "^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*]).{8,}$";
         if (!newPassword.matches(regex)) {
-             return Mono.just(ResponseEntity.badRequest().body("パスワードは8文字以上で、大文字・小文字・数字・記号(!@#$%^&*)を含めてください。"));
+             return Mono.just(new ResponseEntity<>(Objects.requireNonNull("パスワードは8文字以上で、大文字・小文字・数字・記号(!@#$%^&*)を含めてください。"), HttpStatus.BAD_REQUEST));
         }
 
         return userRepository.findByResetPasswordToken(token)
             .flatMap(user -> {
-                // 期限切れチェック
                 if (user.getResetPasswordExpiresAt().isBefore(LocalDateTime.now())) {
-                    return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body("リンクの有効期限が切れています。もう一度リクエストしてください。"));
+                    return Mono.just(new ResponseEntity<>(Objects.requireNonNull("リンクの有効期限が切れています。もう一度リクエストしてください。"), HttpStatus.BAD_REQUEST));
                 }
 
-                // パスワード更新 & トークン消去
                 user.setPassword(passwordEncoder.encode(newPassword));
                 user.setResetPasswordToken(null);
                 user.setResetPasswordExpiresAt(null);
 
                 return userRepository.save(user)
-                    .map(saved -> ResponseEntity.ok("パスワードが正常に変更されました。新しいパスワードでログインしてください。"));
+                    .map(saved -> new ResponseEntity<>(Objects.requireNonNull("パスワードが正常に変更されました。新しいパスワードでログインしてください。"), HttpStatus.OK));
             })
-            .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body("無効なリクエストです。")));
+            .switchIfEmpty(Mono.just(new ResponseEntity<>(Objects.requireNonNull("無効なリクエストです。"), HttpStatus.BAD_REQUEST)));
     }
-    // --- ★追加 5. 認証メール再送用API ---
+
+    // --- 5. 認証メール再送用API ---
     @PostMapping("/resend-verification")
-    public Mono<ResponseEntity<String>> resendVerification(@RequestBody Map<String, String> request) {
+    public Mono<ResponseEntity<String>> resendVerification(@RequestBody @NonNull Map<String, String> request) {
         String email = request.get("email");
         
         if (email == null || email.isEmpty()) {
-            return Mono.just(ResponseEntity.badRequest().body("メールアドレスを入力してください"));
+            return Mono.just(new ResponseEntity<>(Objects.requireNonNull("メールアドレスを入力してください"), HttpStatus.BAD_REQUEST));
         }
 
         return userRepository.findByEmail(email)
             .flatMap(user -> {
-                // 既に認証済みならエラー（ログインへ誘導）
                 if (Boolean.TRUE.equals(user.getIsVerified())) {
-                    return Mono.just(ResponseEntity.badRequest().body("このメールアドレスは既に認証済みです。ログインしてください。"));
+                    return Mono.just(new ResponseEntity<>(Objects.requireNonNull("このメールアドレスは既に認証済みです。ログインしてください。"), HttpStatus.BAD_REQUEST));
                 }
 
-                // 新しいトークンを再発行
                 String newToken = UUID.randomUUID().toString();
                 user.setVerificationToken(newToken);
 
                 return userRepository.save(user)
                     .flatMap(savedUser -> {
-                        // n8n へ再送信リクエスト
                         WebClient.create()
                             .post()
-                            .uri(n8nVerifyEmailWebhookUrl) // 新規登録と同じWebhookを使用
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .bodyValue(Map.of(
+                            .uri(Objects.requireNonNull(n8nVerifyEmailWebhookUrl))
+                            .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
+                            .bodyValue(Objects.requireNonNull(Map.of(
                                 "email", savedUser.getEmail(),
                                 "username", savedUser.getUsername(),
                                 "verification_token", newToken
-                            ))
+                            )))
                             .retrieve()
                             .toBodilessEntity()
-                            .subscribe(); // 非同期実行
+                            .subscribe();
 
-                        return Mono.just(ResponseEntity.ok("認証メールを再送しました。受信トレイを確認してください。"));
+                        return Mono.just(new ResponseEntity<>(Objects.requireNonNull("認証メールを再送しました。受信トレイを確認してください。"), HttpStatus.OK));
                     });
             })
-            // セキュリティ上、未登録メアドでも「送りました」風にするか迷う所ですが、
-            // 今回は分かりやすさ優先でNOT_FOUNDを返します
-            .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND).body("そのメールアドレスは登録されていません。")));
+            .switchIfEmpty(Mono.just(new ResponseEntity<>(Objects.requireNonNull("そのメールアドレスは登録されていません。"), HttpStatus.NOT_FOUND)));
     }
-    // --- ★追加: 自分のユーザー情報を取得するAPI ---
-    // App.jsx から呼ばれるエンドポイントです
+
+    // --- 自分のユーザー情報を取得するAPI ---
     @org.springframework.web.bind.annotation.GetMapping("/me")
-    public Mono<ResponseEntity<Map<String, Object>>> getMyInfo(Principal principal) { // ← ここを UserDetails から Principal に変更
+    public Mono<ResponseEntity<Map<String, Object>>> getMyInfo(Principal principal) { 
         
-        // 認証されていない場合は null になる
+        // Principalの@NonNullは外してあります（デッドコード回避）
         if (principal == null) {
-            return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+            return Mono.just(new ResponseEntity<>(HttpStatus.UNAUTHORIZED));
         }
 
-        // Principal からユーザー名を取得
         String username = principal.getName();
 
         return userRepository.findByUsername(username)
@@ -298,9 +278,9 @@ public class AuthController {
                 response.put("plan", user.getPlanType()); 
                 response.put("isPremium", "PREMIUM".equalsIgnoreCase(user.getPlanType()));
                 
-                return ResponseEntity.ok(response);
+                return new ResponseEntity<>(Objects.requireNonNull(response), HttpStatus.OK);
             })
-            .defaultIfEmpty(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
+            .defaultIfEmpty(new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
 
     // --- DTO ---
