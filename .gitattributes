@@ -1,19 +1,15 @@
-# 1. Javaを「最優先のプログラミング言語」として強制指定
-*.java linguist-language=Java
-*.java linguist-detectable=true
-
-# 2. JS/JSXは「統計には入れるが、生成物（vendored）扱い」にする
-# これにより、統計の計算には入りますが、Javaより優先度が下がります
-*.js linguist-language=JavaScript
-*.js linguist-vendored
-*.jsx linguist-language=JavaScript
-*.jsx linguist-vendored
-
-# 3. その他、邪魔なものは徹底的に除外
-*.html linguist-vendored
-Dockerfile linguist-vendored
+# すべてのファイルを一旦リセットせず、特定の拡張子だけ「データ」として除外
 *.sql linguist-vendored
 *.txt linguist-vendored
-*.json linguist-vendored
-*.xml linguist-vendored
-*.yml linguist-vendored
+*.sqlite linguist-vendored
+*.csv linguist-vendored
+*.log linguist-vendored
+
+# JavaとJSを「これはプログラミング言語だ」と明示
+*.java linguist-detectable=true
+*.js linguist-detectable=true
+*.jsx linguist-detectable=true
+
+# DockerfileやHTMLも、バーを邪魔するなら除外
+Dockerfile linguist-vendored
+*.html linguist-vendored
