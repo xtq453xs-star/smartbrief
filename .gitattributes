@@ -1,0 +1,11 @@
+# 巨大なデータファイルを統計から除外する
+*.sql linguist-vendored
+*.txt linguist-vendored
+*.sqlite linguist-vendored
+*.csv linguist-vendored
+*.log linguist-vendored
+
+# もしReactなどを使っているなら、JSXもJavaより優先されないように除外
+*.jsx linguist-vendored
+*.js linguist-vendored
+*.json linguist-vendored
