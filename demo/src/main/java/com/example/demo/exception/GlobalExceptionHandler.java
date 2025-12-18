@@ -24,8 +24,7 @@ public class GlobalExceptionHandler {
     public Mono<ResponseEntity<String>> handleAllExceptions(Exception ex) {
         
         // ★修正ポイント: もしアプリが意図的に投げたエラー(403/404など)なら、そのステータスを尊重する
-        if (ex instanceof ResponseStatusException) {
-            ResponseStatusException rse = (ResponseStatusException) ex;
+        if (ex instanceof ResponseStatusException rse) {
             // ログはINFOレベルで控えめに（バグではないため）
             log.info("Handled expected exception: {} {}", rse.getStatusCode(), rse.getReason());
             
