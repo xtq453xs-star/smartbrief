@@ -19,7 +19,7 @@
 
 **「名作を、10分で。」**
 
-SmartBriefは、忙しい現代人のために、青空文庫や海外の名作文学をAIが読みやすく要約・翻訳して提供する**「時短読書プラットフォーム」**です。
+SmartBriefは、忙しい現代人のために、青空文庫や海外の名作文学をAIが読みやすく要約・翻訳して提供する「時短読書プラットフォーム」です。
 膨大な作品群からAIが今の気分に合った本をレコメンドし、雑誌のような美しいレイアウトで読書体験を提供します。
 
 ### 🌐 Live Demo
@@ -42,7 +42,7 @@ SmartBriefは、忙しい現代人のために、青空文庫や海外の名作�
 個人開発では軽視されがちなセキュリティを、商用レベルで実装しています。
 - **Zero Trust Network:** Cloudflare Tunnelによりインバウンドポート（80/443含む）を全閉鎖。DDoS攻撃やポートスキャンを物理的に無効化。
 - **最高評価「A+」:** Qualys SSL Labsにて最高評価を獲得。HSTS (6ヶ月)、TLS 1.3強制、CSPによるXSS対策を完備。
-- **堅牢な認証フロー:** JWTによるステートレス認証に加え、**メールアドレス到達確認（Verify）**や再送フローを実装し、不正アカウントを排除。
+- **堅牢な認証フロー:** JWTによるステートレス認証に加え、メールアドレス到達確認（Verify）や再送フローを実装し、不正アカウントを排除。
 
 ### 2. 完全自動化されたコンテンツ工場 (AI Pipeline)
 手動更新ゼロでコンテンツが増え続けるパイプラインを構築しました。
@@ -123,8 +123,22 @@ graph TD
     classDef external fill:#fff3e0,stroke:#ff6f00,stroke-width:2px;
     class FE,BE,n8n_bot,n8n_mail,n8n_batch,MySQL container;
     class User,Stripe,Gutenberg,Vertex,OpenAI,LINE,Gmail,CF external;
-    ```
+
+```markdown
+## 📸 Screen Shots
+
+| 認証・セキュリティ | ダッシュボード |
+| :---: | :---: |
+| <img src="https://github.com/user-attachments/assets/40b33828-75ec-4553-b4a0-e59f8890b5d8" width="400" alt="認証画面" /> | <img src="https://github.com/user-attachments/assets/139a4416-4cb8-43bd-8496-3ca9ef0edcd7" width="400" alt="ダッシュボード" /> |
+| **メール再送機能**<br>到達確認を含む堅牢な認証フロー | **ホーム画面**<br>履歴・お気に入り・検索を集約 |
+
+| 翻訳リーダー | モバイル対応 |
+| :---: | :---: |
+| <img src="https://github.com/user-attachments/assets/a0e319b4-0d02-4835-ba55-0110dea64535" width="400" alt="翻訳画面" /> | <img src="" width="400" alt="Mobile View (Coming Soon)" /><br>*(スマホ版スクショ準備中)* |
+| **翻訳モード**<br>AI翻訳によるシームレスな読書体験 | **レスポンシブ**<br>スマホでも快適なUI設計 |
+
 ---
 
-
-📸 Screen Shots認証・セキュリティダッシュボード<img src="https://github.com/user-attachments/assets/40b33828-75ec-4553-b4a0-e59f8890b5d8" width="400" alt="認証画面" /><img src="https://github.com/user-attachments/assets/139a4416-4cb8-43bd-8496-3ca9ef0edcd7" width="400" alt="ダッシュボード" />メール再送機能到達確認を含む堅牢な認証フローホーム画面履歴・お気に入り・検索を集約翻訳リーダーモバイル対応<img src="https://github.com/user-attachments/assets/a0e319b4-0d02-4835-ba55-0110dea64535" width="400" alt="翻訳画面" />(ここにスマホ版のスクショがあれば推奨)翻訳モードAI翻訳によるシームレスな読書体験レスポンシブスマホでも快適なUI設計🚀 今後の展望音声読み上げ機能: Azure AI Speech等のAPIを用いたオーディオブック化レコメンド精度の向上: ベクトル検索を用いた、より文脈に近い書籍提案
+## 🚀 今後の展望
+- **音声読み上げ機能:** Azure AI Speech等のAPIを用いたオーディオブック化
+- **レコメンド精度の向上:** ベクトル検索を用いた、より文脈に近い書籍提案
