@@ -123,8 +123,8 @@ graph TD
     classDef external fill:#fff3e0,stroke:#ff6f00,stroke-width:2px;
     class FE,BE,n8n_bot,n8n_mail,n8n_batch,MySQL container;
     class User,Stripe,Gutenberg,Vertex,OpenAI,LINE,Gmail,CF external;
+```
 
-```markdown
 ## 📸 Screen Shots
 
 | 認証・セキュリティ | ダッシュボード |
