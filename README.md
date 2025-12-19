@@ -123,7 +123,7 @@ Web版の機能をLINEでも利用可能です。
 | カテゴリ | 技術・ツール |
 | :--- | :--- |
 | **Frontend** | React, Vite, CSS Modules, React Router |
-| **Backend** | Java 17, Spring Boot 3 (WebFlux), Spring Security |
+| **Backend** | Java 21, Spring Boot 3 (WebFlux), Spring Security |
 | **Database** | MySQL 8.0 (Docker Container, Multi-Schema) |
 | **Infra** | Docker, Docker Compose, Cloudflare Tunnel |
 | **Security** |	HSTS, CSP, JWT, WAF (Cloudflare), Page Shield

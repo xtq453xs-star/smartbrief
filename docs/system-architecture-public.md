@@ -32,7 +32,7 @@ SmartBrief は、青空文庫および海外のパブリックドメイン作品
 
 **Backend API**
 
-- Java 17 / Spring Boot 3 (WebFlux)
+- Java 21 / Spring Boot 3 (WebFlux)
 - 認証・権限管理（無料／プレミアムの厳密な分離）、作品閲覧制御
 - メール認証トークン管理、Stripe Webhook 連携・LINE連携・履歴管理 等
 
