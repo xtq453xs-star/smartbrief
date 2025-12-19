@@ -1,0 +1,113 @@
+package jp.smartbrief.billing.controller;
+
+import java.nio.charset.StandardCharsets;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.buffer.DataBufferUtils;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import jp.smartbrief.billing.domain.User;
+import jp.smartbrief.billing.service.BillingService;
+import com.stripe.exception.EventDataObjectDeserializationException;
+import com.stripe.model.Event;
+import com.stripe.model.checkout.Session;
+import com.stripe.net.Webhook;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Mono;
+
+/**
+ * Stripe ウェブフック コントローラー
+ * 
+ * Stripe からの webhook イベントを受信・処理します。
+ * 主にチェックアウトセッション完了イベントを処理し、
+ * ユーザーの購読情報をデータベースに保存します。
+ */
+@Slf4j
+@RestController
+@RequestMapping("/api/v1/webhook")
+@RequiredArgsConstructor
+public class StripeWebhookController {
+
+    @Value("${stripe.webhook-secret}")
+    private String endpointSecret;
+
+    private final BillingService billingService;
+
+    @PostMapping
+    public Mono<ResponseEntity<String>> handleStripeWebhook(ServerHttpRequest request) {
+        
+        log.info("★★★ [Webhook] Endpoint Secret Check: {}", 
+                endpointSecret == null ? "NULL!!!" : "SET (Length: " + endpointSecret.length() + ")");
+
+        return DataBufferUtils.join(request.getBody())
+                .map(dataBuffer -> {
+                    try {
+                        byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                        dataBuffer.read(bytes);
+                        return new String(bytes, StandardCharsets.UTF_8);
+                    } finally {
+                        DataBufferUtils.release(dataBuffer);
+                    }
+                })
+                .flatMap(payload -> {
+                    log.info("★ [Webhook] Received payload. Length: {}", payload.length());
+
+                    String sigHeader = request.getHeaders().getFirst("Stripe-Signature");
+                    Event event;
+
+                    try {
+                        event = Webhook.constructEvent(payload, sigHeader, endpointSecret);
+                        log.info("★ [Webhook] Signature Verified. Event Type: {}", event.getType());
+                    } catch (Exception e) {
+                        log.error("★ [Webhook] Signature verification failed!", e);
+                        return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Webhook Error"));
+                    }
+
+                    if ("checkout.session.completed".equals(event.getType())) {
+                        log.info("★ [Webhook] Deserializing session object...");
+                        
+                        Session session = null;
+                        try {
+                            session = (Session) event.getDataObjectDeserializer().deserializeUnsafe();
+                        } catch (EventDataObjectDeserializationException e) {
+                            log.error("★ [Webhook] Deserialization Exception!", e);
+                            return Mono.just(ResponseEntity.ok("Deserialization Error"));
+                        }
+                        
+                        if (session != null) {
+                            String username = session.getMetadata().get("userId");
+                            log.info("★ [Webhook] SUCCESS! Metadata userId: {}", username);
+
+                            if (username == null) {
+                                log.warn("★ [Webhook] Username is NULL in metadata!");
+                                return Mono.just(ResponseEntity.ok("Username missing"));
+                            }
+
+                            // ★★★ 修正箇所: Customer ID を取得して Service に渡す ★★★
+                            String customerId = session.getCustomer();
+                            log.info("★ [Webhook] Extracted Customer ID: {}", customerId);
+
+                            // 引数に customerId を追加
+                            return billingService.updateSubscriptionFromWebhook(username, User.Plan.PREMIUM, customerId)
+                                    .map(user -> {
+                                        log.info("★ [Webhook] DB Updated for user: {}", user.getUsername());
+                                        return ResponseEntity.ok("Success");
+                                    });
+                        } else {
+                            log.error("★ [Webhook] Session is still NULL! (deserializeUnsafe failed)");
+                        }
+                    } else {
+                        log.info("★ [Webhook] Ignored event type: {}", event.getType());
+                    }
+
+                    return Mono.just(ResponseEntity.ok("Ignored"));
+                });
+    }
+}
