@@ -1,173 +1,130 @@
-# SmartBrief (青空文庫 & 世界名作 AI要約プラットフォーム)
+# 📚 SmartBrief - AI要約 & 翻訳SaaSプラットフォーム
 
-> **Note**
-> ※本プロジェクトは、個人での商用化を目指して設計・開発・運用を行っているSaaSプロダクトです。
-> **【2025/12 完成】** **メールアドレス認証、決済連携、**翻訳パイプライン、LINE連携を含む全機能の実装が完了し、**本番デプロイ済**です。
-> *（Stripeの加盟店審査を正式に通過済みです。決済機能はフル実装されており、ライブAPIキーを投入するだけで、即座に収益化を開始できる状態です。）*
+![Java](https://img.shields.io/badge/Java_21-Spring_Boot_3-green)
+![React](https://img.shields.io/badge/React-Vite-blue)
+![Infrastructure](https://img.shields.io/badge/Infra-Docker_%7C_Cloudflare-orange)
+![Security](https://img.shields.io/badge/Security-A%2B_Rating-success)
+![Status](https://img.shields.io/badge/Status-Production_Ready-brightgreen)
+
+> **🚀 Project Status: 完成 / 本番稼働中 (2025.12)**
+>
+> 本プロジェクトは、個人開発の枠を超え、**商用利用を前提としたSaaSプロダクト**として設計・開発・デプロイを完了しました。
+> * **決済機能:** Stripe加盟店審査を通過済。サブスクリプション課金、Webhookによる権限自動更新、カスタマーポータルまで完全実装。
+> * **セキュリティ:** Cloudflare Zero Trustによるオリジン遮蔽、JWT認証、HSTS等を完備し、外部セキュリティ評価で最高ランクを獲得。
+> * **現状:** ライブAPIキーによる実課金が可能な状態で稼働しています。
 
 ---
 
-## 📖 どんなサービス？
+## 📖 プロダクト概要
 
-**「名作を、10分で。」** SmartBriefは、忙しい現代人のために、青空文庫や海外の名作文学をAIが読みやすく要約・翻訳して提供する**「時短読書プラットフォーム」**です。
+**「名作を、10分で。」**
 
-膨大な数の作品の中から、今の気分に合った本を瞬時に検索し、雑誌のような美しいレイアウトで要約を楽しむことができます。
-また、**LINE公式アカウントとも完全連動**しており、スマホから手軽に読書体験が可能です。
+SmartBriefは、忙しい現代人のために、青空文庫や海外の名作文学をAIが読みやすく要約・翻訳して提供する**「時短読書プラットフォーム」**です。
+膨大な作品群からAIが今の気分に合った本をレコメンドし、雑誌のような美しいレイアウトで読書体験を提供します。
 
-### ✅ このプロジェクトで技術的に示せること
-
-- **自動化コンテンツ工場**: n8nと**Google Vertex AI (Gemini)** を組み合わせ、海外作品の「収集 → 翻訳 → 要約 → DB格納」を行う完全自動パイプラインを構築。
-- **セキュアな認証フロー**: JWT認証、環境変数による機密情報の分離に加え、**認証メールの再送機能を含む堅牢な認証フロー**を完備。
-- **SaaS運用**: **Stripeサブスクリプションと連携を完了**し、決済状態（無料 / プレミアム）に基づいた厳密な権限管理と解約フローを完全自動化。
-- **法規準拠**: 特定商取引法に基づく表記や利用規約を整備し、**商用利用を想定した**実運用レベルの構成。
-- **エンタープライズ水準のセキュリティ**: Cloudflare Zero Trustによるオリジン遮蔽に加え、HSTS、CSPなどのセキュリティヘッダを完備。外部評価機関（Qualys SSL Labs）にて**最高評価「A+」**を獲得し、商用利用に耐えうる堅牢な通信基盤を構築。
-
-### 🌐 ライブデモ & テストアカウント
-
-実際に稼働しているサービスをご覧いただけます。採用担当者様向けに、機能制限のないプレミアムアカウントをご用意しました。
+### 🌐 Live Demo
+採用担当者様向けに、全機能（翻訳・無制限アクセス）を開放したプレミアムアカウントをご用意しました。
 
 **URL:** <https://smartbrief.jp/>
 
-**▼ デモ用ログイン情報**
-| プラン | ユーザーID | メールアドレス | パスワード | 特徴 |
-| :--- | :--- | :--- | :--- | :--- |
-| **💎 Premium** | `guest_premium` | `guest.pre@example.com` | `Test@2025` | **翻訳全文・高品質要約**を含む、すべての機能が無制限で利用可能です。 |
-| **🌱 Free** | `guest_free` | `guest.free@example.com` | `Test@2025` | 無料プランの挙動（**1日10回制限**やアップグレード導線）を確認できます。 |
+| プラン | ID / Email | Pass | 想定利用シーン |
+| :--- | :--- | :--- | :--- |
+| **💎 Premium** | ID: `guest_premium`<br>Email: `guest.pre@example.com` | `Test@2025` | **翻訳全文・高品質要約**を含む、SaaSとしてのフル機能を体験いただけます。 |
+| **🌱 Free** | ID: `guest_free`<br>Email: `guest.free@example.com` | `Test@2025` | 無料会員の制限（**1日10回制限**）や、課金へのアップグレード導線を確認できます。 |
 
 ---
 
-## ✨ 主な機能と特徴
+## 💡 このプロジェクトの技術的ハイライト
 
-### 1. 読書体験を変える「AI要約 & 翻訳リーダー」
+本プロジェクトでは、単なる機能実装だけでなく、**「運用・保守・収益化」**に耐えうるシステム設計を行いました。
 
-- **AI要約:** **GPT-5 Nano** が生成した高品質な要約を、**「しっぽり明朝」**フォントや余白を活かした**雑誌風のデザイン**で提供。
-- **[NEW] 翻訳リーダー:** 海外のパブリックドメイン作品（O.ヘンリー等）を、**Vertex AI** が文脈を考慮して翻訳。外部サイトに飛ばず、アプリ内で完結するシームレスな読書体験を実現しました。
+### 1. エンタープライズ水準のセキュリティ (Defense in Depth)
+個人開発では軽視されがちなセキュリティを、商用レベルで実装しています。
+- **Zero Trust Network:** Cloudflare Tunnelによりインバウンドポート（80/443含む）を全閉鎖。DDoS攻撃やポートスキャンを物理的に無効化。
+- **最高評価「A+」:** Qualys SSL Labsにて最高評価を獲得。HSTS (6ヶ月)、TLS 1.3強制、CSPによるXSS対策を完備。
+- **堅牢な認証フロー:** JWTによるステートレス認証に加え、**メールアドレス到達確認（Verify）**や再送フローを実装し、不正アカウントを排除。
 
-### 2. 自分だけの図書館「マイ・ライブラリ」
+### 2. 完全自動化されたコンテンツ工場 (AI Pipeline)
+手動更新ゼロでコンテンツが増え続けるパイプラインを構築しました。
+- **n8n + Vertex AI:** 海外パブリックドメイン作品（Project Gutenberg等）を定期巡回。
+- **マルチモデル戦略:** 翻訳には文脈理解に強い **Google Vertex AI (Gemini)**、要約には **GPT-5 Nano** を使い分け、コストと品質を最適化。
 
-- **閲覧履歴・お気に入り:** 読んだ本や気に入った本を自動で記録し、ダッシュボードで管理できます。
-- **多様な検索:** タイトル検索だけでなく、「人気ランキング」「作家一覧」「ジャンル検索」など、多角的なアプローチで本と出会えます。
-
-### 3. 本格的な「サブスクリプション & アカウント管理」
-
-商用利用を想定した堅牢な会員システムを実装しています。
-
-- **認証:** ID / パスワードに加え、**厳格なメールアドレス認証フロー**を完備。ログイン時の未認証ブロックや、**認証メールの再送機能**、セキュアなパスワードリセット機能を実装。
-- **権限管理:** 無料会員（1日**10冊**制限に緩和）とプレミアム会員（無制限）の厳密な出し分けを実装。**フロント側の表示制御**と**バックエンドでのアクセス制限**を併用し、スムーズな課金誘導を実現。
-- **決済連携:** Stripeカスタマーポータルと連携し、ユーザー自身での解約・カード変更が可能。
-
-### 4. LINEボット連携
-
-Web版の機能をLINEでも利用可能です。
-
-- **アカウント連携:** Webの会員情報とLINE IDを紐付け、課金ステータスを同期。
-- **トークで読書:** 作品名を送るだけで、AI要約がトーク画面に届きます。
+### 3. 本格的なサブスクリプション基盤 (SaaS Architecture)
+「決済して終わり」ではなく、ライフサイクル全体を管理しています。
+- **Stripe完全連携:** Checkout（決済）だけでなく、Portal（解約・カード変更）まで実装。
+- **Webhookによる即時反映:** 決済成功・失敗・解約のイベントをWebhookで検知し、DB上の権限ステータス（`Free` ⇔ `Premium`）をリアルタイムに自動更新。
 
 ---
 
-## 📸 画面イメージ
+## ✨ 主要機能
 
-### ▼ 認証・ログイン画面（再送機能）
-新規登録後、メール認証が未完了の場合に表示されます。**メール再送機能**をボタン一つで実行でき、運用レベルでのセキュリティを確保していることを示します。
-<img width="1845" height="1669" alt="Image" src="https://github.com/user-attachments/assets/40b33828-75ec-4553-b4a0-e59f8890b5d8" />
+### 📱 読書体験 (Core Features)
+- **AI要約リーダー:** 「しっぽり明朝」フォントや余白を計算した雑誌風UI。
+- **[NEW] シームレス翻訳:** 外部サイトへ飛ばず、アプリ内でVertex AIによる翻訳全文を閲覧可能。
+- **マイ・ライブラリ:** 読書履歴、お気に入り管理、多角的な検索機能。
 
-### ▼ トップページ（ダッシュボード）
-読みかけの本へのアクセスや、お気に入り管理、多彩な検索機能が集約されたホーム画面です。
-<img width="1880" height="1830" alt="Image" src="https://github.com/user-attachments/assets/139a4416-4cb8-43bd-8496-3ca9ef0edcd7" />
+### 💳 アカウント & 決済 (Account Management)
+- **厳格な閲覧制限:** 無料会員（1日10回）とプレミアム会員の出し分けを、フロントエンド/バックエンド双方で制御。
+- **セキュアな認証:** 新規登録時のメール認証ブロック、パスワードリセット機能。
 
-### ▼ 詳細ページ（翻訳リーダーモード）
-海外作品専用のビューアです。青空文庫へのリンクではなく、AIが翻訳した全文をアプリ内でシームレスに読むことができます。
-<img width="978" height="1900" alt="Image" src="https://github.com/user-attachments/assets/a0e319b4-0d02-4835-ba55-0110dea64535" />
-
----
-
-## 👨‍💻 エンジニア向け技術解説 (Architecture)
-
-### 🔥 こだわりのアーキテクチャ
-
-#### 複合AIパイプライン (n8n + Vertex AI)
-
-- **コンテンツ自動生成:** ユーザーのリクエスト毎に生成するのではなく、裏側の **n8n** が定期的にソースを巡回。
-- **マルチモデル活用:**
-    - 要約生成: **OpenAI (GPT-5 Nano)**
-    - 翻訳・メタデータ生成: **Google Vertex AI (Gemini)**
-- これらを使い分けることで、コストパフォーマンスと品質の最大化を実現しています。
-
-#### 完全非同期のバックエンド (Spring WebFlux)
-
-- Java の最新フレームワーク **Spring Boot 3 (WebFlux)** と **R2DBC** を採用。
-- I/O待ちが多いAPI処理においてもスレッドをブロックしにくい構成とし、リソース効率と応答性能を意識した設計を行いました。
-
-#### 🛡️ 鉄壁のセキュリティアーキテクチャ (Defense in Depth)
-
-個人開発の域を超え、商用SaaSとして求められる多層防御を実装しました。
-
-- **🔒 オリジン隠蔽 (Zero Trust Network)**
-  **Cloudflare Tunnel** を採用し、サーバーのインバウンドポート（80/443含む全ポート）を物理的に全閉鎖。外部からの攻撃対象領域（Attack Surface）を最小化し、DDoS攻撃やポートスキャンを無効化しています。
-
-- **🔐 世界標準の暗号化 (Transport Security)**
-  **TLS 1.3** の強制および **HSTS (6ヶ月)** の適用により、第三者評価機関（Qualys SSL Labs）にて**最高評価「A+」**を獲得。中間者攻撃を確実に防ぎます。
-
-- **🛡️ クライアントサイド防御 (Browser Security)**
-  厳密に設計した **CSP (Content Security Policy)** や `X-Content-Type-Options: nosniff` 等のセキュリティヘッダを完備。XSSやMIMEスニフィングなどの攻撃をブラウザレベルでブロックします。
-
-- **🔑 認証・認可 (Authentication)**
-  **JWT (JSON Web Token)** を用いたステートレス認証を採用。セッション管理のリスクを排除しつつ、スケーラブルな構成を実現しています。
-
-- **📧 疎結合なメール配信基盤 (Microservices)**
-  Javaバックエンドから **n8n (Webhook)** を経由し、**Gmail API (OAuth2)** で配信する疎結合アーキテクチャを採用。新規登録・再送・パスワードリセット等の重要通知を、メインのアプリケーションロジックから切り離して安定稼働させています。
----
-
-## 🛠 使用技術スタック
-
-| カテゴリ | 技術・ツール |
-| :--- | :--- |
-| **Frontend** | React, Vite, CSS Modules, React Router |
-| **Backend** | Java 21, Spring Boot 3 (WebFlux), Spring Security |
-| **Database** | MySQL 8.0 (Docker Container, Multi-Schema) |
-| **Infra** | Docker, Docker Compose, Cloudflare Tunnel |
-| **Security** |	HSTS, CSP, JWT, WAF (Cloudflare), Page Shield
-| **AI / Batch** | n8n, Google Vertex AI (Gemini), OpenAI API |
-| **Payment** | Stripe API (Checkout & Portal) |
-| **Messaging** | LINE Messaging API |
+### 💬 LINE連携 (Multi-Platform)
+- **ID連携:** WebアカウントとLINE IDを紐付け、課金ステータスを同期。
+- **トークで読書:** 作品名を送信するだけで、要約コンテンツをLINEトーク画面で返信。
 
 ---
 
-## 📐 システム構成図
+## 👨‍💻 技術スタック & アーキテクチャ
+
+### 🛠 Tech Stack
+
+| カテゴリ | 技術・ツール | 選定理由 |
+| :--- | :--- | :--- |
+| **Backend** | **Java 21, Spring Boot 3 (WebFlux)** | ノンブロッキングI/Oによる高並列処理と、型安全性による保守性の担保。 |
+| **Frontend** | **React, Vite** | 高速なレンダリングとコンポーネント指向によるUI管理。 |
+| **Database** | **MySQL 8.0** (R2DBC) | リアクティブドライバーを用いた非同期DBアクセス。 |
+| **Infra** | Docker, Cloudflare Tunnel | コンテナ化による可搬性と、ゼロトラストによるセキュリティ確保。 |
+| **AI / Workflow** | **n8n, Vertex AI, OpenAI** | ローコードとAPIの組み合わせによる、保守性の高いバッチ処理基盤。 |
+| **Payment** | **Stripe API** | 堅牢かつ拡張性の高い決済基盤。 |
+
+### 📐 System Architecture Diagram
+
+Webアプリとしての応答性能を担保しつつ、裏側でAI処理やメール配信を非同期に行う**疎結合アーキテクチャ**を採用しています。
 
 ```mermaid
 graph TD
     %% ユーザーからのアクセスフロー
-    User((User)) -->|Browser| FE[React Frontend]
-    User -->|LINE App| LINE[LINE Bot]
+    User((User)) -->|HTTPS / Zero Trust| CF[Cloudflare Edge]
+    CF -->|Tunnel| FE[React Frontend]
+    User -->|LINE Messaging| LINE[LINE Bot]
     
     FE -->|REST API / JWT| BE[Spring Boot API]
     
-    %% LINE連携
+    %% LINE連携 & メール (Microservices via n8n)
     LINE -->|Webhook| n8n_bot["n8n (LINE Handler)"]
-    n8n_bot -->|REST API| BE
+    n8n_bot -->|Internal API| BE
+    BE -->|Async Request| n8n_mail["n8n (Email Service)"]
+    n8n_mail -->|OAuth2| Gmail[Gmail API]
     
     %% アプリケーションコア
     subgraph "Application Core (Docker)"
-        BE -->|Async Query / R2DBC| MySQL[("MySQL DB")]
-        BE -->|Subscription Status| Stripe[Stripe API]
-        BE -->|Email Request| n8n_mail["n8n (Email Service)"]
+        BE -->|R2DBC / Non-blocking| MySQL[("MySQL DB")]
+        BE <-->|Subscription Sync| Stripe[Stripe API]
     end
     
-    %% 裏側のデータパイプライン
-    subgraph "Content Factory (n8n)"
-        n8n_batch[n8n Batch Workflow] -->|1. Fetch Text| Gutenberg[Project Gutenberg]
+    %% 裏側のデータパイプライン (Content Factory)
+    subgraph "Content Factory (Automated Pipeline)"
+        n8n_batch[n8n Batch Workflow] -->|1. Fetch| Gutenberg[Project Gutenberg]
         n8n_batch -->|2. Translate| Vertex["Google Vertex AI<br/>(Gemini)"]
         n8n_batch -->|3. Summarize| OpenAI["OpenAI API<br/>(GPT-5 Nano)"]
-        n8n_batch -->|4. Store Content| MySQL
+        n8n_batch -->|4. Upsert| MySQL
     end
 
     classDef container fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
     classDef external fill:#fff3e0,stroke:#ff6f00,stroke-width:2px;
     class FE,BE,n8n_bot,n8n_mail,n8n_batch,MySQL container;
-    class User,Stripe,Gutenberg,Vertex,OpenAI,LINE external;
-```
-    
-🧩 詳細なシステムアーキテクチャ
-より詳しい構成や設計ポリシーについては、下記ドキュメントをご覧ください。
-➡ System Architecture (Public)
+    class User,Stripe,Gutenberg,Vertex,OpenAI,LINE,Gmail,CF external;
+    ```
+---
+
+
+📸 Screen Shots認証・セキュリティダッシュボード<img src="https://github.com/user-attachments/assets/40b33828-75ec-4553-b4a0-e59f8890b5d8" width="400" alt="認証画面" /><img src="https://github.com/user-attachments/assets/139a4416-4cb8-43bd-8496-3ca9ef0edcd7" width="400" alt="ダッシュボード" />メール再送機能到達確認を含む堅牢な認証フローホーム画面履歴・お気に入り・検索を集約翻訳リーダーモバイル対応<img src="https://github.com/user-attachments/assets/a0e319b4-0d02-4835-ba55-0110dea64535" width="400" alt="翻訳画面" />(ここにスマホ版のスクショがあれば推奨)翻訳モードAI翻訳によるシームレスな読書体験レスポンシブスマホでも快適なUI設計🚀 今後の展望音声読み上げ機能: Azure AI Speech等のAPIを用いたオーディオブック化レコメンド精度の向上: ベクトル検索を用いた、より文脈に近い書籍提案

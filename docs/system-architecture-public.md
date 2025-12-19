@@ -1,218 +1,172 @@
 # SmartBrief System Architecture (Public Overview)
 
-Version: 1.1
+**Version:** 2.0 (Release Candidate)
+**Last Updated:** 2025-12
+**Status:** Production Ready
 
-※このドキュメントは、外部公開用の技術概要です。IPアドレスや具体的な設定値など、内部運用情報は意図的に省略しています。
-
----
-
-## 1. サービス概要
-
-SmartBrief は、青空文庫および海外のパブリックドメイン作品を対象にした **AI要約・翻訳プラットフォーム** です。
-
-- 古典文学を「約10分で読める」分量に要約・翻訳
-- 検索・ランキング・お気に入り等の閲覧機能
-- 無料（1日10回制限）／有料（無制限）のサブスクリプションモデル（Stripe連携）
-- Webアプリ＋LINEボット連携によるマルチチャネル提供
-- **メールアドレス認証**によるセキュアな本人確認
-
-アプリケーション全体は Docker Compose を用いてコンテナ化されており、
-フロントエンド・バックエンド・データベース・バッチ基盤を分離したマイクロサービス構成になっています。
+> **Note**
+> 本ドキュメントは、**SmartBrief（AI要約・翻訳SaaSプラットフォーム）** の技術アーキテクチャ概要です。
+> 商用運用を前提とした**セキュリティ設計（Zero Trust / HSTS）**、**決済基盤（Stripe）**、および **複合AIパイプライン** の実装詳細について記述します。
 
 ---
 
-## 2. システム構成（High-level Architecture）
+## 1. システム概要 (System Overview)
 
-### 2.1 コンポーネント一覧
+SmartBrief は、青空文庫および海外のパブリックドメイン作品を、現代の忙しいユーザー向けに再構築する **時短読書プラットフォーム** です。
+完全非同期のバックエンド、マイクロサービス化されたAIバッチ、そして堅牢な決済・認証基盤を組み合わせ、**「読み放題SaaS」** として構築されています。
 
-**Frontend**
+### 主な技術特性
+- **High Performance:** Spring WebFlux (Non-blocking I/O) による高並列処理
+- **Secure by Design:** Cloudflare Zero Trust によるオリジン遮蔽と、多層防御アーキテクチャ
+- **Automated Operations:** n8n を中核とした、コンテンツ生成からメール配信までの完全自動化
+- **Reliable Payment:** Stripe Webhook の冪等性を担保したサブスクリプション管理
 
-- React + Vite
-- 認証（メール認証フロー含む）／検索／閲覧などの Web UI
+---
 
-**Backend API**
+## 2. アーキテクチャ (High-Level Architecture)
 
-- Java 21 / Spring Boot 3 (WebFlux)
-- 認証・権限管理（無料／プレミアムの厳密な分離）、作品閲覧制御
-- メール認証トークン管理、Stripe Webhook 連携・LINE連携・履歴管理 等
+システム全体は Docker Compose によってコンテナ化され、責任範囲ごとに明確に分離されたマイクロサービスアーキテクチャを採用しています。
 
-**Database**
-
-- MySQL 8.x（Dockerコンテナ）
-- ユーザー情報（認証状態含む）、作品メタデータ、要約・翻訳データ、閲覧履歴、お気に入り情報 等を永続化
-
-**Automation / Integration**
-
-- n8n（ワークフローオーケストレーション）
-- **複合AIパイプライン**: 青空文庫/Gutenbergの収集・翻訳(Vertex AI)・要約(OpenAI)バッチ
-- **メール配信基盤**: ユーザー登録時の認証メール、パスワードリセットメールの送信
-
-**Network / Edge**
-
-- Docker Compose によるアプリケーションネットワーク
-- Cloudflare Tunnel を利用した安全な外部公開
-  （サーバ側で直接ポート開放を行わない構成）
-
-### 2.2 アーキテクチャ図（概略）
+### 2.1 システム構成図
 
 ```mermaid
 graph TD
-    %% ユーザーからのアクセスフロー
-    User((User)) -->|Browser| FE[React Frontend]
-    User -->|LINE App| LINE[LINE Bot]
+    %% アクセス層
+    User((User)) -->|HTTPS / TLS 1.3| CF[Cloudflare Edge]
+    CF -->|Zero Trust Tunnel| FE[React Frontend]
+    User -->|LINE Messaging| LINE[LINE Bot]
     
     FE -->|REST API / JWT| BE[Spring Boot API]
     
-    %% LINE連携
+    %% 外部連携 & マイクロサービス
     LINE -->|Webhook| n8n_bot["n8n (LINE Handler)"]
-    n8n_bot -->|REST API| BE
+    n8n_bot -->|Internal API| BE
     
     %% アプリケーションコア
     subgraph "Application Core (Docker)"
-        BE -->|Async Query / R2DBC| DB[("MySQL DB")]
-        BE -->|Subscription Status| Stripe[Stripe API]
-        BE -->|Email Request| n8n_mail["n8n (Email Service)"]
+        BE -->|Async R2DBC| MySQL[("MySQL 8.0")]
+        BE -->|Subscription Logic| Stripe[Stripe API]
+        BE -->|Async Mail Request| n8n_mail["n8n (Email Service)"]
+        n8n_mail -->|OAuth2| Gmail[Gmail API]
     end
     
-    %% 裏側のデータパイプライン
-    subgraph "Content Factory (n8n)"
-        n8n_batch[n8n Batch] -->|1. Fetch & Clean| Gutenberg[Project Gutenberg]
-        n8n_batch -->|2. Translate| Vertex["Google Vertex AI<br/>(Gemini)"]
+    %% コンテンツ生成ファクトリー
+    subgraph "Content Factory (n8n Pipeline)"
+        n8n_batch[n8n Batch Workflow] -->|1. Fetch| Gutenberg[Project Gutenberg]
+        n8n_batch -->|2. Translate| Vertex["Google Vertex AI<br/>(Gemini 1.5)"]
         n8n_batch -->|3. Summarize| OpenAI["OpenAI API<br/>(GPT-5 Nano)"]
-        n8n_batch -->|4. Store Data| DB
+        n8n_batch -->|4. Upsert| MySQL
     end
 
     classDef container fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
     classDef external fill:#fff3e0,stroke:#ff6f00,stroke-width:2px;
-    class FE,BE,n8n_bot,n8n_mail,n8n_batch,DB container;
-    class User,Stripe,Gutenberg,Vertex,OpenAI,LINE external;
+    class FE,BE,n8n_bot,n8n_mail,n8n_batch,MySQL container;
+    class User,Stripe,Gutenberg,Vertex,OpenAI,LINE,Gmail,CF external;
 ```
 
 ---
 
-## 3. Backend Design（Java / Spring WebFlux）
+## 3. バックエンド設計 (Backend Design)
 
-### 3.1 認証・認可
+**Tech Stack:** Java 21, Spring Boot 3 (WebFlux), Spring Security, R2DBC
 
-**方式**
+### 3.1 リアクティブ・アーキテクチャ (High Performance)
+I/O待ち（DBアクセス、外部APIコール）が頻発するSaaSの特性を考慮し、スレッドをブロックしない **Non-blocking I/O** アーキテクチャを採用しています。これにより、最小限のリソースで大量の同時リクエストを処理可能です。
 
-- JWT（JSON Web Token）によるステートレス認証
-- **メールアドレス認証フロー**:
-  - 仮登録時に認証用トークンを発行し、メールで送信
-  - 認証完了フラグ（`is_verified`）が `TRUE` でないとログイン不可
-  - フロントエンドからの再送リクエストにも対応
+### 3.2 認証・認可 (Identity & Access Management)
+- **Stateless Authentication:**
+  - JWT (JSON Web Token) を採用し、セッションサーバーに依存しないスケーラブルな認証基盤を構築。
+- **Robust Verification Flow:**
+  - 仮登録 → 認証トークン発行 → メール到達確認（Verify） → 本登録 の厳格なフローを実装。
+  - `is_verified` フラグによるログイン制御と、トークン有効期限管理により不正アカウントを排除。
+- **Role-Based Access Control (RBAC):**
+  - エンドポイントレベルで `FREE` / `PREMIUM` の権限を厳密に分離。
+  - API Gateway 層（Spring Security）で認証不要パス（Webhook等）と認証必須パスをホワイトリスト形式で管理。
 
-**主な設計ポイント**
+### 3.3 データモデル設計 (Data Modeling)
+**Spring Data R2DBC** を用いた非同期データアクセス層を構築。
 
-- `Authorization: Bearer <token>` ヘッダを検証
-- ユーザー種別（`FREE` / `PREMIUM`）に応じたアクセス制御
-- 以下をフレームワーク（ルーティング／セキュリティ設定）で明確に分離
-  - 認証不要パス（ログイン、サインアップ、メール認証、再送、パスワードリセット、各種 Webhook）
-  - 認証必須パス（作品閲覧・履歴／お気に入り取得など）
+- **User:** 認証情報、サブスクリプション状態、Stripe Customer ID を一元管理。
+- **Work:** 翻訳本文、要約（Short/Long）、メタデータを格納。
+- **UserBookHistory:**
+  - ユーザーごとの閲覧履歴と「本日分の閲覧回数」を管理。
+  - **重複排除ロジック:** 短時間の連続アクセスを1回とみなす制御を実装し、閲覧権限の不正消費を防止。
 
----
-
-### 3.2 データモデル（概要）
-
-主なエンティティは以下の通りです（カラム名・テーブル名は一部抽象化）。
-
-- **User**
-  - 認証情報（メールアドレス、パスワードハッシュ）
-  - 認証状態（`is_verified`: boolean, `verification_token`: string）
-  - 会員種別（`FREE` / `PREMIUM`）
-  - サブスクリプションステータス
-
-- **Work**
-  - 作品ID、タイトル、著者名、翻訳本文、キャッチコピー
-  - 要約テキスト（300文字版 / フル版）
-  - カテゴリ（青空文庫 / 翻訳作品）
-
-- **UserBookHistory**
-  - ユーザーごとの作品閲覧履歴
-  - 日次カウントによる「無料枠の閲覧制限（1日10回）」判定に利用
-  - 重複カウント防止ロジック（短時間の連続アクセスは1回とみなす）を実装
-
-- **UserFavorite**
-  - ユーザーのお気に入り作品の管理
-
-実装には **Spring Data R2DBC** を用いており、
-リアクティブな I/O パターンを採用することで、同時接続へのスケーラビリティを意識した設計としています。
+### 3.4 決済・サブスクリプション連携 (Payment Integration)
+- **Stripe Integration:**
+  - Checkout Session によるセキュアなカード情報入力。
+  - Billing Portal によるユーザー主導の契約変更・解約フロー。
+- **Idempotency (冪等性):**
+  - Stripe Webhook（`invoice.payment_succeeded` 等）処理において、イベントIDの重複チェックを実装。
+  - ネットワーク遅延等によるWebhook多重送信時も、契約期間が不正延長されない堅牢なロジックを確立。
 
 ---
 
-### 3.3 外部連携
+## 4. フロントエンド設計 (Frontend Design)
 
-- **Stripe**
-  - サブスクリプションの購入／更新／解約イベントを Webhook で受信
-  - イベント種別に応じてユーザーの会員ステータスを更新
+**Tech Stack:** React, Vite, CSS Modules, React Router
 
-- **LINE**
-  - n8n 経由の Webhook で、ユーザーアカウントとの紐付けを実施
-  - LINE 経由での閲覧時に、課金状況や無料枠を含む閲覧権限チェックを行う
+### 4.1 UX Optimization
+- **Optimistic UI:** データのロード完了を待たずにスケルトンスクリーンを表示し、体感速度を向上。
+- **Parallel Data Fetching:** ダッシュボード表示時に「ランキング」「新着」「履歴」のAPIを並列リクエスト（`Promise.all`）し、初期描画時間を短縮。
+- **Premium Upsell UI:**
+  - 無料会員が制限（10回）に達した際、専用のモーダルへ誘導。
+  - 詳細画面では、テキストの一部をグラデーションで隠す「ティーザーUI」により、課金転換率（CVR）向上を狙った設計。
 
-- **n8n (Email Service)**
-  - バックエンドからのHTTPリクエストをトリガーに、Gmail API (OAuth2) 経由でメールを送信
-  - 認証メール、パスワードリセットメール等の配信基盤として利用
-
----
-
-## 4. Frontend Design（React / Vite）
-
-- 使用ライブラリ:
-  - React
-  - Vite
-  - `react-router-dom`
-
-**主な画面**
-
-- 非ログインユーザー向け:
-  - `/login`（ログイン・再送申請）
-  - `/register`（新規登録）
-  - `/verify-email`（メール認証実行）
-  - `/forgot-password`, `/reset-password`
-- ログインユーザー向け:
-  - `/`（ダッシュボード）
-  - 検索画面
-  - 作品詳細画面（要約ビューア / 翻訳リーダー） など
-
-**UX 面の工夫**
-
-- **閲覧制限の視覚化**:
-  - 無料会員が上限（10回）を超えた場合、サーバーエラーではなく専用の課金誘導モーダルを表示
-  - 詳細画面では、テキストの一部をグラデーションで隠し、続きを読みたくなるようなUI設計（オーバーレイ解除）を採用
-- **並列データロード**: ダッシュボード初期表示時に複数の API を並列呼び出しし、初回ロード時間を短縮
+### 4.2 Security Implementation
+- **XSS対策:** React の自動エスケープ機構に加え、Content Security Policy (CSP) でスクリプト実行元を厳密に制限。
+- **機密情報の保護:** LocalStorage にはパスワード等の機密情報を一切保存せず、JWTのみを管理。
 
 ---
 
-## 5. Automation Pipeline（n8n + AI）
+## 5. オートメーション & AIパイプライン (Automation)
 
-SmartBrief では、作品の収集からコンテンツ生成までを **完全自動化されたパイプライン** で処理しています。
+**Tech Stack:** n8n, Google Vertex AI, OpenAI API
 
-### 5.1 複合AIパイプラインのフロー
+### 5.1 コンテンツ・ファクトリー (Content Factory)
+手動運用ゼロを目指し、n8n をオーケストレーターとして以下のバッチ処理を定期実行しています。
 
-1. **収集**: Project Gutenberg / 青空文庫からテキストを取得
-2. **翻訳 (Vertex AI)**: Gemini 1.5 Flash を使用し、文脈を考慮した自然な日本語へ翻訳
-3. **要約 (OpenAI)**: GPT-5 Nano を使用し、要約・解説・キャッチコピーを生成
-4. **保存**: 生成されたデータをデータベースへ格納（既存データの場合は更新）
-5. **通知**: 必要に応じたメール通知・LINE通知
+1. **Source Acquisition:** Project Gutenberg / 青空文庫からパブリックドメイン作品を自動収集。
+2. **Context-Aware Translation:** 長文脈に強い **Gemini 1.5 (Vertex AI)** を使用し、作品全体のトーンを維持した自然な翻訳を実行。
+3. **Summarization:** **GPT-5 Nano** により、3段階（キャッチコピー・要約・解説）のメタデータを生成。
+4. **Data Upsert:** 生成結果を MySQL に格納し、即座にフロントエンドへ反映。
 
-### 5.2 設計方針
-
-- **適材適所のモデル選定**:
-  - 長文翻訳にはコンテキストウィンドウの広い **Gemini (Vertex AI)**
-  - 要約とキャッチコピー生成には **GPT-5 Nano**
-  - これらを使い分けることで、コストと品質の最適化を実現
+### 5.2 疎結合なメッセージング (Decoupled Messaging)
+メール配信やLINE通知などの「副作用」を伴う処理は、メインのAPIサーバーから切り離し、n8n の Webhook へオフロード。
+- **Gmail API (OAuth2)**: バックエンドからのHTTPリクエストをトリガーに、認証メールやパスワードリセットメールを即時配信。
+- **LINE Messaging API**: ユーザーの操作（検索、ID連携）に対し、非同期で応答メッセージを生成・送信。
 
 ---
 
-## 6. Security & Operations（概要）
+## 6. セキュリティとインフラ (Security & Infrastructure)
 
-- APIキーや DB 接続情報、JWT シークレットなどの機密情報は **すべて環境変数で管理** し、リポジトリにはコミットしない
-- 認証不要エンドポイントと認証必須エンドポイントをフレームワーク（Spring Security 等）の設定で明確に分離
-- Cloudflare Tunnel を利用し、インバウンドポートを開放せずに安全に外部公開
-- コンテナオーケストレーションには **Docker Compose** を利用し、更新時はイメージ再ビルド・環境変数の適用による運用を行う
+本番運用（Production）を前提とした**多層防御 (Defense in Depth)** を実装しています。
+
+### 6.1 ネットワークセキュリティ
+- **Cloudflare Zero Trust (Tunnel):**
+  - オリジンサーバーのインバウンドポート（80/443含む全ポート）を物理的に閉鎖。
+  - Cloudflare エッジ経由のトラフィックのみを許可し、DDoS攻撃やポートスキャンを無効化。
+
+### 6.2 通信セキュリティ
+- **Qualys SSL Labs A+ Rating:**
+  - **TLS 1.3** の強制および、脆弱な暗号スイートの排除。
+  - **HSTS (HTTP Strict Transport Security)** ヘッダ（max-age=6ヶ月）の付与により、中間者攻撃を防止。
+
+### 6.3 アプリケーションセキュリティ
+- **Environment Isolation:** APIキーやDBパスワードはすべて環境変数（`.env`）で注入し、コードベースから完全に分離。
+- **Security Headers:**
+  - `Content-Security-Policy`: XSS対策
+  - `X-Content-Type-Options: nosniff`: MIMEスニフィング防止
+  - `X-Frame-Options: DENY`: クリックジャッキング防止
 
 ---
 
-このドキュメントは、SmartBrief の「技術的な全体像」を外部向けに説明するためのものです。
-より詳細な運用マニュアルや具体的な設定値は、非公開の内部ドキュメント側で管理しています。
+### 付録: 開発・運用環境
+
+- **Repository:** GitHub (Feature Branch Flow)
+- **CI/CD:** GitHub Actions (Lint / Test / Build)
+- **Monitoring:** Cloudflare Analytics, Docker Container Logs
+
+---
+
+*このドキュメントは外部公開用に構成された技術概要です。内部的なIPアドレス、認証キー、詳細なAPI仕様については、非公開の内部ドキュメントを参照してください。*
