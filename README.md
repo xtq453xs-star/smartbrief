@@ -86,6 +86,14 @@ SmartBriefは、忙しい現代人のために、青空文庫や海外の名作�
 | **AI / Workflow** | **n8n, Vertex AI, OpenAI** | ローコードとAPIの組み合わせによる、保守性の高いバッチ処理基盤。 |
 | **Payment** | **Stripe API** | 堅牢かつ拡張性の高い決済基盤。 |
 
+### 🎨 Frontend 実装メモ
+
+- **React 19 + React Router v7 + Vite(rolldown-vite)** でSPAを構築
+- **API呼び出しの統一:** `frontend/src/utils/apiClient.js` に集約（`/api/v1`、`{ ok, status, data, message }` で返却）
+- **通知の統一:** `frontend/src/contexts/ToastContext.jsx`（成功/失敗/401などをトーストで表示）
+- **認証トークン:** `authToken` を localStorage に保存し、ログイン時は **localStorage先書き → state更新** でレース回避（ログイン直後にログイン画面へ戻る事象を解消）
+- **401の扱い:** `apiClient` は token を削除してステータスを返し、画面側で `logout → /login` を統一的に制御
+
 ### 📐 System Architecture Diagram
 
 Webアプリとしての応答性能を担保しつつ、裏側でAI処理やメール配信を非同期に行う**疎結合アーキテクチャ**を採用しています。
