@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Footer from './Footer';
+import { theme } from '../theme'; // ★ theme.js をインポート
+import { apiClient } from '../utils/apiClient';
+import { useToast } from '../contexts/ToastContext';
 
-// ★修正: 検索ヒット率を上げるため、姓と名の間に半角スペースを追加
-// これでDB上の「宮沢 賢治」と一致しやすくなります
+// --- 作家リスト（姓と名の間にスペースあり） ---
 const POPULAR_AUTHORS = [
-  // --- グループA: 幻想・ロマン ---
+  // グループA: 幻想・ロマン
   { name: '宮沢 賢治', file: 'miyazawa_kenji.png' },
   { name: '小川 未明', file: 'ogawa_mimei.png' },
   { name: '泉 鏡花', file: 'izumi_kyoka.png' },
@@ -14,8 +16,7 @@ const POPULAR_AUTHORS = [
   { name: '中原 中也', file: 'nakahara_chuya.png' },
   { name: '牧野 信一', file: 'makino_shinichi.png' },
   { name: '豊島 与志雄', file: 'toyoshima_toshio.png' },
-  
-  // --- グループB: 無頼・近代 ---
+  // グループB: 無頼・近代
   { name: '太宰 治', file: 'dazai_osamu.png' },
   { name: '坂口 安吾', file: 'sakaguchi_ango.png' },
   { name: '芥川 竜之介', file: 'akutagawa_ryunosuke.png' },
@@ -23,8 +24,7 @@ const POPULAR_AUTHORS = [
   { name: '田山 録弥', file: 'tayama_rokuya.png' },
   { name: '菊池 寛', file: 'kikuchi_kan.png' },
   { name: '山本 周五郎', file: 'yamamoto_shugorou.png' },
-  
-  // --- グループC: 科学・思想・芸術 ---
+  // グループC: 科学・思想・芸術
   { name: '寺田 寅彦', file: 'terada_torahiko.png' },
   { name: '中谷 宇吉郎', file: 'nakaya_ukichiro.png' },
   { name: '北大路 魯山人', file: 'kitaooji_rosannzin.png' },
@@ -34,8 +34,7 @@ const POPULAR_AUTHORS = [
   { name: '原 民喜', file: 'hara_tamiki.png' },
   { name: '岸田 國士', file: 'kishida_kunio.png' },
   { name: '折口 信夫', file: 'origuchi_nobuo.png' },
-  
-  // --- グループD: エンタメ・ミステリー ---
+  // グループD: エンタメ・ミステリー
   { name: '江戸川 乱歩', file: 'edogawa_ranpo.png' },
   { name: '夢野 久作', file: 'yumeno_kyusaku.png' },
   { name: '海野 十三', file: 'uno_juza.png' },
@@ -52,34 +51,28 @@ const POPULAR_AUTHORS = [
   { name: '田中 貢太郎', file: 'tanaka_koutarou.png' },
 ];
 
-// --- コンポーネント定義 ---
-
-// 通常の作品カード
+// --- 共通BookCardコンポーネント (theme適用) ---
 const BookCardItem = ({ book, onClick, index, isRanking = false }) => {
   const [isHovered, setIsHovered] = useState(false);
 
-  // ランキング・作家カード用の共通スタイルベース
-  const cardStyle = isRanking ? {
+  // ランキング用スタイル
+  const cardStyle = {
     ...styles.bookCard,
-    minWidth: '120px', 
-    maxWidth: '120px',
-    flexShrink: 0,
-    scrollSnapAlign: 'start',
-    marginRight: '15px'
-  } : styles.bookCard;
+    ...(isRanking ? { 
+        minWidth: '120px', maxWidth: '120px', flexShrink: 0, 
+        scrollSnapAlign: 'start', marginRight: '15px' 
+    } : {}),
+    ...(isHovered ? styles.bookCardHover : {}),
+  };
 
   const getCoverColor = (id) => {
     const colors = ['#FF9A9E', '#FECFEF', '#A18CD1', '#FBC2EB', '#8FD3F4', '#84FAB0', '#E0C3FC'];
-    return colors[id % colors.length];
+    return colors[(id || 0) % colors.length];
   };
 
   return (
     <div 
-      style={{
-        ...cardStyle,
-        ...(isHovered && !isRanking ? styles.bookCardHover : {}),
-        ...(isHovered && isRanking ? {transform: 'translateY(-4px)'} : {})
-      }}
+      style={cardStyle}
       onClick={onClick}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -88,20 +81,9 @@ const BookCardItem = ({ book, onClick, index, isRanking = false }) => {
 
       <div style={styles.bookCover}>
          {book.image_url ? (
-           <img 
-             src={book.image_url} 
-             alt={`${book.title} - ${book.authorName} の要約・あらすじ`}
-             style={{
-               ...styles.bookImage,
-               ...(isHovered ? styles.bookImageHover : {})
-             }} 
-           />
+           <img src={book.image_url} alt={book.title} style={{...styles.bookImage, ...(isHovered ? styles.bookImageHover : {})}} />
          ) : (
-           <div style={{
-             width: '100%', height: '100%', 
-             background: `linear-gradient(135deg, ${getCoverColor(book.id || index)} 0%, #fff 150%)`, 
-             display: 'flex', alignItems: 'center', justifyContent: 'center'
-           }}>
+           <div style={{...styles.noImageCover, background: `linear-gradient(135deg, ${getCoverColor(book.id)} 0%, #fff 150%)`}}>
              <span style={{fontSize: isRanking ? '24px' : '40px'}}>📖</span>
            </div>
          )}
@@ -109,28 +91,25 @@ const BookCardItem = ({ book, onClick, index, isRanking = false }) => {
       </div>
 
       <div style={styles.bookInfo}>
-        <h4 style={{...styles.bookTitle, fontSize: isRanking ? '12px' : '15px'}}>{book.title}</h4>
-        <p style={{...styles.bookAuthor, fontSize: isRanking ? '10px' : '12px'}}>{book.authorName}</p>
+        <h4 style={{...styles.bookTitle, fontSize: isRanking ? '12px' : '14px'}}>{book.title}</h4>
+        <p style={{...styles.bookAuthor, fontSize: isRanking ? '10px' : '11px'}}>{book.authorName}</p>
         {!isRanking && book.highQuality && <span style={styles.hqBadge}>✨ Pro</span>}
       </div>
     </div>
   );
 };
 
-// 作家カードコンポーネント
+// --- 共通AuthorCardコンポーネント ---
 const AuthorCardItem = ({ author, onClick }) => {
   const [isHovered, setIsHovered] = useState(false);
 
   return (
     <div 
       style={{
-        ...styles.bookCard, // 基本スタイルは本と同じ
-        minWidth: '120px',
-        maxWidth: '120px',
-        flexShrink: 0,
-        scrollSnapAlign: 'start',
-        marginRight: '15px',
-        ...(isHovered ? {transform: 'translateY(-4px)'} : {})
+        ...styles.bookCard, // 基本はBookCardと同じ
+        minWidth: '120px', maxWidth: '120px', flexShrink: 0, 
+        scrollSnapAlign: 'start', marginRight: '15px',
+        ...(isHovered ? styles.bookCardHover : {})
       }}
       onClick={onClick}
       onMouseEnter={() => setIsHovered(true)}
@@ -138,25 +117,22 @@ const AuthorCardItem = ({ author, onClick }) => {
     >
       <div style={styles.bookCover}>
          <img 
-             src={`https://assets.smartbrief.jp/${author.file}`}
-             alt={`${author.name}の作品一覧`}
-             style={{
-               ...styles.bookImage,
-               ...(isHovered ? styles.bookImageHover : {})
-             }} 
+             src={`https://assets.smartbrief.jp/${author.file}`} 
+             alt={author.name} 
+             style={{...styles.bookImage, ...(isHovered ? styles.bookImageHover : {})}} 
          />
          <div style={styles.gradientOverlay}></div>
       </div>
-
       <div style={styles.bookInfo}>
         <p style={{...styles.bookAuthor, fontSize: '10px', color: '#ccc', marginBottom: '2px'}}>作家</p>
-        <h4 style={{...styles.bookTitle, fontSize: '13px', marginBottom: '5px'}}>{author.name}</h4>
+        <h4 style={{...styles.bookTitle, fontSize: '13px'}}>{author.name}</h4>
       </div>
     </div>
   );
 };
 
-const BookSearch = ({ token, onBookSelect }) => {
+const BookSearch = ({ onBookSelect, onLogout }) => {
+  const { showToast } = useToast();
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -170,68 +146,57 @@ const BookSearch = ({ token, onBookSelect }) => {
   const [currentSearchType, setCurrentSearchType] = useState(null); 
   const [lastSearchWord, setLastSearchWord] = useState('');
   const [activeTab, setActiveTab] = useState('all'); 
+  const [rankingBooks, setRankingBooks] = useState([]);
 
   const LIMIT = 50; 
   const [searchParams] = useSearchParams(); 
-  const [rankingBooks, setRankingBooks] = useState([]);
   
-  // スクロール用Ref
   const rankingScrollRef = useRef(null);
   const authorScrollRef = useRef(null);
 
-  // 初期データ取得
-  useEffect(() => {
-    fetch('/api/v1/books/ranking?limit=20', { headers: { 'Authorization': `Bearer ${token}` } })
-    .then(res => res.ok ? res.json() : [])
-    .then(data => setRankingBooks(data))
-    .catch(err => console.error(err));
-  }, [token]);
+  // --- API Fetch ヘルパー ---
+  const fetchData = useCallback(async (endpoint) => {
+    const res = await apiClient.get(endpoint);
+    if (res.ok) return res.data;
+    showToast(res.message, 'error');
+    if (res.status === 401 && typeof onLogout === 'function') onLogout();
+    return null;
+  }, [onLogout, showToast]);
 
-  // 検索関数
+  useEffect(() => {
+    fetchData('/books/ranking?limit=20').then(data => setRankingBooks(data || []));
+  }, [fetchData]);
+
   const fetchBooks = async (type, word, newOffset, isAppend = false) => {
     if (type !== 'translation' && !word) return;
     
-    if (!isAppend) {
-      setLoading(true);
-      setListLoading(true);
-      setBooks([]);
-    } else {
-      setListLoading(true);
-    }
+    if (!isAppend) { setLoading(true); setListLoading(true); setBooks([]); } 
+    else { setListLoading(true); }
     
     setError(null);
 
     try {
       let url = '';
       const params = `limit=${LIMIT}&offset=${newOffset}&sort=length_desc`;
+      const encodedWord = encodeURIComponent(word);
 
-      if (type === 'text') {
-        url = `/api/v1/books/search?q=${encodeURIComponent(word)}&${params}`;
-      } else if (type === 'genre') {
-        url = `/api/v1/books/search/genre?q=${encodeURIComponent(word)}&${params}`;
-      } else if (type === 'translation') {
-        url = `/api/v1/books/search?type=translation&${params}`;
-      }
+      if (type === 'text') url = `/books/search?q=${encodedWord}&${params}`;
+      else if (type === 'genre') url = `/books/search/genre?q=${encodedWord}&${params}`;
+      else if (type === 'translation') url = `/books/search?type=translation&${params}`;
 
-      const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
+      const data = await fetchData(url);
+      
+      if (!data) throw new Error('検索エラー');
 
-      if (!response.ok) throw new Error('検索に失敗しました');
-      const data = await response.json();
-
-      if (isAppend) {
-        setBooks(prev => [...prev, ...data]);
-      } else {
-        setBooks(data);
-      }
+      if (isAppend) setBooks(prev => [...prev, ...data]);
+      else setBooks(data);
 
       setHasMore(data.length === LIMIT);
       setOffset(newOffset);
       setCurrentSearchType(type);
       setLastSearchWord(word);
 
-    } catch (err) {
+    } catch {
       setError('検索中にエラーが発生しました。');
     } finally {
       setLoading(false);
@@ -245,14 +210,12 @@ const BookSearch = ({ token, onBookSelect }) => {
     setSuggestions([]); setShowSuggestions(false);
     setActiveTab('all');
     fetchBooks('text', searchWord, 0, false);
-    // 検索したらトップへスクロール
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const executeGenreSearch = (genreWord) => {
     if (!genreWord) return;
-    setQuery(''); 
-    setSuggestions([]); setShowSuggestions(false);
+    setQuery(''); setSuggestions([]); setShowSuggestions(false);
     setActiveTab('all'); 
     fetchBooks('genre', genreWord, 0, false);
   };
@@ -263,15 +226,13 @@ const BookSearch = ({ token, onBookSelect }) => {
         setQuery('');
         fetchBooks('translation', null, 0, false);
     } else {
-        setBooks([]);
-        setHasMore(false);
+        setBooks([]); setHasMore(false);
     }
   };
 
   const loadMore = () => {
     if (!hasMore || listLoading) return;
-    const nextOffset = offset + LIMIT;
-    fetchBooks(currentSearchType, lastSearchWord, nextOffset, true);
+    fetchBooks(currentSearchType, lastSearchWord, offset + LIMIT, true);
   };
 
   useEffect(() => {
@@ -287,25 +248,13 @@ const BookSearch = ({ token, onBookSelect }) => {
   // サジェスト
   useEffect(() => {
     if (!query.trim() || query.startsWith('ジャンル:')) { setSuggestions([]); return; }
-    const delayDebounceFn = setTimeout(async () => {
-      try {
-        const response = await fetch(`/api/v1/books/suggest?q=${encodeURIComponent(query)}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setSuggestions(data); setShowSuggestions(true);
-        }
-      } catch (err) { console.error(err); }
+    const timer = setTimeout(async () => {
+       const data = await fetchData(`/books/suggest?q=${encodeURIComponent(query)}`);
+       if(data) { setSuggestions(data); setShowSuggestions(true); }
     }, 300);
-    return () => clearTimeout(delayDebounceFn);
-  }, [query, token]);
+    return () => clearTimeout(timer);
+  }, [query, fetchData]);
 
-  const handleSuggestionClick = (book) => {
-    setQuery(book.title); setSuggestions([]); onBookSelect(book.id);
-  };
-
-  // 横スクロール関数
   const scrollContainer = (ref, direction) => {
     if (ref.current) {
       const amount = 300;
@@ -315,15 +264,6 @@ const BookSearch = ({ token, onBookSelect }) => {
 
   return (
     <div style={styles.container}>
-      <style>{`
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .scroll-btn:hover { background-color: rgba(255,255,255,1) !important; transform: scale(1.1); }
-        .load-more-btn:hover { background-color: #2b6cb0 !important; }
-        .load-more-btn:disabled { background-color: #cbd5e0 !important; cursor: not-allowed; }
-      `}</style>
-      
       <div style={styles.headerArea}>
         <h2 style={styles.heading}>📚 蔵書検索</h2>
         <p style={styles.subText}>AIが要約した名作文学の世界へ</p>
@@ -332,23 +272,15 @@ const BookSearch = ({ token, onBookSelect }) => {
       {/* --- ランキングセクション --- */}
       {rankingBooks.length > 0 && activeTab === 'all' && !query && (
         <div style={{marginBottom: '50px'}}>
-          <h3 style={styles.sectionTitle}>
-            <span>👑</span> 今週の人気ランキング
-          </h3>
+          <h3 style={styles.sectionTitle}>👑 今週の人気ランキング</h3>
           <div style={{position: 'relative'}}>
-            <button className="scroll-btn" onClick={() => scrollContainer(rankingScrollRef, 'left')} style={{...styles.scrollButton, left: '-20px'}}>&#10094;</button>
-            <div ref={rankingScrollRef} className="hide-scrollbar" style={styles.rankingGrid}>
-              {rankingBooks.map((book, index) => (
-                <BookCardItem 
-                  key={`rank-${book.id || index}`}
-                  book={book}
-                  index={index}
-                  onClick={() => onBookSelect(book.id)}
-                  isRanking={true}
-                />
+            <button style={{...styles.scrollButton, left: '-20px'}} onClick={() => scrollContainer(rankingScrollRef, 'left')}>&#10094;</button>
+            <div ref={rankingScrollRef} style={styles.horizontalScroll}>
+              {rankingBooks.map((book, i) => (
+                <BookCardItem key={`rank-${i}`} book={book} index={i} onClick={() => onBookSelect(book.id)} isRanking={true} />
               ))}
             </div>
-            <button className="scroll-btn" onClick={() => scrollContainer(rankingScrollRef, 'right')} style={{...styles.scrollButton, right: '-20px'}}>&#10095;</button>
+            <button style={{...styles.scrollButton, right: '-20px'}} onClick={() => scrollContainer(rankingScrollRef, 'right')}>&#10095;</button>
           </div>
         </div>
       )}
@@ -356,21 +288,15 @@ const BookSearch = ({ token, onBookSelect }) => {
       {/* --- 人気作家セクション --- */}
       {activeTab === 'all' && !query && (
         <div style={{marginBottom: '50px'}}>
-          <h3 style={styles.sectionTitle}>
-            <span>✒️</span> 人気作家から探す
-          </h3>
+          <h3 style={styles.sectionTitle}>✒️ 人気作家から探す</h3>
           <div style={{position: 'relative'}}>
-            <button className="scroll-btn" onClick={() => scrollContainer(authorScrollRef, 'left')} style={{...styles.scrollButton, left: '-20px'}}>&#10094;</button>
-            <div ref={authorScrollRef} className="hide-scrollbar" style={styles.rankingGrid}>
-              {POPULAR_AUTHORS.map((author, index) => (
-                <AuthorCardItem 
-                  key={`auth-${index}`}
-                  author={author}
-                  onClick={() => executeSearch(author.name)}
-                />
+            <button style={{...styles.scrollButton, left: '-20px'}} onClick={() => scrollContainer(authorScrollRef, 'left')}>&#10094;</button>
+            <div ref={authorScrollRef} style={styles.horizontalScroll}>
+              {POPULAR_AUTHORS.map((author, i) => (
+                <AuthorCardItem key={`auth-${i}`} author={author} onClick={() => executeSearch(author.name)} />
               ))}
             </div>
-            <button className="scroll-btn" onClick={() => scrollContainer(authorScrollRef, 'right')} style={{...styles.scrollButton, right: '-20px'}}>&#10095;</button>
+            <button style={{...styles.scrollButton, right: '-20px'}} onClick={() => scrollContainer(authorScrollRef, 'right')}>&#10095;</button>
           </div>
         </div>
       )}
@@ -389,8 +315,8 @@ const BookSearch = ({ token, onBookSelect }) => {
           />
           {showSuggestions && suggestions.length > 0 && (
             <ul style={styles.suggestionList}>
-              {suggestions.map((item, index) => (
-                <li key={item.id || index} style={styles.suggestionItem} onMouseDown={() => handleSuggestionClick(item)}>
+              {suggestions.map((item, i) => (
+                <li key={i} style={styles.suggestionItem} onMouseDown={() => {setQuery(item.title); setSuggestions([]); onBookSelect(item.id);}}>
                   <span style={styles.suggestionTitle}>{item.title}</span>
                   <span style={styles.suggestionAuthor}>{item.authorName}</span>
                 </li>
@@ -399,22 +325,16 @@ const BookSearch = ({ token, onBookSelect }) => {
           )}
         </div>
         <button type="submit" disabled={loading} style={styles.button}>
-          {loading ? <div style={styles.spinner} /> : '検索'}
+          {loading ? '...' : '検索'}
         </button>
       </form>
 
       {/* タブ */}
       <div style={styles.tabWrapper}>
-          <button 
-            style={activeTab === 'all' ? styles.activeTabBtn : styles.tabBtn} 
-            onClick={() => handleTabChange('all')}
-          >
+          <button style={activeTab === 'all' ? styles.activeTabBtn : styles.tabBtn} onClick={() => handleTabChange('all')}>
             すべて
           </button>
-          <button 
-            style={activeTab === 'translation' ? styles.activeTabBtn : styles.tabBtn} 
-            onClick={() => handleTabChange('translation')}
-          >
+          <button style={activeTab === 'translation' ? styles.activeTabBtn : styles.tabBtn} onClick={() => handleTabChange('translation')}>
             🌍 海外翻訳作品
           </button>
       </div>
@@ -422,40 +342,19 @@ const BookSearch = ({ token, onBookSelect }) => {
       {error && <p style={styles.error}>{error}</p>}
 
       {/* 検索結果グリッド */}
-      <div className="book-grid-container" style={{marginBottom: '40px'}}>
-        {loading ? (
-          <div style={styles.loadingContainer}>
-            <div style={{...styles.spinner, borderColor: '#ccc', borderTopColor: '#007bff'}}></div>
-            <span style={{marginLeft: '10px', color: '#666'}}>本棚から探しています...</span>
-          </div>
+      <div style={{marginBottom: '40px'}}>
+        {loading && !listLoading ? (
+          <div style={styles.loadingContainer}>読み込み中...</div>
         ) : books.length > 0 ? (
           <>
             <div style={styles.grid}>
-              {books.map((book, index) => (
-                <BookCardItem 
-                  key={`${book.id}-${index}`} 
-                  book={book} 
-                  index={index}
-                  onClick={() => onBookSelect(book.id)} 
-                />
-              ))}
+              {books.map((book, i) => <BookCardItem key={`${book.id}-${i}`} book={book} index={i} onClick={() => onBookSelect(book.id)} />)}
             </div>
 
             {hasMore && (
               <div style={{textAlign: 'center', marginTop: '40px'}}>
-                <button 
-                  className="load-more-btn"
-                  onClick={loadMore} 
-                  disabled={listLoading}
-                  style={styles.loadMoreButton}
-                >
-                  {listLoading ? (
-                    <span style={{display:'flex', alignItems:'center', gap:'10px'}}>
-                      <div style={{...styles.spinner, width:'15px', height:'15px'}}></div> 読み込み中...
-                    </span>
-                  ) : (
-                    'もっと見る'
-                  )}
+                <button onClick={loadMore} disabled={listLoading} style={styles.loadMoreButton}>
+                  {listLoading ? '読み込み中...' : 'もっと見る'}
                 </button>
               </div>
             )}
@@ -465,179 +364,113 @@ const BookSearch = ({ token, onBookSelect }) => {
             <div style={styles.emptyState}>
               <div style={{fontSize: '48px', marginBottom: '10px'}}>🤔</div>
               <p style={styles.noResult}>本が見つかりませんでした</p>
-              <p style={{fontSize: '14px'}}>キーワードを変えるか、作家名で検索してみてください</p>
             </div>
           )
         )}
       </div>
 
-      <Footer />
+      <Footer color={theme.colors.textSub} separatorColor={theme.colors.border} />
     </div>
   );
 };
 
-// --- Styles ---
+// --- Styles (theme.js を活用) ---
 const styles = {
-  container: { maxWidth: '1000px', margin: '0 auto', padding: '40px 20px', fontFamily: '"Shippori Mincho", "Yu Mincho", serif', color: '#4a3b32' },
+  container: { 
+      maxWidth: '1000px', margin: '0 auto', padding: '40px 20px', 
+      fontFamily: theme.fonts.body, color: theme.colors.textMain, backgroundColor: theme.colors.background 
+  },
   headerArea: { textAlign: 'center', marginBottom: '40px' },
-  heading: { fontSize: '32px', color: '#2d2420', marginBottom: '10px', fontWeight: 'bold' },
-  subText: { color: '#8d6e63', fontSize: '15px', letterSpacing: '1px' },
+  heading: { fontSize: '28px', color: theme.colors.primary, marginBottom: '10px', fontWeight: 'bold', fontFamily: theme.fonts.heading },
+  subText: { color: theme.colors.textSub, fontSize: '14px', letterSpacing: '1px' },
   
-  sectionTitle: { fontSize: '20px', color: '#4a3b32', marginBottom: '20px', display:'flex', alignItems:'center', gap:'10px', fontWeight: 'bold' },
+  sectionTitle: { fontSize: '18px', color: theme.colors.primary, marginBottom: '20px', fontWeight: 'bold', fontFamily: theme.fonts.heading },
 
-  // --- 検索フォーム ---
-  form: { display: 'flex', gap: '10px', marginBottom: '30px', maxWidth: '600px', margin: '0 auto 30px auto', position: 'relative' },
-  inputWrapper: { flex: 1, position: 'relative' },
+  // フォーム
+  form: { display: 'flex', 
+    // ★修正: 10px だと間延びするので 4px に短縮
+    // (もしピッタリくっつけたい場合は 0 にしてください)
+    gap: '0px', 
+    
+    marginBottom: '30px', 
+    maxWidth: '600px', 
+    margin: '0 auto 30px auto', 
+    position: 'relative' 
+  },
+  inputWrapper: { flex: 1, 
+                  position: 'relative',
+                  // ★追加: これがないと、画面が狭くなった時にここが突っ張ってボタンを押し潰します
+                  minWidth: 0,
+  },
   input: { 
     width: '100%', 
-    padding: '16px 24px', 
+    padding: '14px 20px', 
     fontSize: '16px', 
-    border: '1px solid #d7ccc8', 
-    borderRadius: '50px', 
+    border: `1px solid ${theme.colors.border}`, 
+    borderRadius: '4px', 
     outline: 'none', 
-    boxSizing: 'border-box', 
-    transition: 'all 0.2s', 
-    boxShadow: '0 4px 10px rgba(0,0,0,0.05)',
-    fontFamily: '"Noto Sans JP", sans-serif'
+    backgroundColor: '#fff', 
+    transition: 'border-color 0.2s', 
+    fontFamily: theme.fonts.body,
+    // ★追加: パディング(内側の余白)を含めて幅100%にする設定
+    boxSizing: 'border-box'
   },
-  button: { 
-    padding: '0 30px', 
-    backgroundColor: '#5d4037', 
-    color: 'white', 
-    border: 'none', 
-    borderRadius: '50px', 
-    cursor: 'pointer', 
-    fontWeight: 'bold', 
-    fontSize: '16px', 
-    minWidth: '100px', 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    boxShadow: '0 4px 6px rgba(0,0,0,0.2)',
-    transition: 'transform 0.2s'
-  },
-  
-  // --- カードデザイン ---
-  grid: { 
-    display: 'grid', 
-    gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', 
-    gap: '20px' 
-  },
-  
-  // 横スクロール用コンテナ
-  rankingGrid: { display: 'flex', overflowX: 'auto', padding: '10px 5px 20px 5px', scrollSnapType: 'x mandatory', scrollBehavior: 'smooth' },
-
-  bookCard: { 
-    position: 'relative',
-    backgroundColor: '#000', 
-    borderRadius: '12px', 
-    overflow: 'hidden', 
-    boxShadow: '0 8px 16px rgba(0,0,0,0.1)', 
-    cursor: 'pointer', 
-    transition: 'transform 0.3s ease, box-shadow 0.3s ease', 
-    border: 'none',
-    aspectRatio: '2 / 3', 
-  },
-
-  bookCardHover: {
-    transform: 'translateY(-8px)',
-    boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
-  },
-
-  bookCover: { 
-    height: '100%', 
-    width: '100%',
-    position: 'relative',
-    overflow: 'hidden'
-  },
-
-  bookImage: {
-    width: '100%', 
-    height: '100%', 
-    objectFit: 'cover',
-    transition: 'transform 0.5s ease',
-  },
-
-  bookImageHover: {
-    transform: 'scale(1.08)', 
-  },
-
-  gradientOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    width: '100%',
-    height: '70%', 
-    background: 'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.6) 50%, transparent 100%)',
-    zIndex: 1,
-    pointerEvents: 'none',
-  },
-
-  bookInfo: { 
-    position: 'absolute', 
-    bottom: 0, 
-    left: 0,
-    width: '100%',
-    padding: '10px', 
-    zIndex: 2,
-    boxSizing: 'border-box',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'flex-end',
-    textAlign: 'left'
-  },
-
-  bookTitle: { 
-    margin: '0 0 5px 0',
-    fontWeight: 'bold', 
-    color: '#fff', 
-    lineHeight: '1.4',
-    textShadow: '0 2px 8px rgba(0,0,0,0.8)',
-    display: '-webkit-box', 
-    WebkitLineClamp: 2, 
-    WebkitBoxOrient: 'vertical', 
-    overflow: 'hidden',
-  },
-  
-  bookAuthor: { 
-    margin: 0,
-    color: 'rgba(255,255,255,0.85)', 
-    textShadow: '0 1px 4px rgba(0,0,0,0.8)',
-    fontFamily: '"sans-serif"'
-  },
-
-  hqBadge: {
-    marginTop: '6px',
-    alignSelf: 'flex-start',
-    fontSize: '10px',
-    backgroundColor: '#FFD700',
-    color: '#000',
-    padding: '2px 6px',
+  button: {
+    ...theme.ui.buttonPrimary,
     borderRadius: '4px',
     fontWeight: 'bold',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
-  },
 
-  rankBadge: { position: 'absolute', top: '0', left: '0', width: '30px', height: '30px', backgroundColor: '#FFD700', color: '#4a3b32', borderBottomRightRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '14px', zIndex: 10, boxShadow: '2px 2px 5px rgba(0,0,0,0.2)' },
+    flexShrink: 0,        // 1. 親要素が狭くなっても、このボタンは縮めない
+    whiteSpace: 'nowrap', // 2. 中のテキストを絶対に折り返させない
+    minWidth: '80px',     // 3. 最低でも80pxの幅を確保する
+    padding: '0 24px',    // 4. 横の余白をしっかり確保
+
+    // flexboxの設定（文字をど真ん中に置く）
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },  
+  // グリッド・スクロール
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '20px' },
+  horizontalScroll: { display: 'flex', overflowX: 'auto', padding: '10px 5px 20px 5px', scrollSnapType: 'x mandatory', scrollBehavior: 'smooth', scrollbarWidth: 'none' },
+
+  // カード (Dashboardと統一)
+  bookCard: { 
+      position: 'relative', backgroundColor: '#2b2222', borderRadius: '4px', 
+      boxShadow: '0 4px 10px rgba(0,0,0,0.1)', cursor: 'pointer', 
+      transition: 'transform 0.3s ease', overflow: 'hidden', aspectRatio: '2 / 3' 
+  },
+  bookCardHover: { transform: 'translateY(-5px)', boxShadow: '0 15px 30px rgba(0,0,0,0.2)' },
   
-  scrollButton: { position: 'absolute', top: '50%', transform: 'translateY(-50%)', width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'rgba(255, 255, 255, 0.9)', border: 'none', boxShadow: '0 4px 8px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 20, fontSize: '18px', color: '#5d4037', transition: 'all 0.2s' },
+  bookCover: { height: '100%', width: '100%', position: 'relative', overflow: 'hidden' },
+  bookImage: { width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.5s ease' },
+  bookImageHover: { transform: 'scale(1.05)' },
+  noImageCover: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  gradientOverlay: { position: 'absolute', bottom: 0, left: 0, width: '100%', height: '70%', background: 'linear-gradient(to top, rgba(0,0,0,0.9) 0%, transparent 100%)', pointerEvents: 'none' },
+
+  bookInfo: { position: 'absolute', bottom: 0, left: 0, width: '100%', padding: '10px', boxSizing: 'border-box', zIndex: 2 },
+  bookTitle: { margin: '0 0 4px 0', fontWeight: 'bold', color: '#fff', lineHeight: '1.4', textShadow: '0 2px 4px rgba(0,0,0,0.8)', fontFamily: theme.fonts.heading },
+  bookAuthor: { margin: 0, color: 'rgba(255,255,255,0.8)' },
+  hqBadge: { marginTop: '4px', fontSize: '10px', backgroundColor: theme.colors.accent, color: '#fff', padding: '2px 6px', borderRadius: '2px', display: 'inline-block' },
+  rankBadge: { position: 'absolute', top: 0, left: 0, width: '24px', height: '24px', backgroundColor: theme.colors.accent, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold', zIndex: 10 },
+
+  scrollButton: { position: 'absolute', top: '50%', transform: 'translateY(-50%)', width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.9)', border: 'none', boxShadow: '0 2px 5px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 20, color: theme.colors.primary },
   
-  loadMoreButton: { padding: '12px 50px', backgroundColor: 'transparent', color: '#5d4037', border: '2px solid #5d4037', borderRadius: '30px', fontSize: '15px', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s' },
+  loadMoreButton: { ...theme.ui.buttonPrimary, padding: '10px 30px', borderRadius: '30px', backgroundColor: 'transparent', color: theme.colors.primary, border: `1px solid ${theme.colors.primary}` },
   
   tabWrapper: { display: 'flex', justifyContent: 'center', gap: '15px', marginBottom: '30px' },
-  tabBtn: { padding: '10px 24px', borderRadius: '25px', border: '1px solid #d7ccc8', backgroundColor: 'transparent', color: '#8d6e63', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s', fontSize: '14px' },
-  activeTabBtn: { padding: '10px 24px', borderRadius: '25px', border: 'none', backgroundColor: '#5d4037', color: '#fff', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 6px rgba(93, 64, 55, 0.3)', fontSize: '14px' },
+  tabBtn: { padding: '8px 20px', borderRadius: '20px', border: `1px solid ${theme.colors.border}`, backgroundColor: 'transparent', color: theme.colors.textSub, cursor: 'pointer', fontSize: '14px' },
+  activeTabBtn: { padding: '8px 20px', borderRadius: '20px', border: 'none', backgroundColor: theme.colors.primary, color: '#fff', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' },
 
-  suggestionList: { position: 'absolute', top: '100%', left: '10px', right: '10px', backgroundColor: 'white', border: 'none', borderRadius: '12px', listStyle: 'none', padding: '10px 0', margin: '10px 0 0 0', zIndex: 1000, boxShadow: '0 10px 25px rgba(0,0,0,0.1)' },
-  suggestionItem: { padding: '12px 20px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f0f0f0' },
-  suggestionTitle: { fontWeight: 'bold', color: '#2d3748' },
-  suggestionAuthor: { fontSize: '12px', color: '#718096' },
+  suggestionList: { position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: 'white', borderRadius: '4px', listStyle: 'none', padding: '5px 0', margin: '5px 0 0 0', zIndex: 1000, boxShadow: '0 4px 15px rgba(0,0,0,0.1)', border: `1px solid ${theme.colors.border}` },
+  suggestionItem: { padding: '10px 15px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', borderBottom: `1px solid ${theme.colors.border}` },
+  suggestionTitle: { fontWeight: 'bold', color: theme.colors.textMain },
+  suggestionAuthor: { fontSize: '12px', color: theme.colors.textSub },
   
-  spinner: { width: '20px', height: '20px', border: '3px solid rgba(255,255,255,0.3)', borderRadius: '50%', borderTopColor: '#fff', animation: 'spin 0.8s linear infinite' },
-  error: { color: '#e53e3e', textAlign: 'center' },
-  loadingContainer: { textAlign: 'center', padding: '60px' },
-  emptyState: { textAlign: 'center', padding: '60px', color: '#8d6e63' },
-  noResult: { fontSize: '18px', fontWeight: 'bold', marginBottom: '10px', color: '#5d4037' },
+  error: { color: theme.colors.error, textAlign: 'center' },
+  loadingContainer: { textAlign: 'center', padding: '60px', color: theme.colors.textSub },
+  emptyState: { textAlign: 'center', padding: '60px', color: theme.colors.textSub },
+  noResult: { fontSize: '18px', fontWeight: 'bold', marginBottom: '10px', color: theme.colors.primary },
 };
 
 export default BookSearch;

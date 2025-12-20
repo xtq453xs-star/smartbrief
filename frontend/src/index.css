@@ -1,0 +1,42 @@
+/* src/index.css */
+
+/* 全要素に box-sizing: border-box を適用（レイアウト崩れ防止） */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  /* 日本語フォントの最適化 */
+  font-family: "Noto Sans JP", "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* リンクのガタつき防止 */
+a {
+  text-decoration: none;
+  border-bottom: 1px dotted transparent; /* 透明な線を常に引いておく */
+  transition: border-color 0.2s;
+}
+
+a:hover {
+  /* hover時に色だけ変える（高さが変わらないのでガタつかない） */
+  border-bottom-color: currentColor; 
+}
+
+/* スクロールバーのカスタマイズ（任意） */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #fdfbf7; 
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e0; 
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0; 
+}

@@ -1,134 +1,118 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import Footer from "./components/Footer";
+import Footer from './components/Footer'; 
+import { theme } from './theme'; // theme.js をインポート
+import { apiClient } from './utils/apiClient'; // ★追加
+import { useToast } from './contexts/ToastContext'; // ★追加
+
+// --- 共通コンポーネント（デザイン統一） ---
+const InputField = ({ label, type, value, onChange, placeholder, required = true }) => (
+  <div style={styles.inputGroup}>
+    <label style={styles.label}>{label}</label>
+    <input
+      type={type}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={styles.input}
+      placeholder={placeholder}
+      required={required}
+      // フォーカス時の色変化
+      onFocus={(e) => e.target.style.borderColor = theme.colors.primary}
+      onBlur={(e) => e.target.style.borderColor = theme.colors.border}
+    />
+  </div>
+);
+
+const ActionButton = ({ onClick, disabled, children, secondary = false }) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
+    style={secondary ? styles.buttonSecondary : styles.buttonPrimary}
+    // hover効果は簡易的にJSで制御（CSS Modules化までのつなぎ）
+    onMouseOver={(e) => !disabled && (e.currentTarget.style.opacity = '0.9')}
+    onMouseOut={(e) => !disabled && (e.currentTarget.style.opacity = '1')}
+  >
+    {children}
+  </button>
+);
 
 const Login = ({ onLogin }) => {
   const navigate = useNavigate();
+  const { success, error: showError } = useToast(); // ★トーストを使う
   const [viewMode, setViewMode] = useState('login'); // 'login' or 'register'
   
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [agreed, setAgreed] = useState(false);
-  const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-
-  // ★追加: 再送ボタン制御用
   const [showResendLink, setShowResendLink] = useState(false);
-  const [resendStatus, setResendStatus] = useState('');
 
-  // --- ログイン処理 ---
+  // ★リファクタリングされたログイン処理
   const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    setMessage('');
-    setShowResendLink(false); // 初期化
-    setResendStatus('');
+    setShowResendLink(false);
 
-    try {
-      const response = await fetch('/api/v1/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }), 
-      });
+    // apiClientを使うとこんなに短い！
+    const res = await apiClient.post('/auth/login', { username, password });
 
-      const data = await response.json(); // エラー時もメッセージを読むためにパース
-
-      if (response.ok) {
-        if (data.token) {
-            onLogin(data.token);
-            // navigate('/') は App.jsx 側の制御に任せても良いが、念のため
-            navigate('/');
-        }
-      } else {
-        // エラーメッセージを表示
-        setMessage(data.message || 'IDまたはパスワードが正しくありません。');
-
-        // ★追加: バックエンドから「認証」関連のエラーが来たら再送ボタンを出す
-        if (response.status === 401 && data.message && data.message.includes('認証')) {
-            setShowResendLink(true);
-        }
+    if (res.ok) {
+      success('おかえりなさい！'); // ★トースト表示
+      onLogin(res.data.token);
+      navigate('/');
+    } else {
+      showError(res.message); // ★エラーもトースト（または画面表示）
+      if (res.status === 401 && res.message.includes('認証')) {
+        setShowResendLink(true);
       }
-    } catch (error) {
-      setMessage('通信エラーが発生しました。');
-    } finally {
-      setIsLoading(false);
     }
+    setIsLoading(false);
   };
 
-  // --- ★追加: 認証メール再送処理 ---
-  const handleResendEmail = async () => {
-    // 簡易チェック: 入力欄に @ がなければ警告
-    if (!username.includes('@')) {
-        setResendStatus('※上の入力欄に「メールアドレス」を入力してください。');
-        return;
-    }
-
-    setResendStatus('送信中...');
-
-    try {
-        const res = await fetch('/api/v1/auth/resend-verification', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: username }) // 入力欄の値をemailとして送信
-        });
-        
-        if (res.ok) {
-            setResendStatus('✅ 再送しました！迷惑メールフォルダも確認してください。');
-        } else {
-            setResendStatus('❌ 再送に失敗しました。メールアドレスを確認してください。');
-        }
-    } catch (err) {
-        setResendStatus('❌ 通信エラー');
-    }
-  };
-
-  // --- 新規登録処理 ---
+  // ★リファクタリングされた新規登録処理
   const handleRegister = async (e) => {
     e.preventDefault();
-    if (!agreed) { setMessage('規約への同意が必要です。'); return; }
+    if (!agreed) { showError('規約への同意が必要です。'); return; } // ★トースト
     
     setIsLoading(true);
-    try {
-        const response = await fetch('/api/v1/auth/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, email, password }),
-        });
-        if(response.ok) {
-            alert('仮登録が完了しました！\n届いたメール内のリンクをクリックして認証してください。');
-            setViewMode('login');
-            setMessage('');
-        } else {
-            const txt = await response.text();
-            // JSONで返ってくる場合もあるので整形できればベターだが、一旦textで表示
-            setMessage(txt.replace(/["{}]/g, '')); 
-        }
-    } catch(e) { setMessage('エラーが発生しました'); } finally { setIsLoading(false); }
+    const res = await apiClient.post('/auth/register', { username, email, password });
+
+    if (res.ok) {
+        // 成功時はアラートではなく、画面を切り替えてトースト
+        setViewMode('login');
+        success('仮登録が完了しました！メールを確認してください。');
+    } else {
+        showError(res.message);
+    }
+    setIsLoading(false);
   };
 
-  // --- 入力フォーム部品 (共通) ---
-  const renderInput = (label, type, value, setter, placeholder) => (
-    <div style={styles.inputGroup}>
-      <label style={styles.label}>{label}</label>
-      <input type={type} value={value} onChange={(e) => setter(e.target.value)} style={styles.input} placeholder={placeholder} required />
-    </div>
-  );
+  // ★リファクタリングされた再送処理
+  const handleResendEmail = async () => {
+    if (!username.includes('@')) {
+        showError('ユーザーID欄にメールアドレスを入力してください。');
+        return;
+    }
+    const res = await apiClient.post('/auth/resend-verification', { email: username });
+    
+    if (res.ok) success('認証メールを再送しました。');
+    else showError('再送に失敗しました。');
+  };
 
   return (
     <div style={styles.pageWrapper}>
+      {/* ヒーローヘッダー */}
       <div style={styles.heroSection}>
-        <div style={styles.logoArea}>
-           <h1 style={styles.logo}>SmartBrief</h1>
-           <p style={styles.catchphrase}>名作を、現代のスピードで。</p>
-           <p style={styles.subCatch}>教養深まる、AI要約図書館</p>
-        </div>
+         <h1 style={styles.logo}>SmartBrief</h1>
+         <p style={styles.catchphrase}>名作を、現代のスピードで。</p>
+         <p style={styles.subCatch}>教養深まる、AI要約図書館</p>
       </div>
 
       <div style={styles.container}>
         <div style={styles.contentGrid}>
           
-          {/* 左側: サービス紹介 */}
+          {/* 左側: サービス紹介（LPのような訴求エリア） */}
           <div style={styles.infoColumn}>
             <div style={styles.featureBox}>
               <h3 style={styles.featureTitle}>📚 SmartBriefとは？</h3>
@@ -154,7 +138,7 @@ const Login = ({ onLogin }) => {
             </div>
           </div>
 
-          {/* 右側: ログイン/登録フォーム */}
+          {/* 右側: フォームエリア */}
           <div style={styles.formColumn}>
             <div style={styles.card}>
               <h2 style={styles.formTitle}>
@@ -162,28 +146,24 @@ const Login = ({ onLogin }) => {
               </h2>
               
               {viewMode === 'login' ? (
-                <form onSubmit={handleLogin} style={styles.form}>
-                  {renderInput('ユーザーID / Email', 'text', username, setUsername, 'user@example.com')}
-                  {renderInput('パスワード', 'password', password, setPassword, '')}
+                <form onSubmit={handleLogin}>
+                  <InputField label="ユーザーID / Email" type="text" value={username} onChange={setUsername} placeholder="user@example.com" />
+                  <InputField label="パスワード" type="password" value={password} onChange={setPassword} placeholder="" />
                   
-                  {message && <p style={styles.error}>{message}</p>}
-
-                  {/* ★追加: 再送リンクエリア */}
+                  {/* 再送リンクエリア */}
                   {showResendLink && (
                     <div style={styles.resendArea}>
-                        <p style={{fontSize:'13px', marginBottom:'5px', color:'#e65100'}}>メールが届いていませんか？</p>
-                        <button 
-                            type="button" 
-                            onClick={handleResendEmail} 
-                            style={styles.resendBtn}
-                        >
+                        <p style={{fontSize:'13px', marginBottom:'5px', color: theme.colors.error}}>メールが届いていませんか？</p>
+                        <button type="button" onClick={handleResendEmail} style={styles.resendBtn}>
                             📩 認証メールを再送する
                         </button>
-                        {resendStatus && <p style={styles.resendMsg}>{resendStatus}</p>}
                     </div>
                   )}
 
-                  <button type="submit" style={styles.button} disabled={isLoading}>{isLoading ? '照会中...' : '入館する (ログイン)'}</button>
+                  <ActionButton disabled={isLoading}>
+                    {isLoading ? '照会中...' : '入館する (ログイン)'}
+                  </ActionButton>
+
                   <div style={styles.formFooter}>
                     <p>初めての方はこちら</p>
                     <button type="button" onClick={() => setViewMode('register')} style={styles.switchButton}>新規登録 (無料)</button>
@@ -191,20 +171,22 @@ const Login = ({ onLogin }) => {
                   </div>
                 </form>
               ) : (
-                <form onSubmit={handleRegister} style={styles.form}>
-                  {renderInput('ユーザーID', 'text', username, setUsername, '半角英数')}
-                  {renderInput('メールアドレス', 'email', email, setEmail, '')}
-                  {renderInput('パスワード', 'password', password, setPassword, '8文字以上')}
+                <form onSubmit={handleRegister}>
+                  <InputField label="ユーザーID" type="text" value={username} onChange={setUsername} placeholder="半角英数" />
+                  <InputField label="メールアドレス" type="email" value={email} onChange={setEmail} placeholder="example@mail.com" />
+                  <InputField label="パスワード" type="password" value={password} onChange={setPassword} placeholder="8文字以上" />
                   
                   <div style={styles.checkboxContainer}>
-                    <input type="checkbox" id="agree" checked={agreed} onChange={e => setAgreed(e.target.checked)} />
-                    <label htmlFor="agree" style={{marginLeft:'5px', fontSize:'13px'}}>
-                      <Link to="/terms" target="_blank">利用規約</Link> と <Link to="/privacy" target="_blank">プライバシーポリシー</Link> に同意する
+                    <input type="checkbox" id="agree" checked={agreed} onChange={e => setAgreed(e.target.checked)} style={{accentColor: theme.colors.primary}} />
+                    <label htmlFor="agree" style={{marginLeft:'8px', fontSize:'13px'}}>
+                      <Link to="/terms" target="_blank" style={{color: theme.colors.primary}}>利用規約</Link> と <Link to="/privacy" target="_blank" style={{color: theme.colors.primary}}>プライバシーポリシー</Link> に同意する
                     </label>
                   </div>
 
-                  {message && <p style={styles.error}>{message}</p>}
-                  <button type="submit" style={styles.button} disabled={isLoading}>{isLoading ? '作成中...' : '登録して始める'}</button>
+                  <ActionButton disabled={isLoading}>
+                    {isLoading ? '作成中...' : '登録して始める'}
+                  </ActionButton>
+
                   <div style={styles.formFooter}>
                     <button type="button" onClick={() => setViewMode('login')} style={styles.switchButton}>ログインに戻る</button>
                   </div>
@@ -214,17 +196,36 @@ const Login = ({ onLogin }) => {
           </div>
         </div>
       </div>
-      <Footer color="#6d4c41" separatorColor="#a1887f" />
+      <Footer color={theme.colors.textSub} separatorColor={theme.colors.border} />
     </div>
   );
 };
 
+// --- スタイル定義（theme.js 完全準拠） ---
 const styles = {
-  pageWrapper: { backgroundColor: '#f4f1ea', minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: '"Shippori Mincho", serif', color: '#4a3b32' },
-  heroSection: { textAlign: 'center', padding: '60px 20px 40px', backgroundColor: '#fffcf5', borderBottom: '1px solid #e0e0e0' },
-  logo: { fontSize: '3.5rem', margin: '0 0 10px 0', color: '#3e2723', letterSpacing: '2px', fontFamily: '"Shippori Mincho", serif' },
-  catchphrase: { fontSize: '1.4rem', color: '#5d4037', margin: 0, fontWeight: 'bold' },
-  subCatch: { fontSize: '1rem', color: '#8d6e63', marginTop: '10px' },
+  pageWrapper: { 
+    backgroundColor: theme.colors.background, // クリーム色
+    minHeight: '100vh', 
+    display: 'flex', 
+    flexDirection: 'column', 
+    fontFamily: theme.fonts.body, 
+    color: theme.colors.textMain 
+  },
+  heroSection: { 
+    textAlign: 'center', 
+    padding: '60px 20px 40px', 
+    backgroundColor: '#fffcf5', // ヘッダーは少し明るく
+    borderBottom: `1px solid ${theme.colors.border}` 
+  },
+  logo: { 
+    fontSize: '3.5rem', 
+    margin: '0 0 10px 0', 
+    color: theme.colors.textMain, 
+    letterSpacing: '0.1em', 
+    fontFamily: theme.fonts.heading 
+  },
+  catchphrase: { fontSize: '1.4rem', color: theme.colors.primary, margin: 0, fontWeight: 'bold', fontFamily: theme.fonts.heading },
+  subCatch: { fontSize: '1rem', color: theme.colors.textSub, marginTop: '10px' },
   
   container: { flex: 1, maxWidth: '1000px', margin: '0 auto', width: '100%', padding: '40px 20px' },
   contentGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '40px', alignItems: 'start' },
@@ -232,32 +233,104 @@ const styles = {
   // 左カラム
   infoColumn: { paddingTop: '20px' },
   featureBox: { padding: '0 20px' },
-  featureTitle: { fontSize: '20px', borderBottom: '2px solid #8d6e63', display: 'inline-block', marginBottom: '20px', paddingBottom: '5px' },
+  featureTitle: { 
+    fontSize: '20px', 
+    borderBottom: `2px solid ${theme.colors.accent}`, // 茜色の下線
+    display: 'inline-block', 
+    marginBottom: '20px', 
+    paddingBottom: '5px',
+    fontFamily: theme.fonts.heading
+  },
   featureText: { lineHeight: '1.8', marginBottom: '20px', fontSize: '15px' },
-  featureList: { lineHeight: '2.2', fontSize: '15px', paddingLeft: '20px', color: '#3e2723' },
-  priceBox: { marginTop: '30px', backgroundColor: '#fff', padding: '25px', borderRadius: '8px', border: '1px solid #d7ccc8', textAlign: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' },
-  priceLabel: { display: 'block', fontSize: '12px', color: '#8d6e63', fontWeight: 'bold', letterSpacing: '1px', marginBottom: '5px' },
-  priceValue: { fontSize: '28px', fontWeight: 'bold', color: '#3e2723' },
-  priceNote: { fontSize: '12px', color: '#a1887f', marginTop: '10px' },
+  featureList: { lineHeight: '2.2', fontSize: '15px', paddingLeft: '20px', color: theme.colors.textMain },
+  priceBox: { 
+    marginTop: '30px', 
+    backgroundColor: '#fff', // 白地
+    padding: '25px', 
+    borderRadius: '4px', // 角張らせる
+    border: `1px solid ${theme.colors.border}`, 
+    textAlign: 'center', 
+    boxShadow: '0 4px 10px rgba(0,0,0,0.05)' 
+  },
+  priceLabel: { display: 'block', fontSize: '12px', color: theme.colors.primary, fontWeight: 'bold', letterSpacing: '1px', marginBottom: '5px' },
+  priceValue: { fontSize: '28px', fontWeight: 'bold', color: theme.colors.textMain, fontFamily: theme.fonts.heading },
+  priceNote: { fontSize: '12px', color: theme.colors.textSub, marginTop: '10px' },
 
-  // 右カラム
+  // 右カラム（フォーム）
   formColumn: { },
-  card: { backgroundColor: '#fff', padding: '40px', borderRadius: '8px', boxShadow: '0 10px 30px rgba(62, 39, 35, 0.08)', border: '1px solid #efebe9' },
-  formTitle: { textAlign: 'center', fontSize: '18px', marginBottom: '30px', color: '#5d4037' },
+  card: { 
+    backgroundColor: '#fff',
+    borderRadius: '4px',
+    boxShadow: '0 2px 5px rgba(0,0,0,0.05), 0 10px 30px rgba(0,0,0,0.08)',
+    borderTop: `6px solid ${theme.colors.primary}`, // アクセントライン
+    padding: '40px', 
+  },
+  formTitle: { textAlign: 'center', fontSize: '20px', marginBottom: '30px', color: theme.colors.textMain, fontFamily: theme.fonts.heading },
   inputGroup: { marginBottom: '20px' },
-  label: { display: 'block', marginBottom: '8px', fontSize: '13px', color: '#6d4c41' },
-  input: { width: '100%', padding: '12px', borderRadius: '4px', border: '1px solid #d7ccc8', backgroundColor: '#fffcf5', fontSize: '16px', boxSizing: 'border-box' },
-  button: { width: '100%', padding: '14px', backgroundColor: '#5d4037', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
-  error: { color: '#c62828', fontSize: '13px', marginBottom: '15px', textAlign: 'center', whiteSpace: 'pre-wrap' },
-  formFooter: { marginTop: '25px', textAlign: 'center', fontSize: '13px', color: '#8d6e63' },
-  switchButton: { background: 'none', border: 'none', color: '#3e2723', textDecoration: 'underline', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' },
-  forgotLink: { display: 'block', marginTop: '10px', background: 'none', border: 'none', color: '#a1887f', cursor: 'pointer', fontSize: '12px' },
+  label: { display: 'block', marginBottom: '8px', fontSize: '14px', color: theme.colors.primary, fontWeight: 'bold' },
+  input: { 
+    width: '100%', 
+    padding: '12px', 
+    borderRadius: '2px', // 角張らせる
+    border: `1px solid ${theme.colors.border}`, 
+    backgroundColor: '#fdfbf7', // 入力欄も少しクリーム色
+    fontSize: '16px', 
+    boxSizing: 'border-box',
+    fontFamily: theme.fonts.body,
+    outline: 'none',
+    transition: 'border-color 0.2s',
+    color: theme.colors.textMain
+  },
+  
+  // ボタン
+  buttonPrimary: {
+    ...theme.ui.buttonPrimary, // theme.js のボタン
+    width: '100%',
+    marginTop: '10px',
+    fontSize: '16px',
+    fontWeight: 'bold',
+    borderRadius: '30px', // 柔らかさを出す
+    padding: '12px'
+  },
+  buttonSecondary: {
+    width: '100%', 
+    padding: '14px', 
+    backgroundColor: 'transparent', 
+    color: theme.colors.textSub, 
+    border: `1px solid ${theme.colors.border}`, 
+    borderRadius: '2px', 
+    fontSize: '14px', 
+    cursor: 'pointer', 
+    marginTop: '10px'
+  },
+  
+  error: { 
+    color: theme.colors.error, 
+    fontSize: '14px', 
+    marginBottom: '15px', 
+    textAlign: 'center', 
+    whiteSpace: 'pre-wrap',
+    backgroundColor: '#fff5f5', // 薄い赤背景
+    padding: '10px',
+    borderRadius: '4px',
+    border: '1px solid #feb2b2'
+  },
+  formFooter: { marginTop: '25px', textAlign: 'center', fontSize: '13px', color: theme.colors.textSub },
+  switchButton: { background: 'none', border: 'none', color: theme.colors.primary, textDecoration: 'underline', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px', fontFamily: theme.fonts.body },
+  forgotLink: { display: 'block', marginTop: '10px', background: 'none', border: 'none', color: theme.colors.textSub, cursor: 'pointer', fontSize: '12px' },
   checkboxContainer: { display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '20px' },
 
-  // ★追加: 再送エリアのスタイル
-  resendArea: { backgroundColor: '#fff8e1', padding: '15px', borderRadius: '6px', border: '1px dashed #ffb74d', marginBottom: '15px', textAlign: 'center' },
+  // 再送エリア
+  resendArea: { 
+    backgroundColor: '#fff8e1', 
+    padding: '15px', 
+    borderRadius: '4px', 
+    border: '1px dashed #ffb74d', 
+    marginBottom: '15px', 
+    textAlign: 'center' 
+  },
   resendBtn: { background: 'none', border: 'none', color: '#e65100', textDecoration: 'underline', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' },
-  resendMsg: { fontSize: '12px', marginTop: '8px', fontWeight: 'bold', color: '#333' }
+  resendMsg: { fontSize: '12px', marginTop: '8px', fontWeight: 'bold', color: theme.colors.textMain }
 };
 
 export default Login;

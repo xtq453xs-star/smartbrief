@@ -1,39 +1,65 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Footer from './Footer';
+import { theme } from '../theme';
+import BookReader3D from './BookReader3D';
+import { apiClient } from '../utils/apiClient';
+import { useToast } from '../contexts/ToastContext';
 
-// ★修正: 引数に isPremium を追加
-const BookDetail = ({ bookId, token, onBack, onLimitReached, isPremium }) => {
+// --- サブコンポーネント: ローディング表示 ---
+const LoadingView = () => (
+  <div style={styles.loadingContainer}>
+    <div style={styles.spinner}></div>
+    <p style={styles.loadingText}>紐解いております...</p>
+  </div>
+);
+
+// --- メインコンポーネント ---
+const BookDetail = ({ bookId, onBack, onLogout, onLimitReached, isPremium }) => {
+  const { showToast } = useToast();
   const [book, setBook] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isFavorite, setIsFavorite] = useState(false);
   const [favLoading, setFavLoading] = useState(false);
   const [viewMode, setViewMode] = useState('summary');
+  
+  // 3D読書モード用のState
+  const [show3DReader, setShow3DReader] = useState(false);
 
-  const getAccentColor = (id) => {
-    const colors = ['#FF9A9E', '#FECFEF', '#A18CD1', '#FBC2EB', '#8FD3F4', '#84FAB0', '#E0C3FC'];
-    return colors[id % colors.length];
-  };
+  // --- API通信ヘルパー ---
+  const fetchData = useCallback(async (endpoint, method = 'GET') => {
+    const res = method === 'POST'
+      ? await apiClient.post(endpoint, {})
+      : await apiClient.get(endpoint);
 
+    if (res.ok) return res.data;
+
+    if (res.status === 403) {
+      onLimitReached();
+      return null;
+    }
+
+    showToast(res.message, 'error');
+    if (res.status === 401 && typeof onLogout === 'function') onLogout();
+    return null;
+  }, [onLimitReached, onLogout, showToast]);
+
+  // --- データ取得 ---
   useEffect(() => {
     let isMounted = true;
-    const fetchDetail = async () => {
+    const loadData = async () => {
       if (isMounted) setLoading(true);
       try {
-        const response = await fetch(`/api/v1/books/${bookId}`, {
-          headers: { 'Authorization': `Bearer ${token}` },
-        });
+        const [bookData, favData] = await Promise.all([
+          fetchData(`/books/${bookId}`),
+          fetchData(`/books/${bookId}/favorite`)
+        ]);
 
         if (isMounted) {
-          if (response.status === 403) {
-            onLimitReached();
-            return;
-          }
-          if (!response.ok) throw new Error('詳細データの取得に失敗しました');
-
-          const data = await response.json();
-          setBook(data);
-          checkFavoriteStatus();
+            if (bookData) setBook(bookData);
+            else throw new Error('本の情報を取得できませんでした');
+            
+            if (favData) setIsFavorite(favData.isFavorite);
         }
       } catch (err) {
         if (isMounted) setError(err.message);
@@ -41,38 +67,20 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached, isPremium }) => {
         if (isMounted) setLoading(false);
       }
     };
-
-    const checkFavoriteStatus = async () => {
-      try {
-        const res = await fetch(`/api/v1/books/${bookId}/favorite`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok) {
-            const data = await res.json();
-            if (isMounted) setIsFavorite(data.isFavorite);
-        }
-      } catch (e) { console.error(e); }
-    };
-
-    fetchDetail();
+    loadData();
     return () => { isMounted = false; };
-  }, [bookId, token, onLimitReached]);
+  }, [bookId, fetchData]);
 
+  // --- お気に入り切り替え ---
   const toggleFavorite = async () => {
-      if (favLoading) return;
-      setFavLoading(true);
-      try {
-          const res = await fetch(`/api/v1/books/${bookId}/favorite`, {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${token}` }
-          });
-          if (res.ok) {
-              const data = await res.json();
-              setIsFavorite(data.isFavorite);
-          }
-      } catch (e) { console.error(e); } finally { setFavLoading(false); }
+    if (favLoading) return;
+    setFavLoading(true);
+    const data = await fetchData(`/books/${bookId}/favorite`, 'POST');
+    if (data) setIsFavorite(data.isFavorite);
+    setFavLoading(false);
   };
 
+  // --- テキストパース処理 ---
   const parseSummary = (text) => {
     if (!text) return [];
     if (text.includes('【') && text.includes('】')) {
@@ -80,10 +88,7 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached, isPremium }) => {
         const sections = [];
         for (let i = 0; i < parts.length; i++) {
           if (parts[i].match(/【[^】]+】/) && parts[i+1]) {
-            sections.push({
-              title: parts[i].replace(/[【】]/g, ''),
-              content: parts[i+1].trim()
-            });
+            sections.push({ title: parts[i].replace(/[【】]/g, ''), content: parts[i+1].trim() });
             i++;
           }
         }
@@ -95,366 +100,353 @@ const BookDetail = ({ bookId, token, onBack, onLimitReached, isPremium }) => {
   const parseCatchphrase = (text) => {
       if (!text) return { tag: null, text: null };
       const match = text.match(/^(【[^】]+】)\s*(.*)/);
-      if (match) {
-          return { tag: match[1], text: match[2] };
-      }
-      return { tag: null, text: text };
+      return match ? { tag: match[1], text: match[2] } : { tag: null, text: text };
   };
 
-  if (loading) return (
-    <div style={styles.loadingContainer}>
-      <div style={styles.spinner}></div>
-      <p style={{marginTop: '20px', fontFamily: '"Shippori Mincho", serif'}}>ページをめくっています...</p>
-    </div>
-  );
-  
-  if (error) return <p style={styles.error}>{error}</p>;
+  // --- レンダリング準備 ---
+  if (loading) return <LoadingView />;
+  if (error) return <div style={styles.errorContainer}><p>{error}</p><button onClick={onBack} style={styles.backLink}>戻る</button></div>;
   if (!book) return null;
 
-  const accentColor = getAccentColor(bookId);
-  const hasBodyText = !!book.bodyText;
-  
-  // フラグ定義
-  const isHQ = book.highQuality === true;
-  
-  // ★修正: 親から受け取った isPremium を使用して判定
   const isPremiumUser = isPremium === true;
-
-  const isDailyLimitReached = book.locked === true; 
   const isTranslation = book.category === 'Gutenberg' || book.category === 'TRANSLATION';
-
   const { tag: contentTag, text: displayCatchphrase } = parseCatchphrase(book.catchphrase);
-  
   const isFullTranslation = contentTag && contentTag.includes('完訳');
-  const isDigest = contentTag && contentTag.includes('ダイジェスト');
 
-  // --- ロック判定ロジック ---
-  
-  // 1. 翻訳作品ロック: 無料会員なら無条件でロック
   const isTranslationLock = isTranslation && !isPremiumUser;
-  
-  // 2. 回数制限ロック: 無料会員が10回を超えたらロック
-  const isLimitLock = isDailyLimitReached;
+  const isLimitLock = book.locked === true;
+  const isLocked = isTranslationLock || isLimitLock;
 
-  // 3. 総合判定
-  const isSummaryLocked = isTranslationLock || isLimitLock;
-  const isReaderLocked = isTranslationLock || isLimitLock;
-
-  // --- 表示データの加工 ---
-
-  const rawSummary = isSummaryLocked ? (book.summary_300 || book.summaryText) : book.summaryText;
+  const rawSummary = isLocked ? (book.summary_300 || book.summaryText) : book.summaryText;
   let summarySections = parseSummary(rawSummary || "");
   
-  if (isSummaryLocked && summarySections.length > 0) {
+  if (isLocked && summarySections.length > 0) {
       summarySections = [summarySections[0]];
       const lines = summarySections[0].content.split('\n');
       summarySections[0].content = lines.slice(0, 5).join('\n');
   }
 
   const allReaderLines = (book.bodyText || "").split('\n');
-  let displayedReaderLines = allReaderLines;
-
-  if (isTranslationLock) {
-      displayedReaderLines = [];
-  } else if (isLimitLock) {
-      displayedReaderLines = allReaderLines.slice(0, 10);
-  }
-
-  const insightText = book.insight;
+  const displayedReaderLines = isTranslationLock ? [] : (isLimitLock ? allReaderLines.slice(0, 10) : allReaderLines);
 
   return (
-    <div style={styles.container}>
-      <div style={styles.navBar}>
-        <button onClick={onBack} style={styles.backButton}>← 本棚に戻る</button>
-      </div>
+    <div style={styles.wrapper}>
+      {/* ヘッダーナビゲーション */}
+      <nav style={styles.navBar}>
+        <button onClick={onBack} style={styles.backButton}>
+           <span style={{fontSize:'18px'}}>←</span> 書架に戻る
+        </button>
+        <div style={styles.navTitle}>{book.title}</div>
+        <div style={{width:'80px'}}></div>
+      </nav>
 
-      <article style={styles.article}>
-        <header style={{...styles.header, background: `linear-gradient(135deg, ${accentColor}15 0%, #fff 100%)`, borderTop: `6px solid ${accentColor}`}}>
-          <div style={styles.headerContent}>
-            
-            <div style={styles.labelRow}>
-                <span style={styles.metaLabel}>
-                    {isTranslation ? 'WORLD MASTERPIECE' : 'CLASSIC LITERATURE'}
-                </span>
-                {contentTag && (
-                    <span style={{
-                        ...styles.contentTag, 
-                        backgroundColor: isFullTranslation ? '#2ecc71' : '#e67e22'
-                    }}>
-                        {contentTag.replace(/[【】]/g, '')}
-                    </span>
-                )}
+      {/* メインコンテンツ */}
+      <main style={styles.paperContainer}>
+        
+        {/* 表紙・タイトルエリア */}
+        <header style={styles.bookHeader}>
+            <div style={styles.metaInfo}>
+                <span style={styles.categoryLabel}>{isTranslation ? 'FOREIGN LITERATURE' : 'JAPANESE LITERATURE'}</span>
+                {contentTag && <span style={styles.tagLabel}>{contentTag.replace(/[【】]/g, '')}</span>}
             </div>
             
-            <h1 style={styles.title}>
-                {book.title}
-                <button 
-                    onClick={toggleFavorite} 
-                    style={{...styles.favButton, color: isFavorite ? '#e74c3c' : '#ccc'}}
-                >
-                    {isFavorite ? '❤️' : '🤍'}
-                </button>
-            </h1>
+            <h1 style={styles.title}>{book.title}</h1>
+            <p style={styles.author}>著：{book.authorName}</p>
             
-            {book.originalTitle && (
-                <p style={styles.originalTitle}>{book.originalTitle}</p>
-            )}
+            <div style={styles.actionRow}>
+                {/* 1. お気に入りボタン */}
+                <button onClick={toggleFavorite} style={styles.favButton}>
+                    {isFavorite ? '❤️ お気に入り' : '🤍 お気に入り'}
+                </button>
 
-            <div style={styles.author}>
-              <span style={styles.authorLabel}>著</span> {book.authorName}
+                {/* 2. ★ 3D読書ボタン（ここに配置！） */}
+                {!!book.bodyText && (
+                    <button 
+                        onClick={() => setShow3DReader(true)}
+                        style={styles.immersiveButton}
+                        disabled={isLocked}
+                    >
+                        <span style={{marginRight: '5px'}}>📖</span> 
+                        {isLocked ? 'プレミアム限定' : '没入モードで読む'}
+                    </button>
+                )}
             </div>
 
             {displayCatchphrase && (
-               <div style={isTranslation ? styles.hqCatchphrase : styles.catchphrase}>
-                 {isTranslation && "❝ "}
-                 {displayCatchphrase}
-                 {isTranslation && " ❞"}
-               </div>
+                <div style={styles.catchphraseBox}>
+                    <p style={styles.catchphraseText}>{displayCatchphrase}</p>
+                </div>
             )}
-          </div>
         </header>
 
-        <div style={styles.contentBody}>
-          
-          <div style={styles.tabContainer}>
+        {/* タブ切り替え */}
+        <div style={styles.tabWrapper}>
             <button 
-              style={viewMode === 'summary' ? styles.activeTab : styles.tab}
-              onClick={() => setViewMode('summary')}
+                style={viewMode === 'summary' ? styles.activeTab : styles.tab}
+                onClick={() => setViewMode('summary')}
             >
-              📖 {isTranslation ? '作品解説・あらすじ' : '解説・あらすじ'}
+                解説・あらすじ
             </button>
-            
-            {(hasBodyText || book.aozoraUrl) && (
+            {(!!book.bodyText || book.aozoraUrl) && (
                 <button 
-                style={viewMode === 'full' ? styles.activeTab : styles.tab}
-                onClick={() => setViewMode('full')}
+                    style={viewMode === 'full' ? styles.activeTab : styles.tab}
+                    onClick={() => setViewMode('full')}
                 >
-                {isFullTranslation ? '📄 全文を読む (完訳)' 
-                    : isDigest ? '📄 物語を読む (ダイジェスト)' 
-                    : isTranslation ? '📄 翻訳を読む'
-                    : '📄 本文を読む'}
+                    {isFullTranslation ? '全文を読む' : '本文を読む'}
                 </button>
             )}
-          </div>
+        </div>
 
-          <div style={styles.contentBox}>
-             {viewMode === 'summary' ? (
+        <div style={styles.contentBody}>
+            {viewMode === 'summary' ? (
                 <>
-                <section style={styles.section}>
-                    <div style={styles.textBody}>
-                      {summarySections.map((section, idx) => (
-                        <div key={idx} style={styles.summaryBlock}>
-                           {!isSummaryLocked && section.title && (
-                             <h3 style={{...styles.subTitle, color: '#333', borderLeft: `4px solid ${accentColor}`}}>
-                               {section.title}
-                             </h3>
-                           )}
-                           {section.content.split('\n').map((line, i) => (
-                             line.trim() && <p key={i} style={styles.paragraph}>{line}</p>
-                           ))}
-                        </div>
-                      ))}
+                    {/* 要約セクション */}
+                    <div style={styles.textBlock}>
+                        {summarySections.map((section, idx) => (
+                            <div key={idx} style={{marginBottom: '40px'}}>
+                                {(!isLocked && section.title) && <h3 style={styles.sectionTitle}>{section.title}</h3>}
+                                {section.content.split('\n').map((line, i) => (
+                                    line.trim() && <p key={i} style={styles.paragraph}>{line}</p>
+                                ))}
+                            </div>
+                        ))}
                     </div>
 
-                    {isSummaryLocked && (
-                        <div style={styles.lockWrapper}>
-                            <div style={styles.lockMessage}>
-                                <div style={{fontSize: '40px', marginBottom: '10px'}}>🔒</div>
-                                <h3 style={{marginBottom: '10px', color: '#2d3748'}}>
-                                    {isTranslationLock ? 'プレミアム限定コンテンツ' : '続きはプレミアムで'}
-                                </h3>
-                                <p style={{fontSize: '14px', color: '#718096', marginBottom: '20px'}}>
-                                    {isTranslationLock 
-                                        ? "詳細な解説と要約を読むには\nプレミアムプランへの登録が必要です。"
-                                        : "詳細な要約と解説を読むには\nプレミアムプランへの登録が必要です。"
-                                    }
-                                </p>
-                                <button style={styles.upgradeButton} onClick={() => onLimitReached()}>
-                                    プレミアムプラン詳細へ
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </section>
+                    {isLocked && <LockScreen type={isTranslationLock ? 'translation' : 'limit'} onUpgrade={onLimitReached} />}
 
-                {!isSummaryLocked && insightText && (
-                    <section style={styles.insightSection}>
-                        <div style={styles.insightHeader}>
-                            <span style={styles.insightIcon}>💡</span> 
-                            {isTranslation ? '作品の背景・考察' : '編集者の考察メモ'}
-                        </div>
-                        <div style={styles.insightContent}>
-                            {insightText.split('\n').map((line, i) => (
-                                line.trim() && <p key={i} style={styles.insightParagraph}>{line}</p>
+                    {!isLocked && book.insight && (
+                        <div style={styles.insightBox}>
+                            <h4 style={styles.insightTitle}>
+                                <span style={{marginRight:'8px'}}>💡</span>
+                                {isTranslation ? '作品の背景・考察' : '編集者の考察メモ'}
+                            </h4>
+                            {book.insight.split('\n').map((line, i) => (
+                                line.trim() && <p key={i} style={styles.insightText}>{line}</p>
                             ))}
                         </div>
-                    </section>
-                )}
+                    )}
                 </>
-             ) : (
+            ) : (
                 <>
-                {hasBodyText ? (
-                    <section style={styles.section}>
-                        <div style={isHQ || isTranslation ? styles.readerBox : styles.previewBox}>
-                             {(isHQ || isTranslation) && <h3 style={styles.readerTitle}>{book.title}</h3>}
-                             <div style={styles.textBody}>
-                                 {displayedReaderLines.map((line, i) => (
-                                     line.trim() && <p key={i} style={styles.readerParagraph}>{line}</p>
-                                 ))}
-                             </div>
-                             
-                             {isReaderLocked ? (
-                                <div style={styles.lockWrapper}>
-                                    <div style={styles.lockMessage}>
-                                        <div style={{fontSize: '40px', marginBottom: '10px'}}>🔒</div>
-                                        <h3 style={{marginBottom: '10px', color: '#2d3748'}}>
-                                            {isTranslationLock ? 'プレミアム限定コンテンツ' : '続きはプレミアムで'}
-                                        </h3>
-                                        <p style={{fontSize: '14px', color: '#718096', marginBottom: '20px'}}>
-                                            {isTranslationLock 
-                                                ? "この翻訳作品の全文を読むには\nプレミアムプランへの登録が必要です。"
-                                                : "無料会員の1日の閲覧上限に達しました。\n続きはプレミアムプランでお楽しみください。"
-                                            }
-                                        </p>
-                                        <button style={styles.upgradeButton} onClick={() => onLimitReached()}>
-                                            プレミアムプラン詳細へ
-                                        </button>
-                                    </div>
-                                </div>
-                             ) : (
-                                 <div style={styles.readerFooter}>
-                                     {isFullTranslation ? '― 完 ―' : '― ダイジェスト版 終了 ―'}
-                                 </div>
-                             )}
+                    {/* 本文リーダーセクション */}
+                    {book.bodyText ? (
+                        <div style={styles.textBlock}>
+                            {displayedReaderLines.map((line, i) => (
+                                line.trim() && <p key={i} style={styles.readerParagraph}>{line}</p>
+                            ))}
+                            
+                            {isLocked ? (
+                                <LockScreen type={isTranslationLock ? 'translation' : 'limit'} onUpgrade={onLimitReached} isReader />
+                            ) : (
+                                <div style={styles.endMark}>― 完 ―</div>
+                            )}
                         </div>
-                    </section>
-                ) : (
-                    <div style={styles.aozoraBox}>
-                        <p style={{marginBottom: '20px'}}>この作品は全文データがありません。<br/>青空文庫の公式サイトで原文を閲覧します。</p>
-                        {book.aozoraUrl ? (
-                          <a href={book.aozoraUrl} target="_blank" rel="noopener noreferrer" style={styles.amazonButton}>
-                            青空文庫で開く ↗
-                          </a>
-                        ) : (
-                          <p style={{color: '#999'}}>本文リンクが見つかりませんでした。</p>
-                        )}
-                    </div>
-                )}
+                    ) : (
+                        <div style={styles.externalLinkBox}>
+                            <p>この作品は外部サイト（青空文庫）で閲覧できます。</p>
+                            {book.aozoraUrl && (
+                                <a href={book.aozoraUrl} target="_blank" rel="noopener noreferrer" style={styles.externalButton}>
+                                    青空文庫を開く ↗
+                                </a>
+                            )}
+                        </div>
+                    )}
                 </>
-             )}
-          </div>
-
-          <footer style={styles.bookFooter}>
-            <div style={styles.footerRow}>
-              <span style={styles.footerLabel}>カテゴリ</span>
-              <span style={styles.footerValue}>
-                  {isTranslation ? '海外文学 / 翻訳' : '日本文学'}
-              </span>
-            </div>
-            <div style={styles.footerRow}>
-              <span style={styles.footerLabel}>著者</span>
-              <span style={styles.footerValue}>{book.authorName}</span>
-            </div>
-            <div style={styles.footerRow}>
-              <span style={styles.footerLabel}>読了目安</span>
-              <span style={styles.footerValue}>
-                  {isFullTranslation ? '15〜30分' : '5〜10分'}
-              </span>
-            </div>
-          </footer>
-
-          <div style={styles.actionArea}>
-              <a 
-                href={`https://www.amazon.co.jp/s?k=${encodeURIComponent(book.title + ' ' + book.authorName)}`} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                style={styles.amazonButton}
-              >
-                Amazonで原作を探す
-              </a>
-          </div>
-
+            )}
         </div>
-      </article>
-      <Footer />
+
+        {/* フッター情報 */}
+        <footer style={styles.bookFooter}>
+            <div style={styles.footerItem}>
+                <span style={styles.footerLabel}>読了目安</span>
+                <span style={styles.footerValue}>{isFullTranslation ? '15分' : '5分'}</span>
+            </div>
+            <div style={styles.footerItem}>
+                <a 
+                    href={`https://www.amazon.co.jp/s?k=${encodeURIComponent(book.title + ' ' + book.authorName)}`} 
+                    target="_blank" rel="noopener noreferrer" 
+                    style={styles.amazonLink}
+                >
+                    Amazonで原作を探す ↗
+                </a>
+            </div>
+        </footer>
+
+      </main>
+
+      <div style={{marginTop: '40px'}}>
+        <Footer color={theme.colors.textSub} separatorColor={theme.colors.border} />
+      </div>
+
+      {/* 3D読書リーダー呼び出し */}
+      {show3DReader && book.bodyText && (
+         <BookReader3D 
+             title={book.title}
+             bodyText={book.bodyText}
+             onClose={() => setShow3DReader(false)}
+         />
+      )}
     </div>
   );
 };
 
+// --- ロック画面コンポーネント ---
+const LockScreen = ({ type, onUpgrade, isReader = false }) => (
+    <div style={styles.lockOverlay}>
+        <div style={styles.lockCard}>
+            <div style={{fontSize: '32px', marginBottom: '10px'}}>🔒</div>
+            <h3 style={styles.lockTitle}>
+                {type === 'translation' ? 'プレミアム限定コンテンツ' : '続きはプレミアムで'}
+            </h3>
+            <p style={styles.lockText}>
+                {type === 'translation' 
+                    ? (isReader ? "この翻訳作品の全文を読むには\nプレミアムプランへの登録が必要です。" : "詳細な解説と要約を読むには\nプレミアムプランへの登録が必要です。")
+                    : "無料会員の閲覧上限に達しました。\n続きはプレミアムプランでお楽しみください。"
+                }
+            </p>
+            <button style={styles.upgradeButton} onClick={onUpgrade}>
+                プレミアムプラン詳細へ
+            </button>
+        </div>
+    </div>
+);
+
+// --- スタイル定義 ---
 const styles = {
-  container: { maxWidth: '800px', margin: '0 auto', padding: '0 20px 60px', fontFamily: '"Noto Sans JP", sans-serif', color: '#333' },
-  loadingContainer: { height: '60vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: '#718096' },
-  spinner: { width: '40px', height: '40px', border: '4px solid #eee', borderRadius: '50%', borderTopColor: '#333', animation: 'spin 1s linear infinite' },
-  error: { color: '#e53e3e', textAlign: 'center', marginTop: '50px' },
-  navBar: { padding: '20px 0' },
-  backButton: { background: 'none', border: 'none', color: '#718096', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', padding: 0 },
-  article: { backgroundColor: '#fff', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', borderRadius: '8px', overflow: 'hidden' },
-  header: { padding: '60px 40px', textAlign: 'center', position: 'relative' },
-  headerContent: { display: 'flex', flexDirection: 'column', alignItems: 'center' },
-  labelRow: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' },
-  metaLabel: { fontSize: '12px', letterSpacing: '0.1em', color: '#718096', fontWeight: 'bold' },
-  contentTag: { fontSize: '12px', color: '#fff', padding: '3px 8px', borderRadius: '4px', fontWeight: 'bold', letterSpacing: '0.05em' },
-  title: { fontFamily: '"Shippori Mincho", serif', fontSize: '32px', fontWeight: 'bold', color: '#1a202c', marginBottom: '15px', lineHeight: '1.4', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  favButton: { background: 'none', border: 'none', cursor: 'pointer', fontSize: '24px', marginLeft: '15px', verticalAlign: 'middle' },
-  originalTitle: { fontFamily: '"Helvetica Neue", Arial, sans-serif', fontSize: '16px', color: '#718096', marginBottom: '20px', fontStyle: 'italic' },
-  author: { fontFamily: '"Shippori Mincho", serif', fontSize: '18px', color: '#4a5568', marginBottom: '30px' },
-  authorLabel: { fontSize: '12px', background: '#333', color: '#fff', padding: '2px 6px', borderRadius: '2px', marginRight: '8px' },
-  hqCatchphrase: { fontFamily: '"Shippori Mincho", serif', fontSize: '22px', color: '#2d3748', lineHeight: '1.8', fontStyle: 'italic', padding: '30px', background: 'rgba(255,255,255,0.6)', borderRadius: '8px', display: 'inline-block', marginTop: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.03)' },
-  catchphrase: { fontFamily: '"Shippori Mincho", serif', fontSize: '20px', color: '#2d3748', lineHeight: '1.8', fontStyle: 'italic', padding: '20px', borderTop: '1px solid rgba(0,0,0,0.05)', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'inline-block' },
-  contentBody: { padding: '40px' },
-  section: { marginBottom: '40px' },
-  summaryBlock: { marginBottom: '30px' },
-  subTitle: { fontSize: '18px', fontFamily: '"Shippori Mincho", serif', fontWeight: 'bold', paddingLeft: '12px', marginBottom: '15px' },
-  paragraph: { marginBottom: '1.5em', lineHeight: '1.8', fontSize: '16px', textAlign: 'justify' },
-  insightSection: { marginTop: '60px', padding: '30px', backgroundColor: '#f0f4f8', borderRadius: '12px', position: 'relative' },
-  insightHeader: { fontSize: '18px', fontWeight: 'bold', color: '#2c5282', marginBottom: '15px', display: 'flex', alignItems: 'center', fontFamily: '"Shippori Mincho", serif' },
-  insightIcon: { marginRight: '10px', fontSize: '20px' },
-  insightContent: { borderTop: '1px solid #cbd5e0', paddingTop: '15px' },
-  insightParagraph: { fontSize: '15px', lineHeight: '1.8', color: '#4a5568', marginBottom: '10px' },
-  tabContainer: { display: 'flex', borderBottom: '1px solid #ddd', marginBottom: '30px' },
-  tab: { flex: 1, padding: '15px', border: 'none', backgroundColor: 'transparent', cursor: 'pointer', fontSize: '16px', color: '#999', fontFamily: '"Shippori Mincho", serif', borderBottom: '3px solid transparent', transition: '0.2s' },
-  activeTab: { flex: 1, padding: '15px', border: 'none', backgroundColor: 'transparent', cursor: 'pointer', fontSize: '16px', color: '#2c3e50', fontFamily: '"Shippori Mincho", serif', borderBottom: '3px solid #2c3e50', fontWeight: 'bold' },
-  contentBox: { minHeight: '200px' },
-  readerBox: { padding: '40px', backgroundColor: '#fff', borderRadius: '2px' },
-  readerTitle: { textAlign: 'center', fontSize: '24px', fontFamily: '"Shippori Mincho", serif', marginBottom: '40px', color: '#333' },
-  readerParagraph: { marginBottom: '1.8em', lineHeight: '2.0', fontSize: '17px', textAlign: 'justify', fontFamily: '"Shippori Mincho", serif', color: '#2d3748' },
-  readerFooter: { textAlign: 'center', marginTop: '60px', color: '#a0aec0', fontSize: '14px', letterSpacing: '0.2em' },
-  previewBox: { padding: '20px', backgroundColor: '#fdfbf7', borderRadius: '8px', border: '1px solid #f0e6d2' },
-  aozoraBox: { textAlign: 'center', padding: '40px 20px', backgroundColor: '#f9f9f9', borderRadius: '8px' },
-  bookFooter: { borderTop: '1px solid #eee', paddingTop: '30px', marginTop: '50px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', textAlign: 'center' },
-  footerRow: { display: 'flex', flexDirection: 'column', gap: '5px' },
-  footerLabel: { fontSize: '11px', color: '#a0aec0', textTransform: 'uppercase', letterSpacing: '1px' },
-  footerValue: { fontSize: '14px', fontWeight: 'bold' },
-  actionArea: { marginTop: '40px', textAlign: 'center' },
-  amazonButton: { display: 'inline-block', backgroundColor: '#FF9900', color: '#fff', padding: '12px 30px', borderRadius: '50px', textDecoration: 'none', fontWeight: 'bold', boxShadow: '0 4px 10px rgba(255, 153, 0, 0.3)', transition: 'transform 0.2s' },
-  
-  // ロック画面用スタイル
-  lockWrapper: {
-    marginTop: '40px',
-    display: 'flex',
-    justifyContent: 'center',
+  wrapper: {
+    minHeight: '100vh',
+    backgroundColor: theme.colors.background,
+    color: theme.colors.textMain,
+    fontFamily: theme.fonts.body,
+    paddingBottom: '20px',
   },
-  lockMessage: {
-    textAlign: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    padding: '30px',
-    borderRadius: '16px',
-    boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
-    border: '1px solid #edf2f7',
-    maxWidth: '90%',
+  navBar: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: '15px 20px', position: 'sticky', top: 0, zIndex: 100,
+    backgroundColor: 'rgba(252, 249, 242, 0.95)', borderBottom: `1px solid ${theme.colors.border}`,
+    backdropFilter: 'blur(5px)',
   },
+  backButton: {
+    background: 'none', border: 'none', cursor: 'pointer',
+    color: theme.colors.textSub, fontSize: '14px', fontWeight: 'bold',
+    display: 'flex', alignItems: 'center', gap: '5px', fontFamily: theme.fonts.heading
+  },
+  navTitle: {
+    fontSize: '14px', fontWeight: 'bold', color: theme.colors.textMain,
+    fontFamily: theme.fonts.heading, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '60%'
+  },
+  paperContainer: {
+    maxWidth: '720px', margin: '30px auto',
+    backgroundColor: '#fff', borderRadius: '4px',
+    boxShadow: '0 2px 5px rgba(0,0,0,0.05), 0 10px 30px rgba(0,0,0,0.08)',
+    borderLeft: `6px solid ${theme.colors.primary}`, 
+    overflow: 'hidden', position: 'relative',
+  },
+  bookHeader: {
+    padding: '60px 40px 40px', textAlign: 'center',
+    backgroundImage: 'radial-gradient(circle at center, #fafafa 0%, #fff 100%)',
+  },
+  metaInfo: { display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '20px' },
+  categoryLabel: { fontSize: '11px', letterSpacing: '0.15em', color: theme.colors.primary, fontWeight: 'bold', border: `1px solid ${theme.colors.primary}`, padding: '4px 8px', borderRadius: '2px' },
+  tagLabel: { fontSize: '11px', color: '#fff', backgroundColor: theme.colors.accent, padding: '5px 8px', borderRadius: '2px', fontWeight: 'bold' },
+  title: {
+    fontFamily: theme.fonts.heading, fontSize: '36px', fontWeight: 'bold',
+    color: theme.colors.textMain, marginBottom: '10px', lineHeight: '1.3',
+  },
+  author: {
+    fontFamily: theme.fonts.heading, fontSize: '18px', color: theme.colors.textSub, marginBottom: '30px',
+  },
+  // アクション行（お気に入り＋没入ボタン）
+  actionRow: { 
+      marginBottom: '30px', display: 'flex', justifyContent: 'center', gap: '15px', alignItems: 'center' 
+  },
+  favButton: {
+    background: 'transparent', border: `1px solid ${theme.colors.border}`, borderRadius: '20px',
+    padding: '8px 20px', fontSize: '13px', color: theme.colors.textSub, cursor: 'pointer', transition: 'all 0.2s',
+  },
+  // 没入モードボタンのスタイル
+  immersiveButton: {
+      ...theme.ui.buttonPrimary,
+      borderRadius: '30px',
+      padding: '8px 24px',
+      fontSize: '13px',
+      display: 'flex',
+      alignItems: 'center',
+      boxShadow: '0 4px 12px rgba(30, 42, 74, 0.3)',
+      transition: 'transform 0.2s',
+      cursor: 'pointer',
+      ':disabled': { backgroundColor: '#ccc', cursor: 'not-allowed', boxShadow: 'none' }
+  },
+  catchphraseBox: {
+    marginTop: '20px', padding: '20px', borderTop: `1px solid ${theme.colors.border}`, borderBottom: `1px solid ${theme.colors.border}`,
+  },
+  catchphraseText: {
+    fontFamily: theme.fonts.heading, fontSize: '18px', fontStyle: 'italic', color: theme.colors.textMain, lineHeight: '1.8',
+  },
+  tabWrapper: {
+    display: 'flex', borderBottom: `1px solid ${theme.colors.border}`, backgroundColor: '#fafafa',
+  },
+  tab: {
+    flex: 1, padding: '15px', border: 'none', background: 'transparent',
+    color: theme.colors.textSub, fontFamily: theme.fonts.heading, fontSize: '15px',
+    cursor: 'pointer', transition: '0.2s', borderBottom: '3px solid transparent'
+  },
+  activeTab: {
+    flex: 1, padding: '15px', border: 'none', background: '#fff',
+    color: theme.colors.primary, fontFamily: theme.fonts.heading, fontSize: '15px', fontWeight: 'bold',
+    cursor: 'default', borderBottom: `3px solid ${theme.colors.primary}`
+  },
+  contentBody: { padding: '50px 40px', minHeight: '300px' },
+  sectionTitle: {
+    fontFamily: theme.fonts.heading, fontSize: '20px', color: theme.colors.primary,
+    marginBottom: '20px', borderBottom: `1px dotted ${theme.colors.border}`, paddingBottom: '5px', display: 'inline-block'
+  },
+  paragraph: {
+    fontSize: '16px', lineHeight: '1.9', color: theme.colors.textMain, marginBottom: '1.5em', textAlign: 'justify',
+  },
+  readerParagraph: {
+    fontSize: '18px', lineHeight: '2.2', fontFamily: theme.fonts.heading,
+    color: '#222', marginBottom: '2em', textAlign: 'justify',
+  },
+  insightBox: {
+    marginTop: '50px', padding: '30px', backgroundColor: '#f8f9fa',
+    borderLeft: `4px solid ${theme.colors.accent}`, borderRadius: '0 4px 4px 0',
+  },
+  insightTitle: {
+    fontSize: '16px', fontWeight: 'bold', color: theme.colors.textMain, marginBottom: '15px', display: 'flex', alignItems: 'center'
+  },
+  insightText: { fontSize: '15px', lineHeight: '1.8', color: '#444', marginBottom: '10px' },
+  lockOverlay: {
+    marginTop: '40px', padding: '40px 20px', textAlign: 'center',
+    background: 'linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 30%)',
+  },
+  lockCard: {
+    display: 'inline-block', padding: '30px', backgroundColor: '#fff', borderRadius: '8px',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.15)', border: `1px solid ${theme.colors.border}`, maxWidth: '400px',
+  },
+  lockTitle: { fontSize: '18px', fontWeight: 'bold', color: theme.colors.primary, marginBottom: '10px' },
+  lockText: { fontSize: '14px', color: theme.colors.textSub, marginBottom: '20px', whiteSpace: 'pre-wrap' },
   upgradeButton: {
-    backgroundColor: '#3182ce',
-    color: '#fff',
-    border: 'none',
-    padding: '12px 24px',
-    borderRadius: '50px',
-    fontSize: '16px',
-    fontWeight: 'bold',
-    cursor: 'pointer',
-    boxShadow: '0 4px 12px rgba(49, 130, 206, 0.4)',
-    transition: 'transform 0.2s',
-  }
+    ...theme.ui.buttonPrimary, borderRadius: '30px', padding: '12px 30px', fontSize: '15px',
+  },
+  bookFooter: {
+    marginTop: '60px', padding: '30px 40px', borderTop: `1px solid ${theme.colors.border}`,
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fafafa'
+  },
+  footerItem: { display: 'flex', flexDirection: 'column', gap: '5px' },
+  footerLabel: { fontSize: '11px', color: theme.colors.textSub },
+  footerValue: { fontSize: '14px', fontWeight: 'bold', color: theme.colors.textMain },
+  amazonLink: {
+    fontSize: '13px', color: theme.colors.primary, textDecoration: 'none', borderBottom: `1px solid ${theme.colors.primary}`, paddingBottom: '2px'
+  },
+  externalLinkBox: { textAlign: 'center', padding: '50px 20px', color: theme.colors.textSub },
+  externalButton: { display: 'inline-block', marginTop: '15px', padding: '10px 20px', border: `1px solid ${theme.colors.border}`, borderRadius: '4px', textDecoration: 'none', color: theme.colors.textMain },
+  endMark: { textAlign: 'center', marginTop: '60px', color: theme.colors.textSub, fontFamily: theme.fonts.heading, letterSpacing: '0.2em' },
+  loadingContainer: { height: '80vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' },
+  spinner: { width: '40px', height: '40px', border: '3px solid #eee', borderTop: `3px solid ${theme.colors.primary}`, borderRadius: '50%', animation: 'spin 1s linear infinite' },
+  loadingText: { marginTop: '20px', fontFamily: theme.fonts.heading, color: theme.colors.textSub },
+  errorContainer: { padding: '50px', textAlign: 'center', color: theme.colors.error },
+  backLink: { marginTop: '20px', background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer', color: theme.colors.textSub },
 };
 
 export default BookDetail;

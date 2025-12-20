@@ -1,0 +1,28 @@
+/* src/index.css */
+
+/* Google Fontsの読み込み（まだ無ければ追加） */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Shippori+Mincho:wght@400;500;600;700&display=swap');
+
+body {
+  margin: 0;
+  padding: 0;
+  /* theme.js の background と同じ色 */
+  background-color: #fcf9f2;
+  /* theme.js の textMain と同じ色 */
+  color: #2b2222;
+  font-family: "Noto Sans JP", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* リンクの色も雰囲気に合わせる */
+a {
+  color: #1e2a4a; /* 勝色 */
+  text-decoration: none;
+  border-bottom: 1px dotted #1e2a4a; /* 点線の下線でレトロ感を */
+}
+
+a:hover {
+  color: #b7282e; /* ホバー時は茜色 */
+  border-bottom: 1px solid #b7282e;
+}
