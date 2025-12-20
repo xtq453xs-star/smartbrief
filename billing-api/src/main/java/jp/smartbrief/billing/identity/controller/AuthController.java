@@ -2,6 +2,7 @@ package jp.smartbrief.billing.identity.controller;
 
 import java.security.Principal;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -26,9 +27,8 @@ import reactor.core.publisher.Mono;
 
 /**
  * 認証 API コントローラー
- * * VS Codeの厳格なNullチェック警告（Unchecked conversion to @NonNull Object）を
- * 回避するため、WebClient.bodyValue や ResponseEntity の引数を
- * Objects.requireNonNull() でラップして型安全性を保証しています。
+ * VS Codeの厳格なNull安全性警告を回避するため、
+ * 引数や定数を Objects.requireNonNull() でラップして型安全性を保証しています。
  */
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -44,10 +44,18 @@ public class AuthController {
     @Value("${n8n.webhook.verify:https://n8n.smartbrief.jp/webhook/webhook/verify-email}")
     private String n8nVerifyEmailWebhookUrl;
 
-    public AuthController(jp.smartbrief.billing.identity.repository.UserRepository userRepository, PasswordEncoder passwordEncoder, jp.smartbrief.billing.shared.security.JwtUtil jwtUtil) {
+    public AuthController(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
+    }
+
+    // --- ヘルパーメソッド: JSON形式のレスポンスを作成 ---
+    private ResponseEntity<Map<String, String>> createResponse(String message, HttpStatus status) {
+        return new ResponseEntity<>(
+            Objects.requireNonNull(Collections.singletonMap("message", message)), 
+            Objects.requireNonNull(status) // ★statusもラップして警告回避
+        );
     }
 
     // --- 1. ログイン処理 ---
@@ -57,49 +65,46 @@ public class AuthController {
             .filter(user -> passwordEncoder.matches(request.getPassword(), user.getPassword()))
             .flatMap(user -> {
                 if (!Boolean.TRUE.equals(user.getIsVerified())) {
-                    return Mono.just(new ResponseEntity<>(
-                        Objects.requireNonNull(Map.of("message", "メールアドレスの認証が完了していません。受信トレイを確認してください。")),
-                        HttpStatus.UNAUTHORIZED
-                    ));
+                    return Mono.just(createResponse("メールアドレスの認証が完了していません。受信トレイを確認してください。", HttpStatus.UNAUTHORIZED));
                 }
 
                 String token = jwtUtil.generateToken(user.getUsername());
                 return Mono.just(new ResponseEntity<>(
                     Objects.requireNonNull(Map.of("token", token)),
-                    HttpStatus.OK
+                    Objects.requireNonNull(HttpStatus.OK)
                 ));
             })
-            .defaultIfEmpty(new ResponseEntity<>(HttpStatus.UNAUTHORIZED));
+            .defaultIfEmpty(createResponse("ユーザー名またはパスワードが正しくありません。", HttpStatus.UNAUTHORIZED));
     }
 
     // --- 2. 新規会員登録処理 ---
     @PostMapping("/register")
-    public Mono<ResponseEntity<String>> register(@RequestBody @NonNull AuthRequest request) {
+    public Mono<ResponseEntity<Map<String, String>>> register(@RequestBody @NonNull AuthRequest request) {
         
         String username = request.getUsername();
         String email = request.getEmail();
         String password = request.getPassword();
 
         if (username == null || email == null || password == null) {
-             return Mono.just(new ResponseEntity<>(Objects.requireNonNull("必須項目（ID, Email, Password）が入力されていません。"), HttpStatus.BAD_REQUEST));
+             return Mono.just(createResponse("必須項目（ID, Email, Password）が入力されていません。", HttpStatus.BAD_REQUEST));
         }
         if (username.equals(password)) {
-            return Mono.just(new ResponseEntity<>(Objects.requireNonNull("IDと同じパスワードは使用できません。"), HttpStatus.BAD_REQUEST));
+            return Mono.just(createResponse("IDと同じパスワードは使用できません。", HttpStatus.BAD_REQUEST));
         }
         if (!email.contains("@") || !email.contains(".")) {
-             return Mono.just(new ResponseEntity<>(Objects.requireNonNull("有効なメールアドレスを入力してください。"), HttpStatus.BAD_REQUEST));
+             return Mono.just(createResponse("有効なメールアドレスを入力してください。", HttpStatus.BAD_REQUEST));
         }
         
         String regex = "^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*]).{8,}$";
         if (!password.matches(regex)) {
-             return Mono.just(new ResponseEntity<>(Objects.requireNonNull("パスワードは8文字以上で、大文字・小文字・数字・記号(!@#$%^&*)を含めてください。"), HttpStatus.BAD_REQUEST));
+             return Mono.just(createResponse("パスワードは8文字以上で、大文字・小文字・数字・記号(!@#$%^&*)を含めてください。", HttpStatus.BAD_REQUEST));
         }
 
         return userRepository.findByUsername(username)
-            .flatMap(u -> Mono.just(new ResponseEntity<>(Objects.requireNonNull("このユーザーIDは既に使用されています"), HttpStatus.BAD_REQUEST)))
+            .flatMap(u -> Mono.just(createResponse("このユーザーIDは既に使用されています", HttpStatus.BAD_REQUEST)))
             .switchIfEmpty(
                 userRepository.findByEmail(email)
-                    .flatMap(u -> Mono.just(new ResponseEntity<>(Objects.requireNonNull("このメールアドレスは既に登録されています"), HttpStatus.BAD_REQUEST)))
+                    .flatMap(u -> Mono.just(createResponse("このメールアドレスは既に登録されています", HttpStatus.BAD_REQUEST)))
                     .switchIfEmpty(Mono.defer(() -> {
                         User newUser = new User();
                         newUser.setUsername(username);
@@ -117,7 +122,7 @@ public class AuthController {
                                 WebClient.create()
                                     .post()
                                     .uri(Objects.requireNonNull(n8nVerifyEmailWebhookUrl))
-                                    .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
+                                    .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON)) // ★ラップ
                                     .bodyValue(Objects.requireNonNull(Map.of(
                                         "email", savedUser.getEmail(),
                                         "username", savedUser.getUsername(),
@@ -127,7 +132,7 @@ public class AuthController {
                                     .toBodilessEntity()
                                     .subscribe();
 
-                                return Mono.just(new ResponseEntity<>(Objects.requireNonNull("仮登録が完了しました。送信されたメール内のリンクをクリックして認証を完了してください。"), HttpStatus.OK));
+                                return Mono.just(createResponse("仮登録が完了しました。送信されたメール内のリンクをクリックして認証を完了してください。", HttpStatus.OK));
                             });
                     }))
             );
@@ -135,32 +140,32 @@ public class AuthController {
 
     // --- メール認証実行API ---
     @PostMapping("/verify-email")
-    public Mono<ResponseEntity<String>> verifyEmail(@RequestParam("token") @NonNull String token) {
+    public Mono<ResponseEntity<Map<String, String>>> verifyEmail(@RequestParam("token") @NonNull String token) {
         if (token.isEmpty()) {
-            return Mono.just(new ResponseEntity<>(Objects.requireNonNull("トークンが無効です"), HttpStatus.BAD_REQUEST));
+            return Mono.just(createResponse("トークンが無効です", HttpStatus.BAD_REQUEST));
         }
 
         return userRepository.findByVerificationToken(token) 
             .flatMap(user -> {
                 if (Boolean.TRUE.equals(user.getIsVerified())) {
-                    return Mono.just(new ResponseEntity<>(Objects.requireNonNull("既に認証済みです。ログインしてください。"), HttpStatus.OK));
+                    return Mono.just(createResponse("既に認証済みです。ログインしてください。", HttpStatus.OK));
                 }
                 
                 user.setIsVerified(true);
                 user.setVerificationToken(null);
 
                 return userRepository.save(user)
-                    .map(saved -> new ResponseEntity<>(Objects.requireNonNull("メール認証が完了しました！"), HttpStatus.OK));
+                    .map(saved -> createResponse("メール認証が完了しました！", HttpStatus.OK));
             })
-            .switchIfEmpty(Mono.just(new ResponseEntity<>(Objects.requireNonNull("無効なトークンか、期限切れです。"), HttpStatus.BAD_REQUEST)));
+            .switchIfEmpty(Mono.just(createResponse("無効なトークンか、期限切れです。", HttpStatus.BAD_REQUEST)));
     }
     
     // --- 3. パスワードリセット要求 ---
     @PostMapping("/forgot-password")
-    public Mono<ResponseEntity<String>> forgotPassword(@RequestBody @NonNull Map<String, String> request) {
+    public Mono<ResponseEntity<Map<String, String>>> forgotPassword(@RequestBody @NonNull Map<String, String> request) {
         String email = request.get("email");
         if (email == null || email.isEmpty()) {
-            return Mono.just(new ResponseEntity<>(Objects.requireNonNull("メールアドレスを入力してください"), HttpStatus.BAD_REQUEST));
+            return Mono.just(createResponse("メールアドレスを入力してください", HttpStatus.BAD_REQUEST));
         }
 
         return userRepository.findByEmail(email)
@@ -174,7 +179,7 @@ public class AuthController {
                         return WebClient.create()
                             .post()
                             .uri(Objects.requireNonNull(n8nEmailWebhookUrl))
-                            .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
+                            .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON)) // ★ラップ
                             .bodyValue(Objects.requireNonNull(Map.of(
                                 "email", savedUser.getEmail(),
                                 "username", savedUser.getUsername(),
@@ -182,31 +187,31 @@ public class AuthController {
                             )))
                             .retrieve()
                             .toBodilessEntity()
-                            .thenReturn(new ResponseEntity<>(Objects.requireNonNull("パスワード再設定メールを送信しました。"), HttpStatus.OK));
+                            .thenReturn(createResponse("パスワード再設定メールを送信しました。", HttpStatus.OK));
                     });
             })
-            .switchIfEmpty(Mono.just(new ResponseEntity<>(Objects.requireNonNull("そのメールアドレスは登録されていません。"), HttpStatus.NOT_FOUND)));
+            .switchIfEmpty(Mono.just(createResponse("そのメールアドレスは登録されていません。", HttpStatus.NOT_FOUND)));
     }
 
     // --- 4. パスワードリセット実行 ---
     @PostMapping("/reset-password")
-    public Mono<ResponseEntity<String>> resetPassword(@RequestBody @NonNull Map<String, String> request) {
+    public Mono<ResponseEntity<Map<String, String>>> resetPassword(@RequestBody @NonNull Map<String, String> request) {
         String token = request.get("token");
         String newPassword = request.get("password");
 
         if (token == null || newPassword == null) {
-            return Mono.just(new ResponseEntity<>(Objects.requireNonNull("情報が不足しています"), HttpStatus.BAD_REQUEST));
+            return Mono.just(createResponse("情報が不足しています", HttpStatus.BAD_REQUEST));
         }
         
         String regex = "^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*]).{8,}$";
         if (!newPassword.matches(regex)) {
-             return Mono.just(new ResponseEntity<>(Objects.requireNonNull("パスワードは8文字以上で、大文字・小文字・数字・記号(!@#$%^&*)を含めてください。"), HttpStatus.BAD_REQUEST));
+             return Mono.just(createResponse("パスワードは8文字以上で、大文字・小文字・数字・記号(!@#$%^&*)を含めてください。", HttpStatus.BAD_REQUEST));
         }
 
         return userRepository.findByResetPasswordToken(token)
             .flatMap(user -> {
                 if (user.getResetPasswordExpiresAt().isBefore(LocalDateTime.now())) {
-                    return Mono.just(new ResponseEntity<>(Objects.requireNonNull("リンクの有効期限が切れています。もう一度リクエストしてください。"), HttpStatus.BAD_REQUEST));
+                    return Mono.just(createResponse("リンクの有効期限が切れています。もう一度リクエストしてください。", HttpStatus.BAD_REQUEST));
                 }
 
                 user.setPassword(passwordEncoder.encode(newPassword));
@@ -214,24 +219,24 @@ public class AuthController {
                 user.setResetPasswordExpiresAt(null);
 
                 return userRepository.save(user)
-                    .map(saved -> new ResponseEntity<>(Objects.requireNonNull("パスワードが正常に変更されました。新しいパスワードでログインしてください。"), HttpStatus.OK));
+                    .map(saved -> createResponse("パスワードが正常に変更されました。新しいパスワードでログインしてください。", HttpStatus.OK));
             })
-            .switchIfEmpty(Mono.just(new ResponseEntity<>(Objects.requireNonNull("無効なリクエストです。"), HttpStatus.BAD_REQUEST)));
+            .switchIfEmpty(Mono.just(createResponse("無効なリクエストです。", HttpStatus.BAD_REQUEST)));
     }
 
     // --- 5. 認証メール再送用API ---
     @PostMapping("/resend-verification")
-    public Mono<ResponseEntity<String>> resendVerification(@RequestBody @NonNull Map<String, String> request) {
+    public Mono<ResponseEntity<Map<String, String>>> resendVerification(@RequestBody @NonNull Map<String, String> request) {
         String email = request.get("email");
         
         if (email == null || email.isEmpty()) {
-            return Mono.just(new ResponseEntity<>(Objects.requireNonNull("メールアドレスを入力してください"), HttpStatus.BAD_REQUEST));
+            return Mono.just(createResponse("メールアドレスを入力してください", HttpStatus.BAD_REQUEST));
         }
 
         return userRepository.findByEmail(email)
             .flatMap(user -> {
                 if (Boolean.TRUE.equals(user.getIsVerified())) {
-                    return Mono.just(new ResponseEntity<>(Objects.requireNonNull("このメールアドレスは既に認証済みです。ログインしてください。"), HttpStatus.BAD_REQUEST));
+                    return Mono.just(createResponse("このメールアドレスは既に認証済みです。ログインしてください。", HttpStatus.BAD_REQUEST));
                 }
 
                 String newToken = UUID.randomUUID().toString();
@@ -242,7 +247,7 @@ public class AuthController {
                         WebClient.create()
                             .post()
                             .uri(Objects.requireNonNull(n8nVerifyEmailWebhookUrl))
-                            .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
+                            .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON)) // ★ラップ
                             .bodyValue(Objects.requireNonNull(Map.of(
                                 "email", savedUser.getEmail(),
                                 "username", savedUser.getUsername(),
@@ -252,19 +257,17 @@ public class AuthController {
                             .toBodilessEntity()
                             .subscribe();
 
-                        return Mono.just(new ResponseEntity<>(Objects.requireNonNull("認証メールを再送しました。受信トレイを確認してください。"), HttpStatus.OK));
+                        return Mono.just(createResponse("認証メールを再送しました。受信トレイを確認してください。", HttpStatus.OK));
                     });
             })
-            .switchIfEmpty(Mono.just(new ResponseEntity<>(Objects.requireNonNull("そのメールアドレスは登録されていません。"), HttpStatus.NOT_FOUND)));
+            .switchIfEmpty(Mono.just(createResponse("そのメールアドレスは登録されていません。", HttpStatus.NOT_FOUND)));
     }
 
     // --- 自分のユーザー情報を取得するAPI ---
     @org.springframework.web.bind.annotation.GetMapping("/me")
     public Mono<ResponseEntity<Map<String, Object>>> getMyInfo(Principal principal) { 
-        
-        // Principalの@NonNullは外してあります（デッドコード回避）
         if (principal == null) {
-            return Mono.just(new ResponseEntity<>(HttpStatus.UNAUTHORIZED));
+            return Mono.just(new ResponseEntity<>(Objects.requireNonNull(HttpStatus.UNAUTHORIZED))); // ★ラップ
         }
 
         String username = principal.getName();
@@ -277,9 +280,9 @@ public class AuthController {
                 response.put("plan", user.getPlanType()); 
                 response.put("isPremium", "PREMIUM".equalsIgnoreCase(user.getPlanType()));
                 
-                return new ResponseEntity<>(Objects.requireNonNull(response), HttpStatus.OK);
+                return new ResponseEntity<>(Objects.requireNonNull(response), Objects.requireNonNull(HttpStatus.OK));
             })
-            .defaultIfEmpty(new ResponseEntity<>(HttpStatus.NOT_FOUND));
+            .defaultIfEmpty(new ResponseEntity<>(Objects.requireNonNull(HttpStatus.NOT_FOUND))); // ★ラップ
     }
 
     // --- DTO ---
@@ -289,13 +292,6 @@ public class AuthController {
         private String password;
 
         public AuthRequest() {}
-
-        public AuthRequest(String username, String email, String password) {
-            this.username = username;
-            this.email = email;
-            this.password = password;
-        }
-
         public String getUsername() { return username; }
         public void setUsername(String username) { this.username = username; }
         public String getEmail() { return email; }

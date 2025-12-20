@@ -1,6 +1,5 @@
 // src/utils/apiClient.js
 
-// APIのベースURL（必要に応じて変更）
 const BASE_URL = '/api/v1';
 
 export const apiClient = {
@@ -12,10 +11,7 @@ export const apiClient = {
 
 async function request(endpoint, method, body = null) {
   const token = localStorage.getItem('authToken');
-  
-  const headers = {
-    'Content-Type': 'application/json',
-  };
+  const headers = { 'Content-Type': 'application/json' };
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -28,23 +24,42 @@ async function request(endpoint, method, body = null) {
       body: body ? JSON.stringify(body) : null,
     });
 
-    // 401エラー（認証切れ）の共通処理
     if (res.status === 401) {
       localStorage.removeItem('authToken');
-      // 強制リダイレクトさせるか、呼び出し元で処理するか
-      // ここではステータスを返して呼び出し元に任せる
-      return { ok: false, status: 401, message: 'セッションが切れました。再ログインしてください。' };
     }
 
-    // レスポンスのパース（空の場合の対策）
     const text = await res.text();
-    let data = {};
-    try { data = JSON.parse(text); } catch { /* ignore */ }
+    let data = null;
+    let errorMessage = null;
+
+    // 1. JSONパースを試みる
+    try {
+      data = JSON.parse(text);
+    } catch {
+      // JSONじゃないなら、生テキストをそのままメッセージ候補にする
+      errorMessage = text;
+    }
 
     if (!res.ok) {
-        // エラーメッセージの優先順位: サーバーからのmsg > ステータスコード
-        const errorMsg = data.message || `Error: ${res.status}`;
-        return { ok: false, status: res.status, message: errorMsg, data };
+      // エラー時のメッセージ抽出ロジック（優先度順）
+      if (!errorMessage) {
+        if (typeof data === 'string') {
+          // パターンA: サーバーが "エラーです" (JSON文字列) を返した場合
+          errorMessage = data;
+        } else if (data && typeof data === 'object') {
+          // パターンB: サーバーが { message: "...", error: "..." } を返した場合
+          // messageプロパティ、なければ errorプロパティ、それもなければ detailプロパティを探す
+          errorMessage = data.message || data.error || data.detail;
+          
+          // それでも見つからなければ、オブジェクトを文字列化してみる（デバッグ用）
+          if (!errorMessage) errorMessage = JSON.stringify(data);
+        }
+      }
+
+      // 最終防衛ライン: 何も取れなかったらステータスコードを表示
+      const finalMsg = errorMessage || `Error: ${res.status} (${res.statusText})`;
+      
+      return { ok: false, status: res.status, message: finalMsg, data };
     }
 
     return { ok: true, status: res.status, data };

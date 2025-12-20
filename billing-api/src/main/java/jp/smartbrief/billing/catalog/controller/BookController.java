@@ -228,4 +228,24 @@ public class BookController {
             return worksFlux.map(work -> BookResponse.from(work, context.isPremium()));
         });
     }
+    // --- 【復活】サジェストAPI ---
+    // タイトルまたは著者名で検索し、候補を返す（上限10件）
+    @GetMapping("/suggest")
+    public Flux<BookResponse> suggest(
+            @RequestParam(name = "q") String query,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        
+        // 1文字などの短い入力は、負荷対策のため空を返す
+        if (query == null || query.trim().length() < 2) {
+            return Flux.empty();
+        }
+
+        return userContextService.resolveUserContext(authHeader).flatMapMany(context -> {
+            String searchPattern = "%" + query.trim() + "%";
+            
+            // 既存のキーワード検索ロジックを流用（limit=10, offset=0）
+            return workRepository.searchByKeyword(searchPattern, 10, 0)
+                    .map(work -> BookResponse.from(work, context.isPremium()));
+        });
+    }
 }

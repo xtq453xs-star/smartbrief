@@ -245,15 +245,34 @@ const BookSearch = ({ onBookSelect, onLogout }) => {
 
   const handleSearchSubmit = (e) => { e.preventDefault(); executeSearch(query); };
 
-  // サジェスト
+  // --- サジェスト機能（ここを修正） ---
   useEffect(() => {
-    if (!query.trim() || query.startsWith('ジャンル:')) { setSuggestions([]); return; }
+    // クエリがない、空文字、またはジャンル検索の場合は何もしない
+    if (!query || !query.trim() || query.startsWith('ジャンル:')) { 
+        setSuggestions([]); 
+        return; 
+    }
+
     const timer = setTimeout(async () => {
-       const data = await fetchData(`/books/suggest?q=${encodeURIComponent(query)}`);
-       if(data) { setSuggestions(data); setShowSuggestions(true); }
+        try {
+            // ★修正ポイント: 共通の fetchData ではなく、直接 apiClient を使う
+            // fetchDataを使うと、400エラー時にshowToastが出てしまうため
+            const encodedQ = encodeURIComponent(query.trim());
+            const res = await apiClient.get(`/books/suggest?q=${encodedQ}`);
+            
+            if (res.ok && res.data) {
+                 setSuggestions(res.data); 
+                 setShowSuggestions(true);
+            }
+            // エラー(res.ok === false)の場合は、何もせず無視する（トーストを出さない）
+        } catch (e) {
+            // 通信エラー等もコンソールに出すだけでユーザーには見せない
+            console.error("Suggestion silent error:", e);
+        }
     }, 300);
+
     return () => clearTimeout(timer);
-  }, [query, fetchData]);
+  }, [query]); 
 
   const scrollContainer = (ref, direction) => {
     if (ref.current) {
@@ -388,10 +407,7 @@ const styles = {
 
   // フォーム
   form: { display: 'flex', 
-    // ★修正: 10px だと間延びするので 4px に短縮
-    // (もしピッタリくっつけたい場合は 0 にしてください)
     gap: '0px', 
-    
     marginBottom: '30px', 
     maxWidth: '600px', 
     margin: '0 auto 30px auto', 
@@ -399,7 +415,6 @@ const styles = {
   },
   inputWrapper: { flex: 1, 
                   position: 'relative',
-                  // ★追加: これがないと、画面が狭くなった時にここが突っ張ってボタンを押し潰します
                   minWidth: 0,
   },
   input: { 
@@ -412,20 +427,16 @@ const styles = {
     backgroundColor: '#fff', 
     transition: 'border-color 0.2s', 
     fontFamily: theme.fonts.body,
-    // ★追加: パディング(内側の余白)を含めて幅100%にする設定
     boxSizing: 'border-box'
   },
   button: {
     ...theme.ui.buttonPrimary,
     borderRadius: '4px',
     fontWeight: 'bold',
-
-    flexShrink: 0,        // 1. 親要素が狭くなっても、このボタンは縮めない
-    whiteSpace: 'nowrap', // 2. 中のテキストを絶対に折り返させない
-    minWidth: '80px',     // 3. 最低でも80pxの幅を確保する
-    padding: '0 24px',    // 4. 横の余白をしっかり確保
-
-    // flexboxの設定（文字をど真ん中に置く）
+    flexShrink: 0,
+    whiteSpace: 'nowrap',
+    minWidth: '80px',
+    padding: '0 24px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',

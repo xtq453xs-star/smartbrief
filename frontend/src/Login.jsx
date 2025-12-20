@@ -28,7 +28,7 @@ const ActionButton = ({ onClick, disabled, children, secondary = false }) => (
     onClick={onClick}
     disabled={disabled}
     style={secondary ? styles.buttonSecondary : styles.buttonPrimary}
-    // hover効果は簡易的にJSで制御（CSS Modules化までのつなぎ）
+    // hover効果は簡易的にJSで制御
     onMouseOver={(e) => !disabled && (e.currentTarget.style.opacity = '0.9')}
     onMouseOut={(e) => !disabled && (e.currentTarget.style.opacity = '1')}
   >
@@ -38,7 +38,7 @@ const ActionButton = ({ onClick, disabled, children, secondary = false }) => (
 
 const Login = ({ onLogin }) => {
   const navigate = useNavigate();
-  const { success, error: showError } = useToast(); // ★トーストを使う
+  const { success, error: showError } = useToast();
   const [viewMode, setViewMode] = useState('login'); // 'login' or 'register'
   
   const [username, setUsername] = useState('');
@@ -46,40 +46,43 @@ const Login = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [agreed, setAgreed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // ★追加: 再送ボタンの表示制御
   const [showResendLink, setShowResendLink] = useState(false);
 
-  // ★リファクタリングされたログイン処理
+  // --- ログイン処理 ---
   const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    setShowResendLink(false);
+    setShowResendLink(false); // リセット
 
-    // apiClientを使うとこんなに短い！
     const res = await apiClient.post('/auth/login', { username, password });
 
     if (res.ok) {
-      success('おかえりなさい！'); // ★トースト表示
+      success('おかえりなさい！');
       onLogin(res.data.token);
       navigate('/');
     } else {
-      showError(res.message); // ★エラーもトースト（または画面表示）
-      if (res.status === 401 && res.message.includes('認証')) {
+      showError(res.message);
+      
+      // ★ここが重要: 401かつメッセージに「認証」が含まれていれば再送ボタンを表示
+      // (バックエンドのメッセージ: "メールアドレスの認証が完了していません...")
+      if (res.status === 401 && (res.message.includes('認証') || res.message.includes('verify'))) {
         setShowResendLink(true);
       }
     }
     setIsLoading(false);
   };
 
-  // ★リファクタリングされた新規登録処理
+  // --- 新規登録処理 ---
   const handleRegister = async (e) => {
     e.preventDefault();
-    if (!agreed) { showError('規約への同意が必要です。'); return; } // ★トースト
+    if (!agreed) { showError('規約への同意が必要です。'); return; }
     
     setIsLoading(true);
     const res = await apiClient.post('/auth/register', { username, email, password });
 
     if (res.ok) {
-        // 成功時はアラートではなく、画面を切り替えてトースト
         setViewMode('login');
         success('仮登録が完了しました！メールを確認してください。');
     } else {
@@ -88,16 +91,25 @@ const Login = ({ onLogin }) => {
     setIsLoading(false);
   };
 
-  // ★リファクタリングされた再送処理
+  // --- 認証メール再送処理 ---
   const handleResendEmail = async () => {
+    // ログインID欄に入力された値を使うため、メールアドレス形式かチェック
     if (!username.includes('@')) {
-        showError('ユーザーID欄にメールアドレスを入力してください。');
+        showError('再送するためには、ユーザーID欄に正確なメールアドレスを入力してください。');
         return;
     }
+    
+    setIsLoading(true); // 連打防止
+    // バックエンドは { email: "..." } を期待しているため、username を email として送信
     const res = await apiClient.post('/auth/resend-verification', { email: username });
     
-    if (res.ok) success('認証メールを再送しました。');
-    else showError('再送に失敗しました。');
+    if (res.ok) {
+        success('認証メールを再送しました。受信トレイを確認してください。');
+        setShowResendLink(false); // 送信できたらボタンを隠す
+    } else {
+        showError(res.message || '再送に失敗しました。');
+    }
+    setIsLoading(false);
   };
 
   return (
@@ -112,7 +124,7 @@ const Login = ({ onLogin }) => {
       <div style={styles.container}>
         <div style={styles.contentGrid}>
           
-          {/* 左側: サービス紹介（LPのような訴求エリア） */}
+          {/* 左側: サービス紹介 */}
           <div style={styles.infoColumn}>
             <div style={styles.featureBox}>
               <h3 style={styles.featureTitle}>📚 SmartBriefとは？</h3>
@@ -150,12 +162,14 @@ const Login = ({ onLogin }) => {
                   <InputField label="ユーザーID / Email" type="text" value={username} onChange={setUsername} placeholder="user@example.com" />
                   <InputField label="パスワード" type="password" value={password} onChange={setPassword} placeholder="" />
                   
-                  {/* 再送リンクエリア */}
+                  {/* ★再送リンクエリア */}
                   {showResendLink && (
                     <div style={styles.resendArea}>
-                        <p style={{fontSize:'13px', marginBottom:'5px', color: theme.colors.error}}>メールが届いていませんか？</p>
-                        <button type="button" onClick={handleResendEmail} style={styles.resendBtn}>
-                            📩 認証メールを再送する
+                        <p style={{fontSize:'13px', marginBottom:'5px', color: theme.colors.error}}>
+                            メール認証が完了していません。
+                        </p>
+                        <button type="button" onClick={handleResendEmail} style={styles.resendBtn} disabled={isLoading}>
+                            {isLoading ? '送信中...' : '📩 認証メールを再送する'}
                         </button>
                     </div>
                   )}
