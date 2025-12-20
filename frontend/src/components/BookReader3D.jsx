@@ -2,19 +2,48 @@ import React, { useRef, useState, useEffect } from 'react';
 import HTMLFlipBook from 'react-pageflip';
 
 // 長いテキストをページごとに分割する関数
-// ★修正: PC版で文字数が増えることを考慮し、1ページあたりの文字数を調整可能に
+// 段落（改行）を維持しつつ、溢れる場合は強制分割して「読了ワープ」を防ぐ
 const splitTextToPages = (text, charsPerPage) => {
   if (!text) return [];
+  const paragraphs = text.split('\n');
   const pages = [];
-  for (let i = 0; i < text.length; i += charsPerPage) {
-    pages.push(text.slice(i, i + charsPerPage));
+  let currentPage = "";
+
+  paragraphs.forEach((para) => {
+    let remainingPara = para;
+    
+    // 1段落が制限文字数より長い場合に備えたループ処理
+    while (remainingPara.length > 0) {
+      const availableSpace = charsPerPage - currentPage.length;
+      
+      if (remainingPara.length <= availableSpace) {
+        // 段落全体が現在のページに入る場合
+        currentPage += remainingPara + "\n";
+        remainingPara = "";
+      } else {
+        // 現在のページに入り切らない分を分割して追加
+        currentPage += remainingPara.substring(0, availableSpace);
+        pages.push(currentPage.trim());
+        currentPage = "";
+        remainingPara = remainingPara.substring(availableSpace);
+      }
+    }
+
+    // ページ容量の9割に達したら、キリよく次のページへ
+    if (currentPage.length > charsPerPage * 0.9) {
+      pages.push(currentPage.trim());
+      currentPage = "";
+    }
+  });
+
+  if (currentPage.trim()) {
+    pages.push(currentPage.trim());
   }
   return pages;
 };
 
 // 1ページ分のコンポーネント
 const Page = React.forwardRef((props, ref) => {
-  // 影のスタイル（前回と同じ）
   let shadowStyle = {};
   if (props.isCover) {
      shadowStyle = { boxShadow: 'inset 15px 0 20px -10px rgba(0, 0, 0, 0.2)' };
@@ -29,7 +58,6 @@ const Page = React.forwardRef((props, ref) => {
      }
   }
 
-  // ★修正: 文字サイズや行間を動的に受け取る
   const textStyle = {
       ...styles.textArea,
       fontSize: props.fontSize || '16px',
@@ -42,7 +70,6 @@ const Page = React.forwardRef((props, ref) => {
         <div style={styles.pageContent}>
           <div style={styles.pageHeader}>{props.number}</div>
           
-          {/* 本文エリア */}
           <div style={textStyle}>
             {props.children}
           </div>
@@ -57,59 +84,50 @@ const Page = React.forwardRef((props, ref) => {
 const BookReader3D = ({ title, bodyText, onClose }) => {
   const bookRef = useRef();
   
-  // ★追加: 画面サイズに応じた設定を管理するState
   const [bookSettings, setBookSettings] = useState({
       width: 350,
       height: 500,
       fontSize: '16px',
       lineHeight: '2.0',
-      charsPerPage: 350,
+      charsPerPage: 300,
       isMobile: true
   });
 
-  // ★追加: リサイズ検知ロジック
   useEffect(() => {
     const handleResize = () => {
         const winWidth = window.innerWidth;
         const winHeight = window.innerHeight;
         
-        // PC基準（幅が768px以上）
         if (winWidth > 768) {
-            // 画面の高さの85%くらいを本にする（最大800px）
             const newHeight = Math.min(winHeight * 0.85, 800);
-            // 黄金比に近い比率 (1 : 1.41) で幅を決める
             const newWidth = Math.floor(newHeight * 0.70);
             
             setBookSettings({
                 width: newWidth,
                 height: Math.floor(newHeight),
-                fontSize: '19px',      // PCなら文字大きく
-                lineHeight: '2.2',     // 行間もゆったり
-                charsPerPage: 550,     // ページが広い分、文字数も増やす
+                fontSize: '19px',
+                lineHeight: '2.2',
+                charsPerPage: 420, // ★ PC版: 550から420に調整して溢れを防止
                 isMobile: false
             });
         } else {
-            // スマホ基準（既存設定）
             setBookSettings({
                 width: 350,
                 height: 500,
                 fontSize: '16px',
                 lineHeight: '2.0',
-                charsPerPage: 350,
+                charsPerPage: 280, // ★ スマホ版も少し余裕を持たせる
                 isMobile: true
             });
         }
     };
 
-    // 初回実行
     handleResize();
-    // リサイズイベント登録
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const safeText = bodyText || "本文データがありません。";
-  // 設定に基づいてページ分割を実行
   const pages = splitTextToPages(safeText, bookSettings.charsPerPage);
 
   return (
@@ -130,10 +148,8 @@ const BookReader3D = ({ title, bodyText, onClose }) => {
           mobileScrollSupport={true}
           className="flip-book"
           ref={bookRef}
-          // ★重要: keyを変えることで、PC/スマホ切り替え時に再描画させる
           key={bookSettings.isMobile ? 'mobile' : 'pc'}
         >
-          {/* --- 表紙 --- */}
           <Page number="" title="" isCover={true} fontSize={bookSettings.fontSize}>
              <div style={{...styles.pageInterior, ...styles.coverPage}}>
                 <div style={styles.coverBorder}>
@@ -143,20 +159,18 @@ const BookReader3D = ({ title, bodyText, onClose }) => {
              </div>
           </Page>
 
-          {/* --- 本文ページ --- */}
           {pages.map((text, i) => (
              <Page 
                 key={i} 
                 number={i + 1} 
                 title={title}
-                fontSize={bookSettings.fontSize}     // 文字サイズを渡す
-                lineHeight={bookSettings.lineHeight} // 行間を渡す
+                fontSize={bookSettings.fontSize}
+                lineHeight={bookSettings.lineHeight}
              >
                {text}
              </Page>
           ))}
 
-          {/* --- 裏表紙 --- */}
           <Page number="" title="" isBackCover={true} fontSize={bookSettings.fontSize}>
              <div style={{...styles.pageInterior, ...styles.coverPage}}>
                 <div style={styles.coverBorder}>
@@ -170,7 +184,6 @@ const BookReader3D = ({ title, bodyText, onClose }) => {
   );
 };
 
-// スタイル定義（基本はそのまま）
 const styles = {
   overlay: {
     position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
@@ -186,13 +199,13 @@ const styles = {
   },
   bookContainer: {
     display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
-    width: '100%', height: '100%' // コンテナ自体も広げる
+    width: '100%', height: '100%'
   },
   pageInterior: {
     backgroundColor: '#fdfbf7',
     width: '100%',
     height: '100%',
-    padding: '20px',
+    padding: '25px', // パディングを少し広げる
     boxSizing: 'border-box',
     border: '1px solid #d7ccc8',
     color: '#333',
@@ -205,12 +218,15 @@ const styles = {
   pageHeader: { fontSize: '10px', color: '#999', textAlign: 'right', fontFamily: 'serif' },
   textArea: { 
     flex: 1, 
-    // fontSize, lineHeight は動的に上書きされるためここではデフォルト値
     fontFamily: '"Shippori Mincho", "Yu Mincho", serif', 
     textAlign: 'justify', 
     whiteSpace: 'pre-wrap', 
     overflow: 'hidden', 
-    padding: '10px 0'
+    padding: '10px 0',
+    display: 'flex',
+    flexDirection: 'column',
+    wordBreak: 'break-all',
+    marginBottom: '15px' // フッターとの衝突防止
   },
   pageFooter: { fontSize: '10px', color: '#999', textAlign: 'center', borderTop: '1px solid #eee', paddingTop: '8px' },
   coverPage: { 
