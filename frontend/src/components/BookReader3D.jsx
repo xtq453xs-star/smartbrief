@@ -107,7 +107,7 @@ const BookReader3D = ({ title, bodyText, onClose }) => {
                 height: Math.floor(newHeight),
                 fontSize: '19px',
                 lineHeight: '2.2',
-                charsPerPage: 420, // ★ PC版: 550から420に調整して溢れを防止
+                charsPerPage: 390, // ★ 420から390に少し減らす（安全マージン）
                 isMobile: false
             });
         } else {
@@ -116,7 +116,7 @@ const BookReader3D = ({ title, bodyText, onClose }) => {
                 height: 500,
                 fontSize: '16px',
                 lineHeight: '2.0',
-                charsPerPage: 280, // ★ スマホ版も少し余裕を持たせる
+                charsPerPage: 260, // ★ スマホも280から260に微減
                 isMobile: true
             });
         }
@@ -216,17 +216,20 @@ const styles = {
     height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' 
   },
   pageHeader: { fontSize: '10px', color: '#999', textAlign: 'right', fontFamily: 'serif' },
-  textArea: { 
+textArea: { 
     flex: 1, 
     fontFamily: '"Shippori Mincho", "Yu Mincho", serif', 
     textAlign: 'justify', 
     whiteSpace: 'pre-wrap', 
     overflow: 'hidden', 
-    padding: '10px 0',
+    paddingTop: '10px',
+    paddingBottom: '30px', // ★ 下にしっかり余白を作ることで、最後の一行を保護
+    paddingLeft: '5px',
+    paddingRight: '5px',
     display: 'flex',
     flexDirection: 'column',
     wordBreak: 'break-all',
-    marginBottom: '15px' // フッターとの衝突防止
+    boxSizing: 'border-box' // パディングを高さに含める
   },
   pageFooter: { fontSize: '10px', color: '#999', textAlign: 'center', borderTop: '1px solid #eee', paddingTop: '8px' },
   coverPage: { 
