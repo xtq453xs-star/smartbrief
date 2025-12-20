@@ -137,12 +137,12 @@ graph TD
 
 | 認証・セキュリティ | ダッシュボード |
 | :---: | :---: |
-| <img src="https://github.com/user-attachments/assets/40b33828-75ec-4553-b4a0-e59f8890b5d8" width="400" alt="認証画面" /> | <img src="https://github.com/user-attachments/assets/b3306f0b-8929-4b7e-9fa2-e7490d5ed483" width="400" alt="ダッシュボード" /> |
+| <img src="https://github.com/user-attachments/assets/b3306f0b-8929-4b7e-9fa2-e7490d5ed483" width="400" alt="認証画面" /> | <img src="https://github.com/user-attachments/assets/f33deedf-111d-421e-b723-55bb94d53508" width="400" alt="ダッシュボード" /> |
 | **メール再送機能**<br>到達確認を含む堅牢な認証フロー | **ホーム画面**<br>履歴・お気に入り・検索を集約 |
 
 | 翻訳リーダー | モバイル対応 |
 | :---: | :---: |
-| <img src="src="https://github.com/user-attachments/assets/eac45e5e-0857-45b8-baf9-082b61c50a97" width="400" alt="翻訳画面" /> | <img width="951" height="1725" alt="Image" src="https://github.com/user-attachments/assets/18a10ef0-9020-417b-810a-0549b308b6b3" /> |
+| <img src="https://github.com/user-attachments/assets/eac45e5e-0857-45b8-baf9-082b61c50a97" width="400" alt="翻訳画面" /> | <img width="951" height="1725" alt="Image" src="https://github.com/user-attachments/assets/18a10ef0-9020-417b-810a-0549b308b6b3" /> |
 | **翻訳モード**<br>AI翻訳によるシームレスな読書体験 | **レスポンシブ**<br>スマホでも快適なUI設計 |
 
 ---
