@@ -104,7 +104,7 @@ I/O待ち（DBアクセス、外部APIコール）が頻発するSaaSの特性�
 
 ## 4. フロントエンド設計 (Frontend Design)
 
-**Tech Stack:** React, Vite, CSS Modules, React Router
+**Tech Stack:** React 19, React Router v7, Vite (rolldown-vite), CSS（global）+ theme.js
 
 ### 4.1 UX Optimization
 - **Optimistic UI:** データのロード完了を待たずにスケルトンスクリーンを表示し、体感速度を向上。
@@ -113,7 +113,14 @@ I/O待ち（DBアクセス、外部APIコール）が頻発するSaaSの特性�
   - 無料会員が制限（10回）に達した際、専用のモーダルへ誘導。
   - 詳細画面では、テキストの一部をグラデーションで隠す「ティーザーUI」により、課金転換率（CVR）向上を狙った設計。
 
-### 4.2 Security Implementation
+### 4.2 API / 通知の統一 (Consistency)
+
+- **API Client:** `apiClient` によりAPIアクセスを統一（`/api/v1`、`{ ok, status, data, message }` の共通フォーマットで返却）。
+- **Toast通知:** 成功/失敗/認証切れ（401）などのメッセージ表示をトーストに集約し、画面ごとの実装差を抑制。
+- **JWTの取り扱い:** `authToken` を localStorage に保存し、APIリクエスト時は Authorization ヘッダを自動付与。
+- **レース回避:** ログイン時は **localStorage先書き → state更新** の順序で反映し、ログイン直後に認証判定が先行して401になる事象を抑止。
+
+### 4.3 Security Implementation
 - **XSS対策:** React の自動エスケープ機構に加え、Content Security Policy (CSP) でスクリプト実行元を厳密に制限。
 - **機密情報の保護:** LocalStorage にはパスワード等の機密情報を一切保存せず、JWTのみを管理。
 
