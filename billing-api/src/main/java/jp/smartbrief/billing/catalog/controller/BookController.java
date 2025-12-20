@@ -208,4 +208,24 @@ public class BookController {
                     .collect(Collectors.toList());
             });
     }
+    // --- ジャンル検索API (WorkRepository のメソッド名に合わせました) ---
+    @GetMapping("/search/genre")
+    public Flux<BookResponse> searchByGenre(
+            @RequestParam(name = "q") String genre,
+            @RequestParam(name = "limit", defaultValue = "50") int limit,
+            @RequestParam(name = "offset", defaultValue = "0") int offset,
+            @RequestParam(name = "sort", required = false) String sort,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        
+        return userContextService.resolveUserContext(authHeader).flatMapMany(context -> {
+            String searchPattern = "%" + genre.trim() + "%";
+            
+            // WorkRepository の定義済みメソッドを呼び出し
+            Flux<Work> worksFlux = "length_desc".equals(sort)
+                ? workRepository.findByGenreTagContainingOrderByLength(searchPattern, limit, offset)
+                : workRepository.findByGenreTagContaining(searchPattern, limit, offset);
+            
+            return worksFlux.map(work -> BookResponse.from(work, context.isPremium()));
+        });
+    }
 }
