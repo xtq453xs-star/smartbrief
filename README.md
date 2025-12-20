@@ -142,7 +142,7 @@ graph TD
 
 | 翻訳リーダー | モバイル対応 |
 | :---: | :---: |
-| <img src="https://github.com/user-attachments/assets/eac45e5e-0857-45b8-baf9-082b61c50a97" width="400" alt="翻訳画面" /> | <img width="951" height="1725" alt="Image" src="https://github.com/user-attachments/assets/18a10ef0-9020-417b-810a-0549b308b6b3" width="400" /> |
+| <img src="https://github.com/user-attachments/assets/eac45e5e-0857-45b8-baf9-082b61c50a97" width="400" alt="翻訳画面" /> | <<img src=="https://github.com/user-attachments/assets/18a10ef0-9020-417b-810a-0549b308b6b3" width="400" alt="スマホ画面" /> |
 | **翻訳モード**<br>AI翻訳によるシームレスな読書体験 | **レスポンシブ**<br>スマホでも快適なUI設計 |
 
 ---
