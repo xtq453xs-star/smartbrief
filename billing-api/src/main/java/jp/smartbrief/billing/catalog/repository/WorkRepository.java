@@ -61,7 +61,7 @@ public interface WorkRepository extends ReactiveCrudRepository<Work, Integer> {
     // 全ジャンルタグ (変更なし)
     @Query("SELECT genre_tag FROM works WHERE genre_tag IS NOT NULL")
     Flux<String> findAllGenreTags();
- // ★★★ Task 2: カテゴリによるフィルタリング（翻訳作品検索用） ★★★
+    // ★★★ Task 2: カテゴリによるフィルタリング（翻訳作品検索用） ★★★
     // LIMITとOFFSETに対応
     @Query("SELECT * FROM works WHERE category = :category ORDER BY work_id DESC LIMIT :limit OFFSET :offset")
     Flux<Work> findByCategory(String category, int limit, int offset);
