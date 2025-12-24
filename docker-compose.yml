@@ -22,8 +22,6 @@ services:
       - '--character-set-server=utf8mb4'
       - '--collation-server=utf8mb4_unicode_ci'
       
-    ports:
-      - "3306:3306"
     networks:
       n8n_data_ai_net:
         ipv4_address: 10.10.0.100
@@ -44,8 +42,6 @@ services:
     container_name: n8n_server
     restart: always
     user: root
-    ports:
-      - "5678:5678"
     environment:
       - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
       - N8N_USER_MANAGEMENT_ID=1000
@@ -99,8 +95,6 @@ services:
       dockerfile: Dockerfile
     container_name: billing-api
     restart: always
-    ports:
-      - "8080:8080"
     environment:
       - SPRING_R2DBC_URL=${BILLING_DB_URL}
       - SPRING_R2DBC_USERNAME=${BILLING_DB_USER}
@@ -137,9 +131,6 @@ services:
     volumes:
       - ./frontend:/app 
       - /app/node_modules 
-    
-    ports:
-      - "5173:5173"
     
     environment:
       - CHOKIDAR_USEPOLLING=true
