@@ -37,6 +37,6 @@ public class GlobalExceptionHandler {
         log.error("★★★ [Global Error Handler] Caught exception: ", ex);
         return Mono.just(ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body("Internal Server Error: " + ex.getMessage()));
+                .body("システムエラーが発生しました。しばらく経ってから再度お試しください。"));
     }
 }
