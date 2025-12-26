@@ -2,7 +2,6 @@ import React, { useRef, useState, useEffect } from 'react';
 import HTMLFlipBook from 'react-pageflip';
 
 // 長いテキストをページごとに分割する関数
-// 段落（改行）を維持しつつ、溢れる場合は強制分割して「読了ワープ」を防ぐ
 const splitTextToPages = (text, charsPerPage) => {
   if (!text) return [];
   const paragraphs = text.split('\n');
@@ -12,16 +11,13 @@ const splitTextToPages = (text, charsPerPage) => {
   paragraphs.forEach((para) => {
     let remainingPara = para;
     
-    // 1段落が制限文字数より長い場合に備えたループ処理
     while (remainingPara.length > 0) {
       const availableSpace = charsPerPage - currentPage.length;
       
       if (remainingPara.length <= availableSpace) {
-        // 段落全体が現在のページに入る場合
         currentPage += remainingPara + "\n";
         remainingPara = "";
       } else {
-        // 現在のページに入り切らない分を分割して追加
         currentPage += remainingPara.substring(0, availableSpace);
         pages.push(currentPage.trim());
         currentPage = "";
@@ -29,7 +25,6 @@ const splitTextToPages = (text, charsPerPage) => {
       }
     }
 
-    // ページ容量の9割に達したら、キリよく次のページへ
     if (currentPage.length > charsPerPage * 0.9) {
       pages.push(currentPage.trim());
       currentPage = "";
@@ -44,6 +39,8 @@ const splitTextToPages = (text, charsPerPage) => {
 
 // 1ページ分のコンポーネント
 const Page = React.forwardRef((props, ref) => {
+  const { isMobile } = props;
+
   let shadowStyle = {};
   if (props.isCover) {
      shadowStyle = { boxShadow: 'inset 15px 0 20px -10px rgba(0, 0, 0, 0.2)' };
@@ -61,7 +58,9 @@ const Page = React.forwardRef((props, ref) => {
   const textStyle = {
       ...styles.textArea,
       fontSize: props.fontSize || '16px',
-      lineHeight: props.lineHeight || '2.0'
+      lineHeight: props.lineHeight || '2.0',
+      // スマホなら80px(安全マージン)、PCなら30px
+      paddingBottom: isMobile ? '80px' : '30px', 
   };
 
   return (
@@ -99,6 +98,7 @@ const BookReader3D = ({ title, bodyText, onClose }) => {
         const winHeight = window.innerHeight;
         
         if (winWidth > 768) {
+            // PC設定
             const newHeight = Math.min(winHeight * 0.85, 800);
             const newWidth = Math.floor(newHeight * 0.70);
             
@@ -107,16 +107,21 @@ const BookReader3D = ({ title, bodyText, onClose }) => {
                 height: Math.floor(newHeight),
                 fontSize: '19px',
                 lineHeight: '2.2',
-                charsPerPage: 390, // ★ 420から390に少し減らす（安全マージン）
+                charsPerPage: 390,
                 isMobile: false
             });
         } else {
+            // ★再調整: スマホ設定
+            const safeMobileHeight = Math.floor(winHeight * 0.75);
+            
             setBookSettings({
                 width: 350,
-                height: 500,
-                fontSize: '16px',
-                lineHeight: '2.0',
-                charsPerPage: 260, // ★ スマホも280から260に微減
+                height: safeMobileHeight,
+                // ▼ ここを調整して密度を上げました ▼
+                fontSize: '15px',   // 16px -> 15px (少し小さくして収まりよく)
+                lineHeight: '1.85', // 2.0 -> 1.85 (行間を少し詰める)
+                charsPerPage: 280,  // 180 -> 235 (文字数を増やしてスカスカ解消)
+                // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
                 isMobile: true
             });
         }
@@ -150,7 +155,7 @@ const BookReader3D = ({ title, bodyText, onClose }) => {
           ref={bookRef}
           key={bookSettings.isMobile ? 'mobile' : 'pc'}
         >
-          <Page number="" title="" isCover={true} fontSize={bookSettings.fontSize}>
+          <Page number="" title="" isCover={true} fontSize={bookSettings.fontSize} isMobile={bookSettings.isMobile}>
              <div style={{...styles.pageInterior, ...styles.coverPage}}>
                 <div style={styles.coverBorder}>
                   <h2 style={styles.coverTitle}>{title}</h2>
@@ -166,12 +171,13 @@ const BookReader3D = ({ title, bodyText, onClose }) => {
                 title={title}
                 fontSize={bookSettings.fontSize}
                 lineHeight={bookSettings.lineHeight}
+                isMobile={bookSettings.isMobile} 
              >
                {text}
              </Page>
           ))}
 
-          <Page number="" title="" isBackCover={true} fontSize={bookSettings.fontSize}>
+          <Page number="" title="" isBackCover={true} fontSize={bookSettings.fontSize} isMobile={bookSettings.isMobile}>
              <div style={{...styles.pageInterior, ...styles.coverPage}}>
                 <div style={styles.coverBorder}>
                   <p style={styles.coverText}>読了</p>
@@ -186,7 +192,8 @@ const BookReader3D = ({ title, bodyText, onClose }) => {
 
 const styles = {
   overlay: {
-    position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+    position: 'fixed', top: 0, left: 0, width: '100vw',
+    height: '100dvh', 
     backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 9999,
     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
     backdropFilter: 'blur(5px)'
@@ -205,7 +212,7 @@ const styles = {
     backgroundColor: '#fdfbf7',
     width: '100%',
     height: '100%',
-    padding: '25px', // パディングを少し広げる
+    padding: '25px', 
     boxSizing: 'border-box',
     border: '1px solid #d7ccc8',
     color: '#333',
@@ -216,21 +223,27 @@ const styles = {
     height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' 
   },
   pageHeader: { fontSize: '10px', color: '#999', textAlign: 'right', fontFamily: 'serif' },
-textArea: { 
-    flex: 1, 
+  
+  textArea: { 
+    flex: 1,
+    minHeight: 0, 
+    
     fontFamily: '"Shippori Mincho", "Yu Mincho", serif', 
     textAlign: 'justify', 
     whiteSpace: 'pre-wrap', 
-    overflow: 'hidden', 
+    overflowY: 'auto', 
     paddingTop: '10px',
-    paddingBottom: '30px', // ★ 下にしっかり余白を作ることで、最後の一行を保護
+    
+    // paddingBottomは動的に設定
     paddingLeft: '5px',
     paddingRight: '5px',
     display: 'flex',
     flexDirection: 'column',
     wordBreak: 'break-all',
-    boxSizing: 'border-box' // パディングを高さに含める
+    boxSizing: 'border-box',
+    WebkitOverflowScrolling: 'touch',
   },
+  
   pageFooter: { fontSize: '10px', color: '#999', textAlign: 'center', borderTop: '1px solid #eee', paddingTop: '8px' },
   coverPage: { 
     display: 'flex', flexDirection: 'column', 
