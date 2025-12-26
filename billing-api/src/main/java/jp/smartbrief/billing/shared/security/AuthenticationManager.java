@@ -1,59 +1,67 @@
 package jp.smartbrief.billing.shared.security;
 
-import java.util.Collections;
-import java.util.List;
-
 import org.springframework.security.authentication.ReactiveAuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.stereotype.Component;
 
+import jp.smartbrief.billing.identity.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
 /**
  * リアクティブ認証マネージャー
- * 
- * JWT トークンを検証し、ユーザーの認証を行います。
- * トークンからユーザー名を抽出し、トークンの有効性を確認した上で
- * Authentication オブジェクトを返します。
+ * * 責務:
+ * 1. JWTトークンの検証 (形式チェック・期限チェック)
+ * 2. DBからのユーザー情報ロード (存在チェック・権限ロード)
+ * 3. Spring Security用 認証オブジェクトの生成
  */
 @Component
+@RequiredArgsConstructor
+@Slf4j
 public class AuthenticationManager implements ReactiveAuthenticationManager {
 
     private final JwtUtil jwtUtil;
-
-    public AuthenticationManager(JwtUtil jwtUtil) {
-        this.jwtUtil = jwtUtil;
-    }
+    private final UserRepository userRepository;
 
     @Override
     public Mono<Authentication> authenticate(Authentication authentication) {
         String authToken = authentication.getCredentials().toString();
         String username;
-        try {
-           System.out.println("🔍 [AuthManager] Token received: " + authToken.substring(0, 10) + "...");
-            
-            username = jwtUtil.extractUsername(authToken);
-        } catch (Exception e) {
-            System.out.println("❌ [AuthManager] Token extraction failed: " + e.getMessage());
-            // エラーを握りつぶさず、ログレベルをWARNなどに設定してSpring Logbackに任せるのが理想です
-            username = null;
-        }
 
-        if (username != null && jwtUtil.validateToken(authToken, username)) {
-            System.out.println("✅ [AuthManager] Token valid for user: " + username);
-            List<SimpleGrantedAuthority> authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"));
+        // --- Phase 1: トークンの解析と検証 (Fail-Fast) ---
+        try {
+            username = jwtUtil.extractUsername(authToken);
             
-            UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                username,
-                username,
-                authorities
-            );
-            return Mono.just(auth);
-        } else {
-            System.out.println("⚠️ [AuthManager] Token validation returned false (username=" + username + ")");
+            // ユーザー名が取れない、またはトークンが無効な場合は即座に終了
+            if (username == null || !jwtUtil.validateToken(authToken, username)) {
+                log.warn("Authentication failed: Token invalid or expired.");
+                return Mono.empty();
+            }
+        } catch (Exception e) {
+            log.warn("Authentication failed: Invalid token format. Error: {}", e.getMessage());
             return Mono.empty();
         }
+
+        // --- Phase 2: DB参照と認証オブジェクト生成 (Happy Path) ---
+        return userRepository.findByUsername(username)
+            .map(user -> {
+                log.debug("User authenticated successfully: {}", username);
+                
+                // PrincipalにUserエンティティそのものをセット
+                return new UsernamePasswordAuthenticationToken(
+                    user, 
+                    null, 
+                    user.getAuthorities()
+                );
+            })
+            // ★重要: ここで明示的に型を Authentication に変換します
+            .cast(Authentication.class)
+            // DBにユーザーがいなかった場合の処理
+            .switchIfEmpty(Mono.defer(() -> {
+                log.warn("Authentication failed: User not found in DB: {}", username);
+                return Mono.empty();
+            }));
     }
 }

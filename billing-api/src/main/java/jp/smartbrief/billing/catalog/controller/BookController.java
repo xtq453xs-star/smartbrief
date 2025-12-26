@@ -5,12 +5,12 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.function.Function;
+import java.util.Objects; // ★必須
 import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -21,105 +21,100 @@ import jp.smartbrief.billing.catalog.repository.UserBookHistoryRepository;
 import jp.smartbrief.billing.catalog.repository.UserFavoriteRepository;
 import jp.smartbrief.billing.catalog.repository.WorkRepository;
 import jp.smartbrief.billing.catalog.service.BookService;
-import jp.smartbrief.billing.identity.service.UserContextService; 
+import jp.smartbrief.billing.identity.domain.User;
+import jp.smartbrief.billing.shared.dto.UserContext;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
  * 書籍 API コントローラー
- * * すべてのビジネスロジックを BookService と UserContextService に移譲し、
+ * * すべてのビジネスロジックを BookService に移譲し、認証情報は Spring Security 標準機能で解決します。
  * コントローラーは「リクエストの受付と応答」に専念するプロフェッショナルな構成です。
  */
 @RestController
 @RequestMapping("/api/v1/books")
-@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:3000", "https://smartbrief.jp"})
 @RequiredArgsConstructor
 public class BookController {
 
     private final WorkRepository workRepository;
     private final UserBookHistoryRepository historyRepository;
     private final UserFavoriteRepository favoriteRepository;
-    private final UserContextService userContextService; 
     private final BookService bookService; 
 
     // --- 人気ランキングAPI ---
     @GetMapping("/ranking")
-    public Flux<BookResponse> getRanking(@RequestHeader(value = "Authorization", required = false) String authHeader) {
-        return userContextService.resolveUserContext(authHeader).flatMapMany(context -> 
-            historyRepository.findTopBookIds()
-                .collectList()
-                .flatMapMany(ids -> {
-                    if (ids.isEmpty()) return Flux.empty();
-                    return workRepository.findAllById(ids)
-                        .collectList()
-                        .flatMapMany(works -> {
-                            works.sort(Comparator.comparingInt(w -> ids.indexOf(w.getId())));
-                            return Flux.fromIterable(works);
-                        });
-                })
-                .map(work -> BookResponse.from(work, context.isPremium()))
-        );
+    public Flux<BookResponse> getRanking(@AuthenticationPrincipal User user) {
+        UserContext context = UserContext.from(user);
+
+        return historyRepository.findTopBookIds()
+            .collectList()
+            .flatMapMany(ids -> {
+                if (ids.isEmpty()) return Flux.empty();
+                return workRepository.findAllById(ids)
+                    .collectList()
+                    .flatMapMany(works -> {
+                        works.sort(Comparator.comparingInt(w -> ids.indexOf(w.getId())));
+                        return Flux.fromIterable(works);
+                    });
+            })
+            .map(work -> BookResponse.from(work, context.isPremium()));
     }
 
-    // --- 詳細API (軽量化対応済み) ---
+    // --- 詳細API ---
     @GetMapping("/{workId}")
     public Mono<ResponseEntity<BookResponse>> getBookDetail(
             @PathVariable Integer workId,
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+            @AuthenticationPrincipal User user) {
         
-        return userContextService.resolveUserContext(authHeader)
-            .flatMap(context -> {
-                if (!context.isAuthenticated()) {
-                    return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "ログインしてください"));
-                }
-                // 履歴保存・回数制限・本文セットまですべて Service で完結
-                return bookService.getBookDetailWithLimit(workId, context, 10);
-            })
+        UserContext context = UserContext.from(user);
+
+        if (!context.isAuthenticated()) {
+            return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "ログインしてください"));
+        }
+        
+        return bookService.getBookDetailWithLimit(Objects.requireNonNull(workId), context, 10)
             .map(ResponseEntity::ok);
     }
 
     // --- 閲覧履歴取得API ---
     @GetMapping("/history")
-    public Flux<BookResponse> getHistory(@RequestHeader(value = "Authorization", required = false) String authHeader) {
-        return userContextService.resolveUserContext(authHeader).flatMapMany(context -> {
-            if (!context.isAuthenticated()) return Flux.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
-            
-            return historyRepository.findHistoryByUserId(Objects.requireNonNull(context.userId()))
-                .flatMap(history -> 
-                    workRepository.findById(Objects.requireNonNull(history.getBookId()))
-                        .map(work -> BookResponse.from(work, context.isPremium()))
-                );
-        });
+    public Flux<BookResponse> getHistory(@AuthenticationPrincipal User user) {
+        UserContext context = UserContext.from(user);
+        if (!context.isAuthenticated()) return Flux.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        
+        return historyRepository.findHistoryByUserId(context.userId())
+            .filter(history -> history.getBookId() != null)
+            .flatMap(history -> 
+                workRepository.findById(Objects.requireNonNull(history.getBookId()))
+                    .map(work -> BookResponse.from(work, context.isPremium()))
+            );
     }
 
     // --- お気に入り一覧取得API ---
     @GetMapping("/favorites")
-    public Flux<BookResponse> getFavorites(@RequestHeader(value = "Authorization", required = false) String authHeader) {
-        return userContextService.resolveUserContext(authHeader).flatMapMany(context -> {
-            if (!context.isAuthenticated()) return Flux.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
-            
-            return favoriteRepository.findByUserIdOrderByCreatedAtDesc(Objects.requireNonNull(context.userId()))
-                .flatMap(fav -> 
-                    workRepository.findById(Objects.requireNonNull(fav.getBookId()))
-                        .map(work -> BookResponse.from(work, context.isPremium()))
-                );
-        });
+    public Flux<BookResponse> getFavorites(@AuthenticationPrincipal User user) {
+        UserContext context = UserContext.from(user);
+        if (!context.isAuthenticated()) return Flux.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        
+        return favoriteRepository.findByUserIdOrderByCreatedAtDesc(context.userId())
+            .filter(fav -> fav.getBookId() != null)
+            .flatMap(fav -> 
+                workRepository.findById(Objects.requireNonNull(fav.getBookId()))
+                    .map(work -> BookResponse.from(work, context.isPremium()))
+            );
     }
 
     // --- お気に入り登録状態チェック ---
     @GetMapping("/{workId}/favorite")
     public Mono<ResponseEntity<Map<String, Boolean>>> checkFavorite(
             @PathVariable Integer workId,
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+            @AuthenticationPrincipal User user) {
         
-        return userContextService.resolveUserContext(authHeader)
-            .flatMap(context -> {
-                if (!context.isAuthenticated()) return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
-                return favoriteRepository.existsByUserIdAndBookId(
-                    Objects.requireNonNull(context.userId()), 
-                    Objects.requireNonNull(workId));
-            })
+        UserContext context = UserContext.from(user);
+        if (!context.isAuthenticated()) return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        
+        return favoriteRepository.existsByUserIdAndBookId(context.userId(), Objects.requireNonNull(workId))
             .map(exists -> ResponseEntity.ok(Map.of("isFavorite", exists)));
     }
 
@@ -127,35 +122,38 @@ public class BookController {
     @PostMapping("/{workId}/favorite")
     public Mono<ResponseEntity<Map<String, Boolean>>> toggleFavorite(
             @PathVariable Integer workId,
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+            @AuthenticationPrincipal User user) {
         
-        return userContextService.resolveUserContext(authHeader)
-            .flatMap(context -> {
-                if (!context.isAuthenticated()) return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
-                
-                Long userId = Objects.requireNonNull(context.userId());
-                Integer bId = Objects.requireNonNull(workId);
+        UserContext context = UserContext.from(user);
+        if (!context.isAuthenticated()) return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        
+        Long userId = context.userId();
+        Integer safeWorkId = Objects.requireNonNull(workId);
+        
+        return favoriteRepository.existsByUserIdAndBookId(userId, safeWorkId)
+            .flatMap(exists -> {
+                if (exists) {
+                    return favoriteRepository.deleteByUserIdAndBookId(userId, safeWorkId)
+                            .thenReturn(ResponseEntity.ok(Map.of("isFavorite", false)));
+                } else {
+                    return workRepository.findById(safeWorkId)
+                        .flatMap(work -> {
+                            Integer bId = work.getId();
+                            if (bId == null) return Mono.error(new IllegalStateException("Work ID missing"));
 
-                return favoriteRepository.existsByUserIdAndBookId(userId, bId)
-                    .flatMap(exists -> {
-                        if (exists) {
-                            return favoriteRepository.deleteByUserIdAndBookId(userId, bId)
-                                    .thenReturn(ResponseEntity.ok(Map.of("isFavorite", false)));
-                        } else {
-                            return workRepository.findById(bId)
-                                .flatMap(work -> {
-                                    UserFavorite fav = UserFavorite.builder()
-                                        .userId(userId)
-                                        .bookId(work.getId())
-                                        .bookTitle(work.getTitle())
-                                        .authorName(work.getAuthorName())
-                                        .createdAt(LocalDateTime.now())
-                                        .build();
-                                    return favoriteRepository.save(Objects.requireNonNull(fav))
-                                        .thenReturn(ResponseEntity.ok(Map.of("isFavorite", true)));
-                                });
-                        }
-                    });
+                            UserFavorite fav = UserFavorite.builder()
+                                .userId(userId)
+                                .bookId(bId)
+                                .bookTitle(work.getTitle())
+                                .authorName(work.getAuthorName())
+                                .createdAt(LocalDateTime.now())
+                                .build();
+                            
+                            // ★修正: 生成したfavオブジェクトをrequireNonNullで包んで渡す
+                            return favoriteRepository.save(Objects.requireNonNull(fav))
+                                .thenReturn(ResponseEntity.ok(Map.of("isFavorite", true)));
+                        });
+                }
             });
     }
 
@@ -167,26 +165,57 @@ public class BookController {
             @RequestParam(name = "limit", defaultValue = "50") int limit,
             @RequestParam(name = "offset", defaultValue = "0") int offset,
             @RequestParam(name = "sort", required = false) String sort,
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+            @AuthenticationPrincipal User user) {
         
-        return userContextService.resolveUserContext(authHeader).flatMapMany(context -> {
-            Flux<Work> worksFlux;
-            if ("translation".equalsIgnoreCase(type)) {
-                worksFlux = "length_desc".equals(sort) 
-                    ? workRepository.findByCategoryOrderByLength("Gutenberg", limit, offset)
-                    : workRepository.findByCategory("Gutenberg", limit, offset);
-            } else {
-                if (query == null || query.isEmpty()) return Flux.empty();
-                String searchPattern = "%" + query.trim() + "%";
-                worksFlux = "length_desc".equals(sort)
-                    ? workRepository.searchByKeywordOrderByLength(searchPattern, limit, offset)
-                    : workRepository.searchByKeyword(searchPattern, limit, offset);
-            }
-            return worksFlux.map(work -> BookResponse.from(work, context.isPremium()));
-        });
+        UserContext context = UserContext.from(user);
+
+        Flux<Work> worksFlux;
+        if ("translation".equalsIgnoreCase(type)) {
+            worksFlux = "length_desc".equals(sort) 
+                ? workRepository.findByCategoryOrderByLength("Gutenberg", limit, offset)
+                : workRepository.findByCategory("Gutenberg", limit, offset);
+        } else {
+            if (query == null || query.isEmpty()) return Flux.empty();
+            String searchPattern = "%" + query.trim() + "%";
+            worksFlux = "length_desc".equals(sort)
+                ? workRepository.searchByKeywordOrderByLength(searchPattern, limit, offset)
+                : workRepository.searchByKeyword(searchPattern, limit, offset);
+        }
+        return worksFlux.map(work -> BookResponse.from(work, context.isPremium()));
     }
 
-    // --- その他、認証不要の静的なAPI群 ---
+    // --- ジャンル検索API ---
+    @GetMapping("/search/genre")
+    public Flux<BookResponse> searchByGenre(
+            @RequestParam(name = "q") String genre,
+            @RequestParam(name = "limit", defaultValue = "50") int limit,
+            @RequestParam(name = "offset", defaultValue = "0") int offset,
+            @RequestParam(name = "sort", required = false) String sort,
+            @AuthenticationPrincipal User user) {
+        
+        UserContext context = UserContext.from(user);
+        
+        String searchPattern = "%" + genre.trim() + "%";
+        Flux<Work> worksFlux = "length_desc".equals(sort)
+            ? workRepository.findByGenreTagContainingOrderByLength(searchPattern, limit, offset)
+            : workRepository.findByGenreTagContaining(searchPattern, limit, offset);
+        
+        return worksFlux.map(work -> BookResponse.from(work, context.isPremium()));
+    }
+
+    // --- サジェストAPI ---
+    @GetMapping("/suggest")
+    public Flux<BookResponse> suggest(
+            @RequestParam(name = "q") String query,
+            @AuthenticationPrincipal User user) {
+        UserContext context = UserContext.from(user);
+        if (query == null || query.trim().length() < 2) return Flux.empty();
+        String searchPattern = "%" + query.trim() + "%";
+        return workRepository.searchByKeyword(searchPattern, 10, 0)
+                .map(work -> BookResponse.from(work, context.isPremium()));
+    }
+
+    // --- 静的データAPI ---
     @GetMapping("/authors") public Mono<List<String>> getAuthors() { return workRepository.findTopAuthors().collectList(); }
     @GetMapping("/authors/all") public Mono<List<String>> getAllAuthors() { return workRepository.findAllAuthors().collectList(); }
     
@@ -200,52 +229,13 @@ public class BookController {
                     .flatMap(str -> Arrays.stream(str.split(",")))
                     .map(String::trim)
                     .filter(s -> !s.isEmpty())
-                    .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+                    .collect(Collectors.groupingBy(s -> s, Collectors.counting()));
+                
                 return tagCounts.entrySet().stream()
                     .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
                     .limit(40)
                     .map(Map.Entry::getKey)
                     .collect(Collectors.toList());
             });
-    }
-    // --- ジャンル検索API (WorkRepository のメソッド名に合わせました) ---
-    @GetMapping("/search/genre")
-    public Flux<BookResponse> searchByGenre(
-            @RequestParam(name = "q") String genre,
-            @RequestParam(name = "limit", defaultValue = "50") int limit,
-            @RequestParam(name = "offset", defaultValue = "0") int offset,
-            @RequestParam(name = "sort", required = false) String sort,
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
-        
-        return userContextService.resolveUserContext(authHeader).flatMapMany(context -> {
-            String searchPattern = "%" + genre.trim() + "%";
-            
-            // WorkRepository の定義済みメソッドを呼び出し
-            Flux<Work> worksFlux = "length_desc".equals(sort)
-                ? workRepository.findByGenreTagContainingOrderByLength(searchPattern, limit, offset)
-                : workRepository.findByGenreTagContaining(searchPattern, limit, offset);
-            
-            return worksFlux.map(work -> BookResponse.from(work, context.isPremium()));
-        });
-    }
-    // --- 【復活】サジェストAPI ---
-    // タイトルまたは著者名で検索し、候補を返す（上限10件）
-    @GetMapping("/suggest")
-    public Flux<BookResponse> suggest(
-            @RequestParam(name = "q") String query,
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
-        
-        // 1文字などの短い入力は、負荷対策のため空を返す
-        if (query == null || query.trim().length() < 2) {
-            return Flux.empty();
-        }
-
-        return userContextService.resolveUserContext(authHeader).flatMapMany(context -> {
-            String searchPattern = "%" + query.trim() + "%";
-            
-            // 既存のキーワード検索ロジックを流用（limit=10, offset=0）
-            return workRepository.searchByKeyword(searchPattern, 10, 0)
-                    .map(work -> BookResponse.from(work, context.isPremium()));
-        });
     }
 }

@@ -5,58 +5,47 @@ import java.util.Objects;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import jp.smartbrief.billing.identity.service.UserContextService;
-import jp.smartbrief.billing.payment.dto.BillingStatusDto;
+import jp.smartbrief.billing.identity.domain.User;
 import jp.smartbrief.billing.payment.service.BillingService;
+import jp.smartbrief.billing.shared.dto.UserContext;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Mono;
 
 /**
- * 課金・請求 API コントローラー
- * Stripe を利用した課金管理機能を提供します。
- * UserContextService を利用して認証と課金判定を一元化しました。
+ * 課金ポータル API
+ * * 責務: 既存の課金ユーザーを、解約・カード変更画面（Stripe Portal）へ誘導する
  */
 @RestController
 @RequestMapping("/api/v1/billing")
 @RequiredArgsConstructor
-@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:3000", "https://smartbrief.jp"})
 public class BillingController {
 
     private final BillingService billingService;
-    private final UserContextService userContextService;
 
-    // --- ステータス確認API ---
-    @GetMapping("/status")
-    public Mono<BillingStatusDto> getMyBillingStatus(
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+    @GetMapping("/portal")
+    public Mono<ResponseEntity<Map<String, String>>> createPortalSession(@AuthenticationPrincipal User user) {
+        UserContext context = UserContext.from(user);
 
-        return userContextService.resolveUserContext(authHeader)
-            .flatMap(context -> {
-                if (!context.isAuthenticated()) {
-                    return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "ログインしてください"));
-                }
-                // BillingService に解決済みの username を渡す
-                return billingService.getBillingStatus(Objects.requireNonNull(context.username()));
-            });
-    }
+        // 1. 認証ガード (Fail-Fast)
+        if (!context.isAuthenticated()) {
+            return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "ログインしてください"));
+        }
 
-    // --- カスタマーポータルURL発行API ---
-    @PostMapping("/portal")
-    public Mono<ResponseEntity<Map<String, String>>> createPortalSession(
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        // 2. 状態ガード
+        // StripeCustomerIdを持たない（＝課金実績がない）ユーザーはポータルを開けない
+        String customerId = context.rawUser().getStripeCustomerId();
+        if (customerId == null) {
+            return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST, "有料プランの登録情報が見つかりません"));
+        }
 
-        return userContextService.resolveUserContext(authHeader)
-            .flatMap(context -> {
-                if (!context.isAuthenticated()) {
-                    return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "ログインしてください"));
-                }
-                
-                // 内部のUserエンティティからStripe顧客IDを取得してポータル作成
-                return billingService.createPortalSession(Objects.requireNonNull(context.rawUser()))
-                    .map(url -> ResponseEntity.ok(Map.of("portalUrl", url)));
-            });
+        // 3. 処理実行 (Happy Path)
+        return billingService.createPortalSession(customerId)
+            .map(url -> ResponseEntity.ok(Map.of("url", Objects.requireNonNull(url))));
     }
 }

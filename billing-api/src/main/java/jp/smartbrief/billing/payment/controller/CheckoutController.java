@@ -1,90 +1,65 @@
 package jp.smartbrief.billing.payment.controller;
 
 import java.util.Map;
-import java.util.Objects; // ★使うので残します
+import java.util.Objects;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import jp.smartbrief.billing.identity.service.UserContextService;
-// ★ BillingService は使っていないので削除しました
-import com.stripe.Stripe;
-import com.stripe.model.checkout.Session;
-import com.stripe.param.checkout.SessionCreateParams;
-
-import jakarta.annotation.PostConstruct;
-import org.springframework.beans.factory.annotation.Value;
+import jp.smartbrief.billing.identity.domain.User;
+import jp.smartbrief.billing.payment.service.BillingService;
+import jp.smartbrief.billing.shared.dto.UserContext;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 /**
- * チェックアウト API コントローラー
- * 
- * Stripe チェックアウトセッションの作成を担当します。
- * ユーザーの購読プランの決済処理をサポートします。
+ * 決済チェックアウト API
+ * * 責務: ユーザーを有料プラン登録画面（Stripe）へ誘導する
  */
-
-@Slf4j
 @RestController
 @RequestMapping("/api/v1/checkout")
 @RequiredArgsConstructor
-@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:3000", "https://smartbrief.jp"})
 public class CheckoutController {
 
-    private final UserContextService userContextService;
-
-    @Value("${stripe.api-key}")
-    private String stripeApiKey;
-
-    private static final String PREMIUM_PRICE_ID = "price_1SbMi91XIhlvdbUYQHehYanJ"; 
-
-    @PostConstruct
-    public void init() {
-        Stripe.apiKey = stripeApiKey;
-    }
+    private final BillingService billingService;
 
     @PostMapping("/create-session")
     public Mono<ResponseEntity<Map<String, String>>> createCheckoutSession(
-            @RequestHeader(value = "Authorization", required = false) String authHeader) { 
+            @AuthenticationPrincipal User user,
+            @RequestBody(required = false) CheckoutRequest request) {
+
+        // 1. コンテキスト解決
+        UserContext context = UserContext.from(user);
         
-        return userContextService.resolveUserContext(authHeader)
-            .flatMap(context -> {
-                if (!context.isAuthenticated()) {
-                    return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "ログインしてください"));
-                }
+        // 2. 認証ガード (Fail-Fast)
+        if (!context.isAuthenticated()) {
+            return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "ログインが必要です"));
+        }
 
-                // ★ Mono.<Session> と型を明示して安全性を高めます
-                return Mono.<Session>fromCallable(() -> {
-                    String successUrl = "https://smartbrief.jp/payment/success?session_id={CHECKOUT_SESSION_ID}";
-                    String cancelUrl = "https://smartbrief.jp?canceled=true";
-                    
-                    // Metadata に入れる ID も Null ガード
-                    String userIdStr = String.valueOf(Objects.requireNonNull(context.userId()));
+        // 3. ビジネスルールガード
+        // 既にプレミアム会員のユーザーに、重ねて決済させない（二重課金防止 & UX向上）
+        if (context.isPremium()) {
+             return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST, "すでにプレミアムプランに登録済みです"));
+        }
 
-                    SessionCreateParams params = SessionCreateParams.builder()
-                            .addPaymentMethodType(SessionCreateParams.PaymentMethodType.CARD)
-                            .addLineItem(SessionCreateParams.LineItem.builder()
-                                    .setPrice(PREMIUM_PRICE_ID)
-                                    .setQuantity(1L)
-                                    .build())
-                            .setMode(SessionCreateParams.Mode.SUBSCRIPTION)
-                            .setSuccessUrl(successUrl)
-                            .setCancelUrl(cancelUrl)
-                            .putMetadata("userId", userIdStr) 
-                            .build();
+        // 4. 処理実行 (Happy Path)
+        // UserContextから取得するID/Usernameは、認証済みであればnullでない前提だが、requireNonNullで堅牢にする
+        return billingService.createCheckoutSession(
+                Objects.requireNonNull(context.userId()), 
+                Objects.requireNonNull(context.username())
+            )
+            .map(url -> ResponseEntity.ok(Map.of("url", Objects.requireNonNull(url))));
+    }
 
-                    return Session.create(params);
-                })
-                .subscribeOn(Schedulers.boundedElastic())
-                .map(session -> {
-                    // ★ session.getUrl() が Null にならないことを保証
-                    String url = Objects.requireNonNull(session.getUrl());
-                    return ResponseEntity.ok(Map.of("checkoutUrl", url));
-                });
-            });
+    @Data
+    static class CheckoutRequest {
+        private String priceId; // 将来の拡張用
     }
 }

@@ -1,42 +1,65 @@
 package jp.smartbrief.billing.shared.exception;
 
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.server.ResponseStatusException;
+import java.util.Map;
+import java.util.Objects; // ★必須
 
-import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.web.WebProperties;
+import org.springframework.boot.autoconfigure.web.reactive.error.AbstractErrorWebExceptionHandler;
+import org.springframework.boot.web.error.ErrorAttributeOptions;
+import org.springframework.boot.web.reactive.error.ErrorAttributes;
+import org.springframework.context.ApplicationContext;
+import org.springframework.core.annotation.Order;
+import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerCodecConfigurer;
+import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.BodyInserters;
+import org.springframework.web.reactive.function.server.*;
+
 import reactor.core.publisher.Mono;
 
 /**
- * グローバル例外ハンドラー
- * 
- * アプリケーション全体で発生した例外を一元管理します。
- * ResponseStatusException などの Spring Security 関連の例外を
- * 適切なステータスコードと共にクライアントに返します。
+ * グローバル例外ハンドラ
+ * * 責務: アプリケーション全体で発生した例外をキャッチし、統一されたJSON形式でクライアントに返す。
+ * 優先度を高く設定し(@Order(-2))、SpringデフォルトのHTMLエラーページが出ないようにする。
  */
-@Slf4j
-@RestControllerAdvice
-public class GlobalExceptionHandler {
+@Component
+@Order(-2)
+public class GlobalExceptionHandler extends AbstractErrorWebExceptionHandler {
 
-    @ExceptionHandler(Exception.class)
-    public Mono<ResponseEntity<String>> handleAllExceptions(Exception ex) {
+    public GlobalExceptionHandler(ErrorAttributes errorAttributes, WebProperties webProperties,
+                                  ApplicationContext applicationContext, ServerCodecConfigurer serverCodecConfigurer) {
+        super(errorAttributes, webProperties.getResources(), applicationContext);
+        this.setMessageWriters(serverCodecConfigurer.getWriters());
+    }
+
+    @Override
+    protected RouterFunction<ServerResponse> getRoutingFunction(ErrorAttributes errorAttributes) {
+        return RouterFunctions.route(RequestPredicates.all(), this::renderErrorResponse);
+    }
+
+    /**
+     * エラーレスポンスの生成
+     */
+    private Mono<ServerResponse> renderErrorResponse(ServerRequest request) {
+        // エラー属性の取得 (Spring Boot標準機能)
+        Map<String, Object> errorProperties = getErrorAttributes(request, ErrorAttributeOptions.defaults());
         
-        // ★修正ポイント: もしアプリが意図的に投げたエラー(403/404など)なら、そのステータスを尊重する
-        if (ex instanceof ResponseStatusException rse) {
-            // ログはINFOレベルで控えめに（バグではないため）
-            log.info("Handled expected exception: {} {}", rse.getStatusCode(), rse.getReason());
-            
-            return Mono.just(ResponseEntity
-                    .status(rse.getStatusCode())
-                    .body(rse.getReason()));
-        }
+        // エラー情報の抽出（Nullの場合はデフォルト値を設定）
+        int status = (int) errorProperties.getOrDefault("status", 500);
+        String message = (String) errorProperties.getOrDefault("message", "Unexpected error occurred");
+        String error = (String) errorProperties.getOrDefault("error", "Internal Server Error");
 
-        // それ以外の予期せぬエラー（バグなど）は、今まで通りログを出して500にする
-        log.error("★★★ [Global Error Handler] Caught exception: ", ex);
-        return Mono.just(ResponseEntity
-                .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body("システムエラーが発生しました。しばらく経ってから再度お試しください。"));
+        // 統一レスポンスボディの構築
+        Map<String, Object> body = Map.of(
+            "status", status,
+            "error", error,
+            "message", message, // フロントエンドへの表示用メッセージ
+            "path", request.path()
+        );
+
+        return ServerResponse.status(status)
+                // ★修正: 定数や生成したMapであっても、厳格な環境ではNullチェックを求められるためラップする
+                .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
+                .body(BodyInserters.fromValue(Objects.requireNonNull(body)));
     }
 }
