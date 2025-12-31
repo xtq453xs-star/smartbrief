@@ -73,7 +73,7 @@ services:
       - WEBHOOK_URL=${WEBHOOK_URL}
       - N8N_EDITOR_BASE_URL=${N8N_EDITOR_BASE_URL}
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
-      
+
       # ★DB設定を Postgres に変更
       - DB_TYPE=postgresdb
       - DB_POSTGRESDB_HOST=postgres_server
@@ -87,6 +87,7 @@ services:
       - ./n8n_data/.n8n:/home/node/.n8n
       - ./n8n_data/aozora_data/aozorabunko_text-master:/aozora
       - ./n8n_data/aozora_data:/n8n_files
+
     depends_on:
       postgres:
         condition: service_healthy
