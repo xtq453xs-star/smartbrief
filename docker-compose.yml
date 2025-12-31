@@ -73,6 +73,7 @@ services:
       - WEBHOOK_URL=${WEBHOOK_URL}
       - N8N_EDITOR_BASE_URL=${N8N_EDITOR_BASE_URL}
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - N8N_READ_DATA_PATH=/home/node/.n8n/
       
       # ★DB設定を Postgres に変更
       - DB_TYPE=postgresdb
