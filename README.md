@@ -81,7 +81,6 @@ v2.0では、**「切ない恋の話」「勇気が湧いてくる物語」**と
 ## 📐 System Architecture Diagram
 
 ```mermaid
-
 graph TD
     User((User)) -->|HTTPS / Zero Trust| CF[Cloudflare Edge]
     CF --> FE[React Frontend]
@@ -107,9 +106,8 @@ graph TD
     classDef search fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
     class FE,BE,GO,MySQL,Qdrant,n8n container
     class Gemini,Stripe,Gutenberg,CF search
-
     ```
-    
+
 ## 🛠 Development Episodes (Behind the Scenes)
 
 ### 1. 異言語間通信における「型」の壁を突破
