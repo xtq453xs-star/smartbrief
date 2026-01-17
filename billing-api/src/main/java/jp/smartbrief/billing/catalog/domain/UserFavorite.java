@@ -21,6 +21,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+// 修正後
 @Table("user_favorites")
 public class UserFavorite {
     @Id

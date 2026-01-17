@@ -40,26 +40,28 @@ public class GlobalExceptionHandler extends AbstractErrorWebExceptionHandler {
     /**
      * エラーレスポンスの生成
      */
+    // 既存の renderErrorResponse メソッドをこれに置き換え
     private Mono<ServerResponse> renderErrorResponse(ServerRequest request) {
-        // エラー属性の取得 (Spring Boot標準機能)
         Map<String, Object> errorProperties = getErrorAttributes(request, ErrorAttributeOptions.defaults());
         
-        // エラー情報の抽出（Nullの場合はデフォルト値を設定）
         int status = (int) errorProperties.getOrDefault("status", 500);
-        String message = (String) errorProperties.getOrDefault("message", "Unexpected error occurred");
-        String error = (String) errorProperties.getOrDefault("error", "Internal Server Error");
+        Throwable errorObj = getError(request);
+        
+        // 開発者向けにサーバーログにはエラーを1行だけ残す
+        if (errorObj != null) {
+            System.err.println("⚠ [GlobalErrorHandler] " + errorObj.getClass().getSimpleName() + " at " + request.path());
+        }
 
-        // 統一レスポンスボディの構築
+        // クライアント（ブラウザ）へ返すJSONをシンプルにする
         Map<String, Object> body = Map.of(
             "status", status,
-            "error", error,
-            "message", message, // フロントエンドへの表示用メッセージ
+            "error", "Internal Server Error",
+            "message", "Unexpected error occurred", // 詳細は隠す
             "path", request.path()
         );
 
         return ServerResponse.status(status)
-                // ★修正: 定数や生成したMapであっても、厳格な環境ではNullチェックを求められるためラップする
-                .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
-                .body(BodyInserters.fromValue(Objects.requireNonNull(body)));
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(BodyInserters.fromValue(body));
     }
 }

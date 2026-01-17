@@ -15,6 +15,7 @@ import lombok.NoArgsConstructor; // 追加
  * ユーザーが閲覧した書籍の履歴を記録します。
  * ユーザーID、書籍 ID、タイトル、著者名、閲覧時刻などを保持します。
  */
+// 修正後
 @Table("user_book_history")
 @Data
 @NoArgsConstructor // 引数なしコンストラクタがあると安心

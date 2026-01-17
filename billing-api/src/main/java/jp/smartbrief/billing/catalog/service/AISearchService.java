@@ -1,5 +1,6 @@
 package jp.smartbrief.billing.catalog.service;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -8,8 +9,11 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import com.fasterxml.jackson.databind.ObjectMapper; // ★追加
+
 import jp.smartbrief.billing.catalog.domain.Work;
 import jp.smartbrief.billing.catalog.dto.AISearchResponse;
+import jp.smartbrief.billing.catalog.dto.AISearchResponse.ScoredPoint;
 import jp.smartbrief.billing.catalog.repository.WorkRepository;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Flux;
@@ -19,9 +23,8 @@ import reactor.core.publisher.Flux;
 public class AISearchService {
 
     private final WorkRepository workRepository;
-    // Docker内でのGoサービスのホスト名: search_api_go (docker-composeのcontainer_name) または search-api (service名)
-    // ここではサービス名の "search-api" を使います
     private final WebClient webClient = WebClient.create("http://search-api:8081");
+    private final ObjectMapper objectMapper = new ObjectMapper(); // ★JSON解析機
 
     public Flux<Work> searchBySemantics(String query) {
         return webClient.get()
@@ -29,27 +32,49 @@ public class AISearchService {
                         .queryParam("q", query)
                         .build())
                 .retrieve()
-                .bodyToMono(AISearchResponse.class)
-                .flatMapMany(response -> {
-                    if (response.result() == null || response.result().isEmpty()) {
+                // ★修正: 型を決めつけず、まずは「生の文字列」として受け取る
+                .bodyToMono(String.class)
+                .flatMapMany(json -> {
+                    // ログに出すので、何が起きているか一目瞭然になります
+                    System.out.println("🔍 Go Search Response: " + json);
+
+                    List<ScoredPoint> points;
+                    try {
+                        // ★ここが最強ポイント: 先頭の文字で判定！
+                        if (json.trim().startsWith("[")) {
+                            // 配列 [...] なら
+                            ScoredPoint[] array = objectMapper.readValue(json, ScoredPoint[].class);
+                            points = Arrays.asList(array);
+                        } else {
+                            // オブジェクト {...} なら
+                            AISearchResponse response = objectMapper.readValue(json, AISearchResponse.class);
+                            points = response.result();
+                        }
+                    } catch (Exception e) {
+                        System.err.println("🔥 JSON Parse Error: " + e.getMessage());
+                        return Flux.error(e);
+                    }
+
+                    if (points == null || points.isEmpty()) {
                         return Flux.empty();
                     }
 
-                    // 1. Goから返ってきた ID と スコア のリスト
-                    List<AISearchResponse.ScoredPoint> points = response.result();
+                    // --- ここからは共通ロジック ---
                     List<Integer> ids = points.stream()
-                            .map(p -> p.id().intValue())
+                            // ★修正: p.id() ではなく、自作した p.getIdAsLong() を使う
+                            .map(p -> {
+                                Long val = p.getIdAsLong();
+                                return (val != null) ? val.intValue() : null;
+                            })
+                            .filter(id -> id != null) // nullは除外
                             .toList();
-
-                    // 2. MySQLから詳細情報を一括取得 (順不同)
+                            
                     return workRepository.findAllById(ids)
                             .collectList()
                             .flatMapMany(works -> {
-                                // 3. Goのスコア順(元のIDリストの順序)に並べ直す
                                 Map<Integer, Work> workMap = works.stream()
                                         .collect(Collectors.toMap(Work::getId, Function.identity()));
 
-                                // IDリストの順番通りにWorkオブジェクトを並べて返す
                                 return Flux.fromIterable(ids)
                                         .filter(workMap::containsKey)
                                         .map(workMap::get);
