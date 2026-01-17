@@ -28,8 +28,8 @@ const (
 
 func getEmbedding(ctx context.Context, text string) ([]float32, error) {
 	runes := []rune(text)
-	if len(runes) > 2000 {
-		text = string(runes[:2000])
+	if len(runes) > 10000 {
+		text = string(runes[:10000])
 	}
 
 	apiKey := os.Getenv("GOOGLE_API_KEY")
@@ -117,6 +117,7 @@ func main() {
 				}
 
 				batchCount := 0
+				//並列処理を30件に変更
 				const numWorkers = 30
 				jobs := make(chan struct {
 					id                  uint64
