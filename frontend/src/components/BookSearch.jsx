@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Footer from './Footer';
-import { theme } from '../theme'; // ★ theme.js をインポート
+import { theme } from '../theme';
 import { apiClient } from '../utils/apiClient';
 import { useToast } from '../contexts/ToastContext';
 
@@ -148,6 +148,9 @@ const BookSearch = ({ onBookSelect, onLogout }) => {
   const [activeTab, setActiveTab] = useState('all'); 
   const [rankingBooks, setRankingBooks] = useState([]);
 
+  // ★ AI検索モード切り替え用ステート
+  const [searchMode, setSearchMode] = useState('keyword'); // 'keyword' or 'ai'
+
   const LIMIT = 50; 
   const [searchParams] = useSearchParams(); 
   
@@ -177,12 +180,22 @@ const BookSearch = ({ onBookSelect, onLogout }) => {
 
     try {
       let url = '';
-      const params = `limit=${LIMIT}&offset=${newOffset}&sort=length_desc`;
       const encodedWord = encodeURIComponent(word);
 
-      if (type === 'text') url = `/books/search?q=${encodedWord}&${params}`;
-      else if (type === 'genre') url = `/books/search/genre?q=${encodedWord}&${params}`;
-      else if (type === 'translation') url = `/books/search?type=translation&${params}`;
+      // ★ AI検索の場合はパラメータ生成ロジックを変える
+      if (type === 'ai') {
+          url = `/books/search/ai?q=${encodedWord}`;
+          // AI検索は現状ページネーション未対応（Top10を返す仕様）のため、これ以上のロードは止める
+          if (isAppend) {
+             setLoading(false); setListLoading(false); return; 
+          }
+      } else {
+          // 通常検索
+          const params = `limit=${LIMIT}&offset=${newOffset}&sort=length_desc`;
+          if (type === 'text') url = `/books/search?q=${encodedWord}&${params}`;
+          else if (type === 'genre') url = `/books/search/genre?q=${encodedWord}&${params}`;
+          else if (type === 'translation') url = `/books/search?type=translation&${params}`;
+      }
 
       const data = await fetchData(url);
       
@@ -209,7 +222,11 @@ const BookSearch = ({ onBookSelect, onLogout }) => {
     setQuery(searchWord);
     setSuggestions([]); setShowSuggestions(false);
     setActiveTab('all');
-    fetchBooks('text', searchWord, 0, false);
+    
+    // ★ 検索モードに応じてタイプを切り替え
+    const type = searchMode === 'ai' ? 'ai' : 'text';
+    fetchBooks(type, searchWord, 0, false);
+    
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -232,6 +249,8 @@ const BookSearch = ({ onBookSelect, onLogout }) => {
 
   const loadMore = () => {
     if (!hasMore || listLoading) return;
+    // AI検索はページネーションしないのでスキップ
+    if (currentSearchType === 'ai') return;
     fetchBooks(currentSearchType, lastSearchWord, offset + LIMIT, true);
   };
 
@@ -245,9 +264,14 @@ const BookSearch = ({ onBookSelect, onLogout }) => {
 
   const handleSearchSubmit = (e) => { e.preventDefault(); executeSearch(query); };
 
-  // --- サジェスト機能（ここを修正） ---
+  // --- サジェスト機能 ---
   useEffect(() => {
-    // クエリがない、空文字、またはジャンル検索の場合は何もしない
+    // ★ AIモードのときはサジェストを出さない（文章入力がメインのため）
+    if (searchMode === 'ai') {
+        setSuggestions([]);
+        return;
+    }
+
     if (!query || !query.trim() || query.startsWith('ジャンル:')) { 
         setSuggestions([]); 
         return; 
@@ -255,8 +279,6 @@ const BookSearch = ({ onBookSelect, onLogout }) => {
 
     const timer = setTimeout(async () => {
         try {
-            // ★修正ポイント: 共通の fetchData ではなく、直接 apiClient を使う
-            // fetchDataを使うと、400エラー時にshowToastが出てしまうため
             const encodedQ = encodeURIComponent(query.trim());
             const res = await apiClient.get(`/books/suggest?q=${encodedQ}`);
             
@@ -264,15 +286,13 @@ const BookSearch = ({ onBookSelect, onLogout }) => {
                  setSuggestions(res.data); 
                  setShowSuggestions(true);
             }
-            // エラー(res.ok === false)の場合は、何もせず無視する（トーストを出さない）
         } catch (e) {
-            // 通信エラー等もコンソールに出すだけでユーザーには見せない
             console.error("Suggestion silent error:", e);
         }
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [query]); 
+  }, [query, searchMode]); // searchMode依存を追加
 
   const scrollContainer = (ref, direction) => {
     if (ref.current) {
@@ -320,6 +340,22 @@ const BookSearch = ({ onBookSelect, onLogout }) => {
         </div>
       )}
       
+      {/* ★ 検索モード切り替えトグル (ここに追加！) */}
+      <div style={styles.toggleContainer}>
+          <button 
+              style={searchMode === 'keyword' ? styles.toggleActive : styles.toggle}
+              onClick={() => { setSearchMode('keyword'); setQuery(''); setBooks([]); }}
+          >
+              キーワード検索
+          </button>
+          <button 
+              style={searchMode === 'ai' ? styles.toggleActiveAi : styles.toggle}
+              onClick={() => { setSearchMode('ai'); setQuery(''); setBooks([]); }}
+          >
+              ✨ AI感情検索
+          </button>
+      </div>
+
       {/* 検索フォーム */}
       <form onSubmit={handleSearchSubmit} style={styles.form}>
         <div style={styles.inputWrapper}>
@@ -327,12 +363,17 @@ const BookSearch = ({ onBookSelect, onLogout }) => {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onFocus={() => query && !query.startsWith('ジャンル:') && setShowSuggestions(true)}
+            onFocus={() => query && !query.startsWith('ジャンル:') && searchMode !== 'ai' && setShowSuggestions(true)}
             onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-            placeholder="作品名・作家名で検索..."
+            // ★ モードに応じてプレースホルダーを切り替え
+            placeholder={
+                searchMode === 'ai' 
+                ? "例：切なくて涙が出るような物語、勇気が湧いてくる話" 
+                : "作品名・作家名で検索..."
+            }
             style={styles.input}
           />
-          {showSuggestions && suggestions.length > 0 && (
+          {showSuggestions && suggestions.length > 0 && searchMode !== 'ai' && (
             <ul style={styles.suggestionList}>
               {suggestions.map((item, i) => (
                 <li key={i} style={styles.suggestionItem} onMouseDown={() => {setQuery(item.title); setSuggestions([]); onBookSelect(item.id);}}>
@@ -347,6 +388,14 @@ const BookSearch = ({ onBookSelect, onLogout }) => {
           {loading ? '...' : '検索'}
         </button>
       </form>
+
+      {/* AI検索時のヒント表示 */}
+      {searchMode === 'ai' && !query && (
+          <p style={styles.aiHint}>
+              ※ AI検索では、作品の「雰囲気」や「読後の感情」を入力して検索できます。<br/>
+              単語ではなく、文章で入力すると精度が上がります。
+          </p>
+      )}
 
       {/* タブ */}
       <div style={styles.tabWrapper}>
@@ -363,14 +412,16 @@ const BookSearch = ({ onBookSelect, onLogout }) => {
       {/* 検索結果グリッド */}
       <div style={{marginBottom: '40px'}}>
         {loading && !listLoading ? (
-          <div style={styles.loadingContainer}>読み込み中...</div>
+          <div style={styles.loadingContainer}>
+              {searchMode === 'ai' ? 'AIが思考の海から本を探しています...' : '書架を探しています...'}
+          </div>
         ) : books.length > 0 ? (
           <>
             <div style={styles.grid}>
               {books.map((book, i) => <BookCardItem key={`${book.id}-${i}`} book={book} index={i} onClick={() => onBookSelect(book.id)} />)}
             </div>
 
-            {hasMore && (
+            {hasMore && currentSearchType !== 'ai' && (
               <div style={{textAlign: 'center', marginTop: '40px'}}>
                 <button onClick={loadMore} disabled={listLoading} style={styles.loadMoreButton}>
                   {listLoading ? '読み込み中...' : 'もっと見る'}
@@ -404,6 +455,14 @@ const styles = {
   subText: { color: theme.colors.textSub, fontSize: '14px', letterSpacing: '1px' },
   
   sectionTitle: { fontSize: '18px', color: theme.colors.primary, marginBottom: '20px', fontWeight: 'bold', fontFamily: theme.fonts.heading },
+
+  // ★トグルスタイル（追加）
+  toggleContainer: { display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '20px' },
+  toggle: { padding: '8px 20px', borderRadius: '25px', border: 'none', background: '#e2e8f0', cursor: 'pointer', color: '#64748b', fontWeight: 'bold', fontSize: '13px', transition: '0.2s' },
+  toggleActive: { padding: '8px 20px', borderRadius: '25px', border: 'none', background: theme.colors.primary, cursor: 'default', color: '#fff', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(0,0,0,0.1)', fontSize: '13px' },
+  toggleActiveAi: { padding: '8px 20px', borderRadius: '25px', border: 'none', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', cursor: 'default', color: '#fff', fontWeight: 'bold', boxShadow: '0 4px 10px rgba(118, 75, 162, 0.4)', fontSize: '13px' },
+  
+  aiHint: { fontSize: '12px', color: theme.colors.textSub, marginTop: '-20px', marginBottom: '30px', textAlign: 'center', lineHeight: '1.6' },
 
   // フォーム
   form: { display: 'flex', 
