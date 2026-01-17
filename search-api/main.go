@@ -8,43 +8,94 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"sync"
+	"regexp"
+	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/google/generative-ai-go/genai"
-	"google.golang.org/api/option"
 
 	pb "github.com/qdrant/go-client/qdrant"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+// 設定定数
 const (
-	CollectionName = "works_vector"
-	VectorSize     = 768
-	QdrantPort     = "6334"
+	CollectionName = "works_vector_local"
+	VectorSize     = 1024
+	OllamaEndpoint = "http://host.docker.internal:11434/api/embeddings"
+	MaxEmbedLength = 400 // Ollama用に短く制限
+	MinTextLength  = 100
 )
 
+// getEmbedding: ローカルのOllamaを叩く
 func getEmbedding(ctx context.Context, text string) ([]float32, error) {
+	// 1. 文字数カット
 	runes := []rune(text)
-	if len(runes) > 10000 {
-		text = string(runes[:10000])
+	if len(runes) > MaxEmbedLength {
+		text = string(runes[:MaxEmbedLength])
 	}
 
-	apiKey := os.Getenv("GOOGLE_API_KEY")
-	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
+	// 2. リクエストの作成
+	type OllamaRequest struct {
+		Model  string `json:"model"`
+		Prompt string `json:"prompt"`
+	}
+
+	reqBody := OllamaRequest{
+		Model:  "mxbai-embed-large",
+		Prompt: text,
+	}
+
+	jsonPayload, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, err
 	}
-	defer client.Close()
 
-	em := client.EmbeddingModel("text-embedding-004")
-	res, err := em.EmbedContent(ctx, genai.Text(text))
+	// 3. Ollamaへ送信
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Post(OllamaEndpoint, "application/json", strings.NewReader(string(jsonPayload)))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Ollama connection failed: %v", err)
 	}
-	return res.Embedding.Values, nil
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("Ollama returned status: %d", resp.StatusCode)
+	}
+
+	var response struct {
+		Embedding []float32 `json:"embedding"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return nil, fmt.Errorf("Ollama decode error: %v", err)
+	}
+
+	return response.Embedding, nil
+}
+
+func cleanBody(body string) string {
+	const separator = "-------------------------------------------------------"
+	if strings.Contains(body, separator) {
+		parts := strings.Split(body, separator)
+		body = parts[len(parts)-1]
+	}
+	reHeader := regexp.MustCompile(`(?s)【テキスト中に現れる記号について】.*?(\n\n|$)`)
+	body = reHeader.ReplaceAllString(body, "")
+	reRuby := regexp.MustCompile(`《.*?》|［＃.*?］`)
+	body = reRuby.ReplaceAllString(body, "")
+	body = strings.ReplaceAll(body, "-", "")
+	body = strings.ReplaceAll(body, "─", "")
+	body = strings.ReplaceAll(body, "\r", "")
+	return strings.TrimSpace(body)
+}
+
+func safeSubtitle(text string, length int) string {
+	runes := []rune(text)
+	if len(runes) <= length {
+		return text
+	}
+	return string(runes[:length])
 }
 
 func newQdrantClient() (pb.QdrantClient, *grpc.ClientConn, error) {
@@ -52,7 +103,7 @@ func newQdrantClient() (pb.QdrantClient, *grpc.ClientConn, error) {
 	if host == "" {
 		host = "qdrant"
 	}
-	addr := fmt.Sprintf("%s:%s", host, QdrantPort)
+	addr := fmt.Sprintf("%s:6334", host)
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	return pb.NewQdrantClient(conn), conn, err
 }
@@ -67,9 +118,8 @@ func main() {
 			return
 		}
 		defer conn.Close()
-
-		collectionsClient := pb.NewCollectionsClient(conn)
-		_, err = collectionsClient.Create(ctx, &pb.CreateCollection{
+		client := pb.NewCollectionsClient(conn)
+		_, err = client.Create(ctx, &pb.CreateCollection{
 			CollectionName: CollectionName,
 			VectorsConfig: &pb.VectorsConfig{
 				Config: &pb.VectorsConfig_Params{
@@ -80,157 +130,121 @@ func main() {
 		if err != nil {
 			fmt.Fprintf(w, "Setup log: %v\n", err)
 		} else {
-			fmt.Fprintln(w, "Collection created!")
+			fmt.Fprintln(w, "Collection created (Simple Mode)!")
 		}
 	})
 
-	// ② Indexing (MySQL -> Qdrant) - full_text対応 & 1.7万件完走版
+	// ② Indexing: シンプル化
 	http.HandleFunc("/index", func(w http.ResponseWriter, r *http.Request) {
 		go func() {
+			log.Println("🚀 Simple Indexing started...")
 			dsn := os.Getenv("MYSQL_DSN")
 			db, err := sql.Open("mysql", dsn)
 			if err != nil {
-				log.Printf("MySQL connect error: %v", err)
 				return
 			}
 			defer db.Close()
-
 			_, conn, err := newQdrantClient()
 			if err != nil {
-				log.Printf("Qdrant connect error: %v", err)
 				return
 			}
 			defer conn.Close()
-			pointsClient := pb.NewPointsClient(conn)
+			pClient := pb.NewPointsClient(conn)
 
-			totalCount := 0
 			offset := 0
 			limit := 1000
-
 			for {
-				// ★ full_text カラムを読み込み、work_id 順に取得
-				query := fmt.Sprintf("SELECT work_id, title, author_name, full_text FROM works WHERE full_text IS NOT NULL AND full_text != '' ORDER BY work_id ASC LIMIT %d OFFSET %d", limit, offset)
+				query := fmt.Sprintf("SELECT work_id, title, author_name, full_text FROM works WHERE full_text IS NOT NULL AND CHAR_LENGTH(full_text) > %d ORDER BY work_id ASC LIMIT %d OFFSET %d", MinTextLength, limit, offset)
 				rows, err := db.Query(query)
 				if err != nil {
-					log.Printf("Query error at offset %d: %v", offset, err)
 					break
 				}
 
 				batchCount := 0
-				//並列処理を30件に変更
-				const numWorkers = 30
-				jobs := make(chan struct {
-					id                  uint64
-					title, author, body string
-				}, numWorkers*2)
-
-				var wg sync.WaitGroup
-				ctx := context.Background()
-
-				for i := 0; i < numWorkers; i++ {
-					wg.Add(1)
-					go func() {
-						defer wg.Done()
-						for job := range jobs {
-							// 全文だと長すぎる場合があるので、getEmbedding内の rune制限(2000) で安全に処理
-							vector, err := getEmbedding(ctx, fmt.Sprintf("タイトル: %s, 著者: %s, 内容: %s", job.title, job.author, job.body))
-							if err != nil {
-								// API制限(429)が出た場合は、少し待機してリトライするなどの処理が必要ですが、一旦スキップ
-								continue
-							}
-							_, _ = pointsClient.Upsert(ctx, &pb.UpsertPoints{
-								CollectionName: CollectionName,
-								Points: []*pb.PointStruct{
-									{
-										Id: &pb.PointId{PointIdOptions: &pb.PointId_Num{Num: job.id}},
-										Vectors: &pb.Vectors{
-											VectorsOptions: &pb.Vectors_Vector{
-												Vector: &pb.Vector{Data: vector},
-											},
-										},
-										Payload: map[string]*pb.Value{
-											"title":  {Kind: &pb.Value_StringValue{StringValue: job.title}},
-											"author": {Kind: &pb.Value_StringValue{StringValue: job.author}},
-										},
-									},
-								},
-							})
-						}
-					}()
-				}
-
 				for rows.Next() {
 					var id uint64
 					var title, author, body string
 					if err := rows.Scan(&id, &title, &author, &body); err == nil {
-						jobs <- struct {
-							id                  uint64
-							title, author, body string
-						}{id, title, author, body}
+						cleaned := cleanBody(body)
+
+						// ★ここをシンプル化★
+						// タイトルと本文を改行でつなぐだけ。ラベル（作品名:など）は削除。
+						// これで「羅生門」と検索した時に、先頭のタイトルに強く反応するはず。
+						inputText := fmt.Sprintf("%s %s %s\n%s", title, title, title, cleaned)
+
+						vec, err := getEmbedding(context.Background(), inputText)
+						if err != nil {
+							log.Printf("Skip ID %d: %v", id, err)
+							continue
+						}
+
+						_, _ = pClient.Upsert(context.Background(), &pb.UpsertPoints{
+							CollectionName: CollectionName,
+							Points: []*pb.PointStruct{{
+								Id:      &pb.PointId{PointIdOptions: &pb.PointId_Num{Num: id}},
+								Vectors: &pb.Vectors{VectorsOptions: &pb.Vectors_Vector{Vector: &pb.Vector{Data: vec}}},
+								Payload: map[string]*pb.Value{
+									"title":   {Kind: &pb.Value_StringValue{StringValue: title}},
+									"author":  {Kind: &pb.Value_StringValue{StringValue: author}},
+									"preview": {Kind: &pb.Value_StringValue{StringValue: safeSubtitle(cleaned, 200)}},
+								},
+							}},
+						})
 						batchCount++
+						if id%100 == 0 {
+							log.Printf("Processing ID: %d", id)
+						}
 					}
 				}
 				rows.Close()
-				close(jobs)
-				wg.Wait()
-
 				if batchCount == 0 {
 					break
 				}
-
-				totalCount += batchCount
-				log.Printf("✅ Batch Finished: %d / 17846 completed", totalCount)
 				offset += limit
-
-				// Gemini API の Rate Limit (1500RPM) 対策で、1バッチ(1000件)ごとに3秒休憩
-				time.Sleep(3 * time.Second)
 			}
-			log.Printf("🎉🎊 MISSION COMPLETE! Total: %d works indexed.", totalCount)
+			log.Println("🎉 Simple Indexing Complete!")
 		}()
-
-		fmt.Fprintf(w, "Background indexing started for 17,846 works. Check logs!")
+		fmt.Fprintln(w, "Simple indexing started.")
 	})
 
-	// ③ Search
+	// ③ Search: シンプル化
 	http.HandleFunc("/search", func(w http.ResponseWriter, r *http.Request) {
-		query := r.URL.Query().Get("q")
-		if query == "" {
-			http.Error(w, "Query parameter 'q' is required", 400)
+		rawQuery := r.URL.Query().Get("q")
+		if rawQuery == "" {
 			return
 		}
 
-		vector, err := getEmbedding(context.Background(), query)
+		// ★ここもシンプル化★
+		// 検索クエリをそのまま投げる（タイトル検索も本文検索もよしなに拾わせる）
+		log.Printf("🔍 Query: %s", rawQuery)
+		vec, err := getEmbedding(context.Background(), rawQuery)
 		if err != nil {
-			http.Error(w, "Embedding failed", 500)
+			http.Error(w, err.Error(), 500)
 			return
 		}
 
 		_, conn, err := newQdrantClient()
 		if err != nil {
-			http.Error(w, "DB connect failed", 500)
 			return
 		}
 		defer conn.Close()
+		pClient := pb.NewPointsClient(conn)
 
-		pointsClient := pb.NewPointsClient(conn)
-		searchRes, err := pointsClient.Search(context.Background(), &pb.SearchPoints{
+		res, err := pClient.Search(context.Background(), &pb.SearchPoints{
 			CollectionName: CollectionName,
-			Vector:         vector,
+			Vector:         vec,
 			Limit:          10,
 			WithPayload:    &pb.WithPayloadSelector{SelectorOptions: &pb.WithPayloadSelector_Enable{Enable: true}},
 		})
 		if err != nil {
-			log.Printf("Search error: %v", err)
-			http.Error(w, "Search failed", 500)
+			http.Error(w, err.Error(), 500)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(searchRes.Result)
+		json.NewEncoder(w).Encode(res.Result)
 	})
 
-	log.Println("Go Search Service running on :8081")
-	if err := http.ListenAndServe(":8081", nil); err != nil {
-		log.Fatal(err)
-	}
+	log.Println("Local Search API running on :8081")
+	http.ListenAndServe(":8081", nil)
 }

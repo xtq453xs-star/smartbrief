@@ -164,15 +164,18 @@ services:
     container_name: search_api_go
     restart: always
     ports:
-      - "8081:8081" 
+      - "8081:8081" # 動作確認用。本番では隠蔽してもOK
     environment:
+      # ここで好きなAIのキーを設定できます
       - GOOGLE_API_KEY=${GOOGLE_API_KEY} # ベクトル化に使う
       - GROQ_API_KEY=${GROQ_API_KEY}     # 検索結果の要約に使う
       - QDRANT_HOST=qdrant
       - MYSQL_DSN=${MYSQL_USER}:${MYSQL_PASSWORD}@tcp(mysql_server:3306)/aozora_db?charset=utf8mb4
-      - VECTOR_DIMENSION=768             # Googleのモデルは768次元
+      - VECTOR_DIMENSION=1024 # ★重要: mxbai-embed-largeを使うなら1024に変更
     depends_on:
       - qdrant
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - n8n_data_ai_net
 
