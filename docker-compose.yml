@@ -166,10 +166,11 @@ services:
     ports:
       - "8081:8081" 
     environment:
-      - AI_PROVIDER=vertex 
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY} 
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY} # ベクトル化に使う
+      - GROQ_API_KEY=${GROQ_API_KEY}     # 検索結果の要約に使う
       - QDRANT_HOST=qdrant
+      - MYSQL_DSN=${MYSQL_USER}:${MYSQL_PASSWORD}@tcp(mysql_server:3306)/aozora_db?charset=utf8mb4
+      - VECTOR_DIMENSION=768             # Googleのモデルは768次元
     depends_on:
       - qdrant
     networks:

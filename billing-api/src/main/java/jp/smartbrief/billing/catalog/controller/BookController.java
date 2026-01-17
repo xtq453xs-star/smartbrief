@@ -24,6 +24,7 @@ import jp.smartbrief.billing.catalog.service.BookService;
 import jp.smartbrief.billing.identity.domain.User;
 import jp.smartbrief.billing.shared.dto.UserContext;
 import lombok.RequiredArgsConstructor;
+import jp.smartbrief.billing.catalog.service.AISearchService; // ★ここを修正しました！
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -41,7 +42,21 @@ public class BookController {
     private final UserBookHistoryRepository historyRepository;
     private final UserFavoriteRepository favoriteRepository;
     private final BookService bookService; 
+    private final AISearchService aiSearchService; // コンストラクタ注入に追加
 
+    // --- AI感情検索API (New!) ---
+    @GetMapping("/search/ai")
+    public Flux<BookResponse> searchByAi(
+            @RequestParam(name = "q") String query,
+            @AuthenticationPrincipal User user) {
+        
+        UserContext context = UserContext.from(user);
+        
+        // Goのサービスを呼び出して検索
+        return aiSearchService.searchBySemantics(query)
+                .map(work -> BookResponse.from(work, context.isPremium()));
+    }
+    
     // --- 人気ランキングAPI ---
     @GetMapping("/ranking")
     public Flux<BookResponse> getRanking(@AuthenticationPrincipal User user) {

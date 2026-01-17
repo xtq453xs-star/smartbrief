@@ -55,3 +55,12 @@ nodes/
 
 # 自分用スクリプト
 watch_docker_compose.ps1
+
+# --- Go (Search API) ---
+# ビルド生成物（バイナリ）を除外
+search-api/main
+search-api/main.exe
+*.exe
+
+# Goのモジュールキャッシュなど（もしローカルに生成された場合）
+search-api/vendor/
