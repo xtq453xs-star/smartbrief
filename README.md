@@ -106,7 +106,7 @@ graph TD
     classDef search fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
     class FE,BE,GO,MySQL,Qdrant,n8n container
     class Gemini,Stripe,Gutenberg,CF search
-    ```
+```
 
 ## 🛠 Development Episodes (Behind the Scenes)
 
