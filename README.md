@@ -80,7 +80,8 @@ v2.0では、**「切ない恋の話」「勇気が湧いてくる物語」**と
 
 ## 📐 System Architecture Diagram
 
-```mermaid
+```
+mermaid
 graph TD
     User((User)) -->|HTTPS / Zero Trust| CF[Cloudflare Edge]
     CF --> FE[React Frontend]
@@ -88,7 +89,7 @@ graph TD
     
     FE -->|REST API / JWT| BE[Spring Boot API]
     
-    subgraph "AI Search Cluster"
+    subgraph AI_Search_Cluster [AI Search Cluster]
         BE <-->|Internal API| GO[Go Search API]
         GO <-->|Embedding| Gemini[Google Gemini AI]
         GO <-->|Vector Search| Qdrant[Qdrant Vector DB]
@@ -97,16 +98,16 @@ graph TD
     BE -->|R2DBC| MySQL[MySQL DB]
     BE <-->|Subscription| Stripe[Stripe API]
     
-    subgraph "Content Factory"
+    subgraph Content_Factory [Content Factory]
         n8n[n8n Workflow] -->|Batch Fetch| Gutenberg[Project Gutenberg]
         n8n -->|Store| MySQL
     end
 
-    classDef container fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
-    classDef search fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px;
-    FE,BE,GO,MySQL,Qdrant,n8n container;
-    Gemini,Stripe,Gutenberg,CF search;
-```
+    classDef container fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef search fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    class FE,BE,GO,MySQL,Qdrant,n8n container
+    class Gemini,Stripe,Gutenberg,CF search
+    ```
 ## 🛠 Development Episodes (Behind the Scenes)
 
 ### 1. 異言語間通信における「型」の壁を突破
