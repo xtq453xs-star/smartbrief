@@ -20,7 +20,8 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table("works")
+// 修正後: データベース名を明示的に指定します
+@Table("aozora_db.works")
 public class Work {
     @Id
     @Column("work_id")

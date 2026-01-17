@@ -28,8 +28,8 @@ public interface UserBookHistoryRepository extends R2dbcRepository<UserBookHisto
 
     // 既存のメソッド（人気ランキング用ID取得）
     // ※もしネイティブクエリで書いている場合はそのままでOKです。
-    // ここでは一般的なクエリメソッドの例として書いておきます。
-    @Query("SELECT book_id FROM user_book_history GROUP BY book_id ORDER BY COUNT(book_id) DESC LIMIT 10")
+    // 修正後: WHERE句を追加してNULL安全に
+    @Query("SELECT book_id FROM user_book_history WHERE book_id IS NOT NULL GROUP BY book_id ORDER BY COUNT(book_id) DESC LIMIT 10")
     Flux<Integer> findTopBookIds();
 
     // ★★★ 今回のエラーを解消するために追加するメソッド ★★★
