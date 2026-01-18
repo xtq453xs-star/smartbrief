@@ -83,20 +83,39 @@ v2.0では、**「切ない恋の話」「勇気が湧いてくる物語」**と
 
 ```mermaid
 graph TD
-    User((User)) --> FE[React Frontend]
-    FE --> BE[Spring Boot API]
+    User((User)) -->|HTTPS / Zero Trust| CF[Cloudflare Tunnel]
+    CF --> FE[React Frontend]
+    FE -->|REST API| BE[Spring Boot API]
+
+    subgraph "Core Backend"
+        BE <-->|Auth & Data| MySQL[(MySQL DB)]
+        BE <-->|Subscription| Stripe[Stripe API]
+    end
+
+    subgraph "Hybrid AI Engine"
+        direction TB
+        BE -->|Request| Dify[Dify Orchestrator]
+        Dify <-->|Inference (Llama3)| Groq[Groq Cloud API]
+        
+        subgraph "Local GPU Cluster (RTX 3070)"
+            Dify -->|Tool Call| GO[Go Search Service]
+            GO <-->|Embedding| Ollama[Ollama (mxbai-embed)]
+            GO <-->|Vector Search| Qdrant[(Qdrant DB)]
+        end
+    end
+
+    subgraph "Content Factory"
+        n8n[n8n Workflow] -->|Batch Fetch| Gutenberg[Project Gutenberg]
+        n8n -->|Store Content| MySQL
+    end
+
+    classDef container fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef external fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef local fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
     
-    subgraph Local_Infra [Your PC / Local GPU]
-        GO[Go Search API] <-->|Vectorize| Ollama[Ollama / mxbai-embed]
-        GO <-->|Search| Qdrant[Qdrant DB]
-    end
-
-    subgraph Cloud_AI [Inference Layer]
-        Dify[Dify Workflow] <-->|Tool Call| GO
-        Dify <-->|Fast Chat| Groq[Groq / Llama3]
-    end
-
-    BE <--> Dify
+    class FE,BE,MySQL,n8n container
+    class CF,Stripe,Groq,Dify,Gutenberg external
+    class GO,Ollama,Qdrant local
 ```
 
 ## 🛠 Development Episodes (Behind the Scenes)
