@@ -34,10 +34,11 @@ v2.0では、**「切ない恋の話」「勇気が湧いてくる物語」**と
 
 ## 💡 技術的ハイライト & システム設計
 
-### 1. 🧠 AI Intelligence: 感情・文脈による「意味検索」
-キーワードの一致ではなく、ユーザーの感性に寄り添う検索体験を構築しました。
-- **Gemini Embedding**: Google Gemini AIを活用し、1.7万件におよぶ蔵書データの文脈・雰囲気を高次元ベクトルに変換。
-- **ベクトル検索 (Qdrant)**: ベクトルデータベース「Qdrant」を導入。ミリ秒単位の類似度計算により、曖昧なワードから最適な一冊を提案します。
+### 1. 🧠 Hybrid RAG: ローカルGPUとクラウドAIの融合
+コストと速度を両立するため、RAG（検索拡張生成）の工程を最適化しました。
+- **Local Embedding (Ollama)**: RTX 3070のGPUリソースを活用。`mxbai-embed-large`モデルを自前運用し、1.7万件の蔵書を**完全無料・プライバシー重視**でベクトル化。
+- **高速推論 (Groq)**: 検索結果に基づく回答生成には、世界最速級の推論エンジン「Groq」を採用。思考のスピードでAI司書が回答します。
+- **セマンティック検索**: 「勇気で試練を乗り越える」といった抽象的なクエリから、文脈を理解して『坊っちゃん』を導き出す高度な検索精度を実現。
 
 ### 2. 🏗️ マルチ言語マイクロサービス・アーキテクチャ
 システム負荷の最適化と保守性の向上のため、役割に応じた言語選択（Polyglot）を行っています。
@@ -82,30 +83,20 @@ v2.0では、**「切ない恋の話」「勇気が湧いてくる物語」**と
 
 ```mermaid
 graph TD
-    User((User)) -->|HTTPS / Zero Trust| CF[Cloudflare Edge]
-    CF --> FE[React Frontend]
-    User -->|LINE Messaging| LINE[LINE Bot]
+    User((User)) --> FE[React Frontend]
+    FE --> BE[Spring Boot API]
     
-    FE -->|REST API / JWT| BE[Spring Boot API]
-    
-    subgraph AI_Search_Cluster [AI Search Cluster]
-        BE <-->|Internal API| GO[Go Search API]
-        GO <-->|Embedding| Gemini[Google Gemini AI]
-        GO <-->|Vector Search| Qdrant[Qdrant Vector DB]
-    end
-    
-    BE -->|R2DBC| MySQL[MySQL DB]
-    BE <-->|Subscription| Stripe[Stripe API]
-    
-    subgraph Content_Factory [Content Factory]
-        n8n[n8n Workflow] -->|Batch Fetch| Gutenberg[Project Gutenberg]
-        n8n -->|Store| MySQL
+    subgraph Local_Infra [Your PC / Local GPU]
+        GO[Go Search API] <-->|Vectorize| Ollama[Ollama / mxbai-embed]
+        GO <-->|Search| Qdrant[Qdrant DB]
     end
 
-    classDef container fill:#e1f5fe,stroke:#01579b,stroke-width:2px
-    classDef search fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    class FE,BE,GO,MySQL,Qdrant,n8n container
-    class Gemini,Stripe,Gutenberg,CF search
+    subgraph Cloud_AI [Inference Layer]
+        Dify[Dify Workflow] <-->|Tool Call| GO
+        Dify <-->|Fast Chat| Groq[Groq / Llama3]
+    end
+
+    BE <--> Dify
 ```
 
 ## 🛠 Development Episodes (Behind the Scenes)
