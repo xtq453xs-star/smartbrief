@@ -71,7 +71,7 @@ v2.0では、**「切ない恋の話」「勇気が湧いてくる物語」**と
 | カテゴリ | 技術・ツール | 選定理由 |
 | :--- | :--- | :--- |
 | **Backend** | **Java 21, Spring Boot 3** | WebFluxによるノンブロッキングI/Oと堅牢なセキュリティ統括。 |
-| **Search (AI)** Go 1.22, Ollama, Groq | ローカルGPUによるベクトル化と、Groqによる超高速推論のハイブリッド構成。 |
+| **Search (AI)** |Go 1.22, Ollama, Groq | ローカルGPUによるベクトル化と、Groqによる超高速推論のハイブリッド構成。 |
 | **Frontend** | **React 19, Vite** | React Router v7 を採用。コンポーネント指向による高度なUI管理。 |
 | **Database** | **MySQL 8.0 / Qdrant** | 構造化データとベクトルデータのハイブリッド管理。 |
 | **Infra** | **Docker, Cloudflare** | コンテナ化による可搬性とゼロトラストによる安全な公開。 |
