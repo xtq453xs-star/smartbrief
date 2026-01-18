@@ -87,24 +87,24 @@ graph TD
     CF --> FE[React Frontend]
     FE -->|REST API| BE[Spring Boot API]
 
-    subgraph "Core Backend"
-        BE <-->|Auth & Data| MySQL[(MySQL DB)]
-        BE <-->|Subscription| Stripe[Stripe API]
+    subgraph Core_Backend [Core Backend]
+        BE <--> MySQL[(MySQL DB)]
+        BE <--> Stripe[Stripe API]
     end
 
-    subgraph "Hybrid AI Engine"
+    subgraph Hybrid_AI_Engine [Hybrid AI Engine]
         direction TB
-        BE -->|Request| Dify[Dify Orchestrator]
-        Dify <-->|Inference (Llama3)| Groq[Groq Cloud API]
+        BE --> Dify[Dify Orchestrator]
+        Dify <-->|Inference| Groq[Groq Cloud API]
         
-        subgraph "Local GPU Cluster (RTX 3070)"
+        subgraph Local_GPU_Cluster [Local GPU Cluster]
             Dify -->|Tool Call| GO[Go Search Service]
-            GO <-->|Embedding| Ollama[Ollama (mxbai-embed)]
+            GO <-->|Embedding| Ollama[Ollama]
             GO <-->|Vector Search| Qdrant[(Qdrant DB)]
         end
     end
 
-    subgraph "Content Factory"
+    subgraph Content_Factory [Content Factory]
         n8n[n8n Workflow] -->|Batch Fetch| Gutenberg[Project Gutenberg]
         n8n -->|Store Content| MySQL
     end
