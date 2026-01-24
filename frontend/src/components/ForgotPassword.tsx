@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Footer from './Footer';
-import { theme } from '../theme'; // theme.js をインポート
+import { theme } from '../theme'; 
 import { apiClient } from '../utils/apiClient';
 import { useToast } from '../contexts/ToastContext';
 
-const ForgotPassword = () => {
+const ForgotPassword: React.FC = () => {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -13,7 +13,8 @@ const ForgotPassword = () => {
   const navigate = useNavigate();
   const { showToast } = useToast();
 
-  const handleSubmit = async (e) => {
+  // ★ イベントの型を React.FormEvent に指定
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage('');
@@ -39,7 +40,6 @@ const ForgotPassword = () => {
 
   return (
     <div style={styles.wrapper}>
-      {/* メインコンテンツ（申請用紙のようなデザイン） */}
       <main style={styles.paperContainer}>
         <header style={styles.header}>
             <span style={styles.headerIcon}>🔑</span>
@@ -94,11 +94,11 @@ const ForgotPassword = () => {
   );
 };
 
-// スタイル定義（統一感のあるデザイン）
-const styles = {
+// ★ スタイルの型定義を追加
+const styles: Record<string, React.CSSProperties> = {
   wrapper: {
     minHeight: '100vh',
-    backgroundColor: theme.colors.background, // クリーム色
+    backgroundColor: theme.colors.background, 
     color: theme.colors.textMain,
     fontFamily: theme.fonts.body,
     display: 'flex',
@@ -107,21 +107,17 @@ const styles = {
     justifyContent: 'center',
     padding: '20px'
   },
-
-  // 紙のコンテナ（少し小さめに）
   paperContainer: {
     width: '100%',
-    maxWidth: '480px', // フォームなので幅を制限
+    maxWidth: '480px',
     backgroundColor: '#fff', 
     borderRadius: '4px',
     boxShadow: '0 2px 5px rgba(0,0,0,0.05), 0 10px 30px rgba(0,0,0,0.08)',
-    borderTop: `6px solid ${theme.colors.primary}`, // 勝色アクセント
+    borderTop: `6px solid ${theme.colors.primary}`,
     padding: '40px 30px',
     marginBottom: '40px',
     textAlign: 'center'
   },
-
-  // ヘッダーエリア
   header: { marginBottom: '30px' },
   headerIcon: { fontSize: '40px', display: 'block', marginBottom: '15px' },
   title: { 
@@ -129,8 +125,6 @@ const styles = {
     fontFamily: theme.fonts.heading, marginBottom: '15px', letterSpacing: '0.05em'
   },
   sub: { color: theme.colors.textSub, fontSize: '14px', lineHeight: '1.8', fontFamily: theme.fonts.body },
-
-  // フォーム
   form: { display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'left' },
   inputGroup: { display: 'flex', flexDirection: 'column', gap: '8px' },
   label: { fontSize: '12px', fontWeight: 'bold', color: theme.colors.primary, letterSpacing: '0.05em' },
@@ -139,16 +133,14 @@ const styles = {
     fontSize: '16px',
     border: `1px solid ${theme.colors.border}`,
     borderRadius: '4px',
-    backgroundColor: '#fdfbf7', // 薄いクリーム色
+    backgroundColor: '#fdfbf7', 
     outline: 'none',
     transition: 'border 0.2s',
     fontFamily: theme.fonts.body,
     color: theme.colors.textMain
   },
-  
-  // ボタン（共通デザイン）
   primaryButton: {
-    ...theme.ui.buttonPrimary, // テーマのボタンスタイルを適用
+    ...theme.ui.buttonPrimary,
     width: '100%',
     padding: '12px',
     borderRadius: '30px',
@@ -158,8 +150,6 @@ const styles = {
     border: 'none',
     boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
   },
-
-  // エラー・成功メッセージ
   errorBox: { 
     color: '#e53e3e', fontSize: '14px', backgroundColor: '#fff5f5', 
     padding: '10px', borderRadius: '4px', border: '1px solid #feb2b2', textAlign: 'center' 
@@ -169,14 +159,11 @@ const styles = {
     border: '1px solid #c6f6d5', display: 'flex', flexDirection: 'column', alignItems: 'center' 
   },
   successText: { color: '#2f855a', marginBottom: '20px', whiteSpace: 'pre-wrap', lineHeight: '1.8', fontWeight: 'bold' },
-
-  // リンク
   linkArea: { textAlign: 'center', marginTop: '10px' },
   textLink: {
     background: 'none', border: 'none', color: theme.colors.textSub, cursor: 'pointer', 
     textDecoration: 'underline', fontSize: '13px', fontFamily: theme.fonts.heading
   },
-
   footerArea: { width: '100%', maxWidth: '900px' },
 };
 

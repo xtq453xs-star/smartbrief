@@ -1,17 +1,44 @@
 /* eslint-disable react-refresh/only-export-components */
-// src/contexts/ToastContext.jsx
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { theme } from '../theme';
 
-const ToastContext = createContext();
+// --- 1. トースト1つ分のデータの型 ---
+interface ToastItem {
+  id: number;
+  message: string;
+  type: 'success' | 'error';
+}
 
-export const useToast = () => useContext(ToastContext);
+// --- 2. Contextで提供する関数たちの型（これが超重要！） ---
+interface ToastContextType {
+  showToast: (message: string, type?: 'success' | 'error') => void;
+  success: (msg: string) => void;
+  error: (msg: string) => void;
+}
 
-export const ToastProvider = ({ children }) => {
-  const [toasts, setToasts] = useState([]);
+// --- 3. createContext に型を指定する ---
+// 初期値は undefined になる可能性があるので | undefined をつける
+const ToastContext = createContext<ToastContextType | undefined>(undefined);
+
+// --- 4. useToastのカスタムフック（安全に型を取り出す） ---
+export const useToast = (): ToastContextType => {
+  const context = useContext(ToastContext);
+  if (!context) {
+    throw new Error('useToast must be used within a ToastProvider');
+  }
+  return context;
+};
+
+// ProviderのProps型定義
+interface ToastProviderProps {
+  children: ReactNode;
+}
+
+export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   // トーストを追加する関数
-  const showToast = useCallback((message, type = 'success') => {
+  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     const id = Date.now();
     setToasts((prev) => [...prev, { id, message, type }]);
 
@@ -22,8 +49,8 @@ export const ToastProvider = ({ children }) => {
   }, []);
 
   // ショートカット関数
-  const success = (msg) => showToast(msg, 'success');
-  const error = (msg) => showToast(msg, 'error');
+  const success = (msg: string) => showToast(msg, 'success');
+  const error = (msg: string) => showToast(msg, 'error');
 
   return (
     <ToastContext.Provider value={{ showToast, success, error }}>
@@ -44,7 +71,8 @@ export const ToastProvider = ({ children }) => {
   );
 };
 
-const styles = {
+// --- スタイル定義 ---
+const styles: Record<string, React.CSSProperties> = {
   toastContainer: {
     position: 'fixed', top: '20px', right: '20px', zIndex: 9999,
     display: 'flex', flexDirection: 'column', gap: '10px',

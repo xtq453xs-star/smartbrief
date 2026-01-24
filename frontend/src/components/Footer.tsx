@@ -1,8 +1,15 @@
+import React from 'react';
 import { Link } from 'react-router-dom';
-import { theme } from '../theme'; // ★ theme.js をインポート
+import { theme } from '../theme'; 
+
+// ★ 1. Props の型を定義
+interface FooterProps {
+  color?: string;
+  separatorColor?: string;
+}
 
 // デフォルト値を theme.js から取得するように変更
-const Footer = ({ 
+const Footer: React.FC<FooterProps> = ({ 
   color = theme.colors.textSub, 
   separatorColor = theme.colors.border 
 }) => {
@@ -29,31 +36,29 @@ const Footer = ({
   );
 };
 
-// theme.js を活用したスタイル定義
-const styles = {
+// ★ 2. Record<string, React.CSSProperties> を追加！
+const styles: Record<string, React.CSSProperties> = {
   footer: {
-    padding: '40px 0', // 少しゆとりを持たせる
+    padding: '40px 0', 
     textAlign: 'center',
-    // 境界線を theme.colors.border に合わせる（薄くしたい場合は透明度を入れてもOK）
     borderTop: `1px solid ${theme.colors.border}`, 
     marginTop: 'auto', 
-    fontFamily: theme.fonts.heading, // 明朝体で上品に
-    backgroundColor: 'transparent', // 背景色は親要素に任せる
+    fontFamily: theme.fonts.heading, 
+    backgroundColor: 'transparent', 
   },
   linkContainer: {
     marginBottom: '12px',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: '4px', // ここも gap で制御するとスマートです
-    flexWrap: 'wrap', // スマホで折り返せるように
+    gap: '4px', 
+    flexWrap: 'wrap', 
   },
   link: {
     textDecoration: 'none',
     fontSize: '12px',
     cursor: 'pointer',
     transition: 'opacity 0.2s',
-    // ホバー時の色はCSSで制御するのが理想ですが、インラインならこれでシンプルに
     opacity: 0.8,
   },
   sep: {
@@ -64,7 +69,7 @@ const styles = {
   copyright: {
     fontSize: '11px',
     opacity: 0.7,
-    fontFamily: theme.fonts.body, // コピーライトは読みやすいゴシックで
+    fontFamily: theme.fonts.body, 
     margin: 0,
     letterSpacing: '0.05em',
   }

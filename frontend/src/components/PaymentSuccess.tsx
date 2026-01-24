@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { theme } from '../theme';
 
-const PaymentSuccess = () => {
+const PaymentSuccess: React.FC = () => {
   const navigate = useNavigate();
 
   return (
@@ -30,7 +30,8 @@ const PaymentSuccess = () => {
   );
 };
 
-const styles = {
+// ★ ここに型を追加！
+const styles: Record<string, React.CSSProperties> = {
   wrapper: {
     height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
     backgroundColor: theme.colors.background, fontFamily: theme.fonts.body

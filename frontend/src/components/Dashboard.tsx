@@ -1,13 +1,51 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Footer from './Footer';
-import { theme } from '../theme'; // ★ theme.js をインポート
+import { theme } from '../theme';
 import { apiClient } from '../utils/apiClient';
 import { useToast } from '../contexts/ToastContext';
+import { useAuthStore } from '../store/authStore';
+
+// --- 型定義 ---
+interface Book {
+  id: number;
+  title: string;
+  authorName: string;
+  image_url?: string;
+}
+
+interface UserData {
+  username: string;
+  premium: boolean;
+}
+
+interface DashboardProps {
+  onBookSelect: (id: number) => void;
+  onUpgrade: () => void;
+  onManage: () => void;
+}
+
+interface BookCardItemProps {
+  book: Book;
+  onClick: () => void;
+}
+
+interface AuthorCardItemProps {
+  authorName: string;
+  imageFile: string | null;
+  onClick: () => void;
+  isSlider?: boolean;
+}
+
+interface BookListProps {
+  books: Book[];
+  onSelect: (id: number) => void;
+  emptyMsg: string;
+  isMobile: boolean;
+}
 
 // --- 定数データ ---
 const FEATURED_AUTHORS = [
-  // ... (作家リストは長いのでそのまま利用します。変更なし)
   { name: '宮本 百合子', file: 'miyamoto_yuriko.png' },
   { name: '宮沢 賢治', file: 'miyazawa_kenji.png' },
   { name: '小川 未明', file: 'ogawa_mimei.png' },
@@ -50,8 +88,8 @@ const FEATURED_AUTHORS = [
 
 const LINE_FRIEND_URL = 'https://lin.ee/FSfu49T'; 
 
-// --- モバイルヘッダー ---
-const MobileHeader = ({ onOpenSidebar }) => (
+// --- サブコンポーネント ---
+const MobileHeader: React.FC<{ onOpenSidebar: () => void }> = ({ onOpenSidebar }) => (
   <div style={styles.mobileHeader}>
     <button onClick={onOpenSidebar} style={styles.hamburgerBtn}>☰</button>
     <span style={styles.mobileLogoText}>SmartBrief</span>
@@ -59,8 +97,7 @@ const MobileHeader = ({ onOpenSidebar }) => (
   </div>
 );
 
-// --- 共通BookCardコンポーネント (theme適用) ---
-const BookCardItem = ({ book, onClick }) => {
+const BookCardItem: React.FC<BookCardItemProps> = ({ book, onClick }) => {
   const [isHovered, setIsHovered] = useState(false);
 
   return (
@@ -88,8 +125,7 @@ const BookCardItem = ({ book, onClick }) => {
   );
 };
 
-// --- 共通AuthorCardコンポーネント ---
-const AuthorCardItem = ({ authorName, imageFile, onClick, isSlider = false }) => {
+const AuthorCardItem: React.FC<AuthorCardItemProps> = ({ authorName, imageFile, onClick, isSlider = false }) => {
   const [isHovered, setIsHovered] = useState(false);
   
   const containerStyle = {
@@ -123,24 +159,37 @@ const AuthorCardItem = ({ authorName, imageFile, onClick, isSlider = false }) =>
   );
 };
 
-const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
+const BookList: React.FC<BookListProps> = ({ books, onSelect, emptyMsg, isMobile }) => {
+    if (!books || books.length === 0) {
+        return <div style={styles.emptyContainer}><div style={styles.emptyIcon}>📚</div><p>{emptyMsg}</p></div>;
+    }
+    const gridStyle = isMobile ? {...styles.bookGrid, gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '15px'} : styles.bookGrid;
+    return (
+        <div style={gridStyle}>
+            {books.map((book) => <BookCardItem key={book.id} book={book} onClick={() => onSelect(book.id)} />)}
+        </div>
+    );
+};
+
+// --- メインコンポーネント ---
+const Dashboard: React.FC<DashboardProps> = ({ onBookSelect, onUpgrade, onManage }) => {
   const navigate = useNavigate();
   const { showToast } = useToast();
-  const [activeView, setActiveView] = useState('history');
+  const { token, logout } = useAuthStore();
   
-  // レスポンシブState
+  const [activeView, setActiveView] = useState<'history' | 'ranking' | 'favorites' | 'authors'>('history');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  const [historyBooks, setHistoryBooks] = useState([]);
-  const [rankingBooks, setRankingBooks] = useState([]);
-  const [favoriteBooks, setFavoriteBooks] = useState([]);
-  const [allAuthors, setAllAuthors] = useState([]);
+  const [historyBooks, setHistoryBooks] = useState<Book[]>([]);
+  const [rankingBooks, setRankingBooks] = useState<Book[]>([]);
+  const [favoriteBooks, setFavoriteBooks] = useState<Book[]>([]);
+  const [allAuthors, setAllAuthors] = useState<string[]>([]);
   const [displayedAuthorCount, setDisplayedAuthorCount] = useState(50); 
-  const [userData, setUserData] = useState(null);
+  const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const authorScrollRef = useRef(null);
+  const authorScrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const handleResize = () => {
@@ -151,25 +200,24 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // --- API Fetch ヘルパー ---
-  const fetchData = useCallback(async (endpoint) => {
-    const res = await apiClient.get(endpoint);
+  const fetchData = useCallback(async <T,>(endpoint: string): Promise<T | null> => {
+    const res = await apiClient.get<T>(endpoint);
     if (res.ok) return res.data;
-    showToast(res.message, 'error');
-    if (res.status === 401) onLogout();
+    showToast(res.message || 'データ取得エラー', 'error');
+    if (res.status === 401) logout(); 
     return null;
-  }, [onLogout, showToast]);
+  }, [logout, showToast]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!token) return;
     setLoading(true);
-    // Promise.allで並列取得
+    
     Promise.all([
-        fetchData('/billing/status'),
-        fetchData('/books/history'),
-        fetchData('/books/ranking'),
-        fetchData('/books/favorites'),
-        fetchData('/books/authors/all')
+        fetchData<UserData>('/billing/status'),
+        fetchData<Book[]>('/books/history'),
+        fetchData<Book[]>('/books/ranking'),
+        fetchData<Book[]>('/books/favorites'),
+        fetchData<string[]>('/books/authors/all')
     ]).then(([user, history, ranking, favorites, authors]) => {
         setUserData(user);
         setHistoryBooks(history || []);
@@ -178,7 +226,7 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
         setAllAuthors([...new Set(authors || [])]);
         setLoading(false);
     });
-  }, [fetchData, token]);
+  }, [fetchData, token]); 
 
   const viewInfo = {
     history: { title: 'マイ・ライブラリ', desc: 'おかえりなさい。あなたが最近旅した物語です。' },
@@ -187,12 +235,12 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
     authors: { title: '作家一覧', desc: '日本文学を代表する文豪たちの世界へ。' },
   }[activeView] || { title: '', desc: '' };
 
-  const handleAuthorClick = (authorName) => {
+  const handleAuthorClick = (authorName: string) => {
       navigate(`/search?q=${encodeURIComponent(authorName)}`);
       setIsSidebarOpen(false);
   };
 
-  const handleMenuClick = (view) => {
+  const handleMenuClick = (view: 'history' | 'ranking' | 'favorites' | 'authors') => {
       setIsSidebarOpen(false);
       setTimeout(() => {
         setActiveView(view);
@@ -200,14 +248,14 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
       }, 0); 
   };
 
-  const scrollContainer = (ref, direction) => {
+  const scrollContainer = (ref: React.RefObject<HTMLDivElement | null>, direction: 'left' | 'right') => {
     if (ref.current) {
       const amount = 300;
       ref.current.scrollBy({ left: direction === 'left' ? -amount : amount, behavior: 'smooth' });
     }
   };
 
-  const getAuthorImage = (name) => {
+  const getAuthorImage = (name: string) => {
     if (!name) return null;
     const cleanName = name.replace(/[\s\u3000]/g, '');
     const found = FEATURED_AUTHORS.find(a => a.name.replace(/[\s\u3000]/g, '') === cleanName);
@@ -219,21 +267,22 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
       {isMobile && isSidebarOpen && <div style={styles.overlay} onClick={() => setIsSidebarOpen(false)}></div>}
       {isMobile && <MobileHeader onOpenSidebar={() => setIsSidebarOpen(true)} />}
 
-      {/* --- サイドバー --- */}
       <aside style={{ ...styles.sidebar, ...(isMobile ? styles.sidebarMobile : {}), ...(isMobile && isSidebarOpen ? styles.sidebarMobileOpen : {}) }}>
         {isMobile && <button onClick={() => setIsSidebarOpen(false)} style={styles.closeBtn}>×</button>}
 
+        {/* 復活: ロゴエリア */}
         <div style={styles.logoArea}>
           <h1 style={styles.logoText}>SmartBrief</h1>
           <p style={styles.logoSub}>Library</p>
         </div>
 
+        {/* 復活: ナビゲーションメニュー */}
         <nav style={styles.nav}>
           {[
-            { id: 'history', icon: '🕰️', label: '閲覧履歴' },
-            { id: 'ranking', icon: '🏆', label: '人気ランキング' },
-            { id: 'favorites', icon: '🔖', label: 'お気に入り' },
-            { id: 'authors', icon: '✒️', label: '作家一覧' },
+            { id: 'history' as const, icon: '🕰️', label: '閲覧履歴' },
+            { id: 'ranking' as const, icon: '🏆', label: '人気ランキング' },
+            { id: 'favorites' as const, icon: '🔖', label: 'お気に入り' },
+            { id: 'authors' as const, icon: '✒️', label: '作家一覧' },
           ].map(item => (
             <button 
                 key={item.id}
@@ -250,13 +299,14 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
           <button onClick={() => {navigate('/genres'); setIsSidebarOpen(false);}} style={styles.navItem}>🎨 ジャンル一覧</button>
         </nav>
 
+        {/* 復活: LINE公式登録エリア */}
         <div style={styles.lineArea}>
           <p style={styles.lineText}>スマホで読むなら</p>
           <a href={LINE_FRIEND_URL} target="_blank" rel="noopener noreferrer" style={styles.lineButton}>
             <span style={{marginRight:'8px'}}>💬</span> 公式LINEを登録
           </a>
         </div>
-
+        
         <div style={styles.userArea}>
           <div style={styles.userCard}>
             <p style={styles.userName}>{userData?.username || 'Guest'}</p>
@@ -270,14 +320,14 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
             <a href="mailto:info@smartbrief.jp" style={styles.contactBtn}>📩 お問い合わせ</a>
           </div>
           
-          <button onClick={onLogout} style={styles.logoutBtn}>ログアウト</button>
+          <button onClick={logout} style={styles.logoutBtn}>ログアウト</button>
+          
           <div style={{marginTop: '20px'}}>
              <Footer color={theme.colors.textSub} separatorColor="rgba(255,255,255,0.1)" />
           </div>
         </div>
       </aside>
 
-      {/* --- メインコンテンツ --- */}
       <main style={{ ...styles.main, ...(isMobile ? styles.mainMobile : {}) }}>
         <header style={styles.header}>
           <h2 style={styles.pageTitle}>{viewInfo.title}</h2>
@@ -291,7 +341,6 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
              </div>
           ) : (
             <>
-                {/* 閲覧履歴 / ランキング / お気に入り */}
                 {activeView !== 'authors' && (
                     <BookList 
                         books={
@@ -308,7 +357,6 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
                     />
                 )}
 
-                {/* 作家一覧 */}
                 {activeView === 'authors' && (
                   <div>
                     <h3 style={styles.sectionHeading}>✨ Pick Up Authors (39)</h3>
@@ -344,8 +392,6 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
                             <button 
                                 onClick={() => setDisplayedAuthorCount(c => c + 50)} 
                                 style={styles.loadMoreButton}
-                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = theme.colors.primaryHover}
-                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = theme.colors.primary}
                             >
                                 さらに作家を表示
                             </button>
@@ -362,72 +408,28 @@ const Dashboard = ({ token, onLogout, onBookSelect, onUpgrade, onManage }) => {
   );
 };
 
-// --- サブコンポーネント: BookList ---
-const BookList = ({ books, onSelect, emptyMsg, isMobile }) => {
-    if (!books || books.length === 0) {
-        return <div style={styles.emptyContainer}><div style={styles.emptyIcon}>📚</div><p>{emptyMsg}</p></div>;
-    }
-    const gridStyle = isMobile ? {...styles.bookGrid, gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '15px'} : styles.bookGrid;
-    return (
-        <div style={gridStyle}>
-            {books.map((book, i) => <BookCardItem key={i} book={book} onClick={() => onSelect(book.id)} />)}
-        </div>
-    );
-};
-
-// --- スタイル定義 (theme.js を活用) ---
-const styles = {
-  wrapper: { 
-      display: 'flex', minHeight: '100vh', 
-      backgroundColor: theme.colors.background, // クリーム色
-      fontFamily: theme.fonts.body, 
-      color: theme.colors.textMain, 
-      overflowX: 'hidden' 
-  },
-  
-  // サイドバー（濃紺で引き締める）
-  sidebar: { 
-      width: '260px', 
-      backgroundColor: theme.colors.primary, // 勝色
-      color: '#efebe9', 
-      display: 'flex', flexDirection: 'column', 
-      padding: '30px 20px', 
-      boxShadow: '4px 0 10px rgba(0,0,0,0.05)', 
-      flexShrink: 0, zIndex: 50, transition: 'transform 0.3s' 
-  },
+const styles: Record<string, React.CSSProperties> = {
+  wrapper: { display: 'flex', minHeight: '100vh', backgroundColor: theme.colors.background, fontFamily: theme.fonts.body, color: theme.colors.textMain, overflowX: 'hidden' },
+  sidebar: { width: '260px', backgroundColor: theme.colors.primary, color: '#efebe9', display: 'flex', flexDirection: 'column', padding: '30px 20px', boxShadow: '4px 0 10px rgba(0,0,0,0.05)', flexShrink: 0, zIndex: 50, transition: 'transform 0.3s' },
   sidebarMobile: { position: 'fixed', top: 0, left: 0, width: '280px', height: '100vh', transform: 'translateX(-100%)', boxShadow: '4px 0 15px rgba(0,0,0,0.5)', overflowY: 'auto' },
   sidebarMobileOpen: { transform: 'translateX(0)' },
   overlay: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 40 },
-
-  // モバイルヘッダー
-  mobileHeader: { 
-      position: 'fixed', top: 0, left: 0, width: '100%', height: '60px', 
-      backgroundColor: theme.colors.background, 
-      borderBottom: `1px solid ${theme.colors.border}`, 
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 15px', zIndex: 30 
-  },
+  mobileHeader: { position: 'fixed', top: 0, left: 0, width: '100%', height: '60px', backgroundColor: theme.colors.background, borderBottom: `1px solid ${theme.colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 15px', zIndex: 30 },
   hamburgerBtn: { background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: theme.colors.primary },
   mobileLogoText: { fontSize: '18px', fontWeight: 'bold', fontFamily: theme.fonts.heading, color: theme.colors.primary },
   closeBtn: { position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', color: '#fff', fontSize: '28px', cursor: 'pointer' },
-
-  // メインエリア
   main: { flex: 1, padding: '40px 60px', overflowY: 'auto', transition: 'padding 0.3s' },
   mainMobile: { padding: '80px 20px 40px 20px' },
-
   logoArea: { marginBottom: '30px', textAlign: 'center' },
   logoText: { margin: 0, fontSize: '24px', letterSpacing: '2px', fontWeight: 'bold', fontFamily: theme.fonts.heading },
   logoSub: { margin: 0, fontSize: '12px', opacity: 0.7, letterSpacing: '4px' },
-
   nav: { flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' },
   navItem: { background: 'transparent', border: 'none', color: '#ccc', padding: '12px 15px', textAlign: 'left', fontSize: '14px', cursor: 'pointer', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '10px', transition: '0.2s' },
   navItemActive: { background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', padding: '12px 15px', textAlign: 'left', fontSize: '14px', cursor: 'default', borderRadius: '4px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' },
   separator: { height: '1px', backgroundColor: 'rgba(255,255,255,0.1)', margin: '10px 0' },
-
-  // LINE & ユーザーエリア
   lineArea: { marginTop: '20px', padding: '15px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '8px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.1)' },
   lineText: { fontSize: '12px', color: '#ccc', marginBottom: '8px', fontWeight: 'bold' },
   lineButton: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '10px', backgroundColor: '#06c755', color: '#fff', borderRadius: '4px', textDecoration: 'none', fontSize: '13px', fontWeight: 'bold' },
-  
   userArea: { marginTop: '20px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)' },
   userCard: { marginBottom: '15px', padding: '15px', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '4px' },
   userName: { margin: '0 0 5px 0', fontSize: '14px', fontWeight: 'bold' },
@@ -436,14 +438,10 @@ const styles = {
   manageBtnSmall: { marginTop: '10px', width: '100%', padding: '8px', fontSize: '12px', backgroundColor: '#6c757d', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' },
   contactBtn: { display: 'block', marginTop: '10px', width: '100%', padding: '8px', fontSize: '11px', backgroundColor: 'transparent', color: '#ccc', border: '1px dashed #ccc', borderRadius: '4px', textAlign: 'center', textDecoration: 'none' },
   logoutBtn: { background: 'transparent', border: '1px solid #ccc', color: '#ccc', width: '100%', padding: '8px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' },
-
-  // ヘッダー
   header: { marginBottom: '30px', borderBottom: `1px solid ${theme.colors.border}`, paddingBottom: '15px' },
   pageTitle: { fontSize: '24px', margin: '0 0 5px 0', color: theme.colors.primary, fontWeight: 'bold', fontFamily: theme.fonts.heading },
   greeting: { fontSize: '13px', color: theme.colors.textSub, margin: 0 },
   contentArea: { paddingBottom: '20px' },
-
-  // グリッド・カード
   bookGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '20px' },
   bookCard: { position: 'relative', borderRadius: '4px', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', cursor: 'pointer', transition: 'transform 0.3s ease', overflow: 'hidden', aspectRatio: '2 / 3', backgroundColor: '#2b2222' },
   bookCardHover: { transform: 'translateY(-5px)', boxShadow: '0 15px 30px rgba(0,0,0,0.15)' },
@@ -455,16 +453,12 @@ const styles = {
   bookInfo: { position: 'absolute', bottom: 0, left: 0, width: '100%', padding: '12px', boxSizing: 'border-box', zIndex: 2 },
   bookTitle: { margin: '0 0 4px 0', fontSize: '14px', fontWeight: 'bold', color: '#fff', textShadow: '0 2px 4px rgba(0,0,0,0.8)', fontFamily: theme.fonts.heading },
   bookAuthor: { margin: 0, fontSize: '11px', color: 'rgba(255,255,255,0.8)' },
-
   authorCard: { position: 'relative', borderRadius: '4px', boxShadow: '0 4px 8px rgba(0,0,0,0.1)', cursor: 'pointer', transition: 'transform 0.3s ease', overflow: 'hidden', aspectRatio: '2 / 3', backgroundColor: '#000' },
   sectionHeading: { fontSize: '18px', color: theme.colors.primary, marginBottom: '15px', fontWeight: 'bold', fontFamily: theme.fonts.heading, borderBottom: `1px solid ${theme.colors.accent}`, paddingBottom: '5px', display: 'inline-block' },
-  
   authorScrollContainer: { display: 'flex', overflowX: 'auto', gap: '12px', paddingBottom: '10px', scrollSnapType: 'x mandatory', scrollbarWidth: 'none' },
   scrollButton: { position: 'absolute', top: '50%', transform: 'translateY(-50%)', width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'rgba(255, 255, 255, 0.9)', border: 'none', boxShadow: '0 2px 5px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 20, color: theme.colors.primary },
-  
   emptyContainer: { textAlign: 'center', padding: '60px 0', opacity: 0.7, color: theme.colors.textSub },
   emptyIcon: { fontSize: '48px', marginBottom: '15px' },
-
   loadMoreButton: { ...theme.ui.buttonPrimary, padding: '10px 30px', borderRadius: '30px' },
   authorDisplayStatus: { fontSize: '12px', color: theme.colors.textSub, marginTop: '10px' }
 };

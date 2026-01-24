@@ -1,22 +1,26 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import Footer from './components/Footer'; // パスは環境に合わせて調整してください
+import Footer from './components/Footer'; 
 import { theme } from './theme';
 import { apiClient } from './utils/apiClient';
 import { useToast } from './contexts/ToastContext';
 
-const VerifyEmail = () => {
+// ★ ステータス用の型を定義しておくとより安全です
+type VerifyStatus = 'verifying' | 'success' | 'error';
+
+const VerifyEmail: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
   const token = searchParams.get('token');
-  const [status, setStatus] = useState('verifying'); // verifying, success, error
+  const [status, setStatus] = useState<VerifyStatus>('verifying'); 
   const effectiveStatus = token ? status : 'error';
 
   useEffect(() => {
     if (!token) return;
 
     const verify = async () => {
+      // apiClient.get の戻り値に型がない場合は適宜追加してください
       const res = await apiClient.get(`/auth/verify?token=${encodeURIComponent(token)}`);
       if (res.ok) {
         setStatus('success');
@@ -62,7 +66,6 @@ const VerifyEmail = () => {
         )}
       </div>
       
-      {/* 画面下部にフッター固定 */}
       <div style={styles.footerArea}>
         <Footer color={theme.colors.textSub} separatorColor={theme.colors.border} />
       </div>
@@ -70,17 +73,34 @@ const VerifyEmail = () => {
   );
 };
 
-const styles = {
+// ★ ここがポイント！ Record<string, React.CSSProperties> と型を指定します
+const styles: Record<string, React.CSSProperties> = {
   wrapper: {
-    minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: theme.colors.background, fontFamily: theme.fonts.body, padding: '20px'
+    minHeight: '100vh', 
+    display: 'flex', 
+    flexDirection: 'column', // これで TypeScript が「CSSのcolumnだ」と理解します
+    alignItems: 'center', 
+    justifyContent: 'center',
+    backgroundColor: theme.colors.background, 
+    fontFamily: theme.fonts.body, 
+    padding: '20px'
   },
   card: {
-    backgroundColor: '#fff', padding: '50px 40px', borderRadius: '8px',
-    boxShadow: '0 10px 30px rgba(0,0,0,0.1)', textAlign: 'center',
-    maxWidth: '420px', width: '90%', border: `1px solid ${theme.colors.border}`,
+    backgroundColor: '#fff', 
+    padding: '50px 40px', 
+    borderRadius: '8px',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.1)', 
+    textAlign: 'center',
+    maxWidth: '420px', 
+    width: '90%', 
+    border: `1px solid ${theme.colors.border}`,
     borderTop: `6px solid ${theme.colors.primary}`,
-    flex: 1, maxHeight: '400px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center'
+    flex: 1, 
+    maxHeight: '400px', 
+    display: 'flex', 
+    flexDirection: 'column', 
+    justifyContent: 'center', 
+    alignItems: 'center'
   },
   icon: { fontSize: '60px', marginBottom: '20px' },
   title: {

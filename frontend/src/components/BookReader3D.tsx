@@ -1,11 +1,38 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, ReactNode } from 'react';
 import HTMLFlipBook from 'react-pageflip';
 
-// 長いテキストをページごとに分割する関数
-const splitTextToPages = (text, charsPerPage) => {
+// --- 1. 型定義 ---
+interface BookReader3DProps {
+  title: string;
+  bodyText: string;
+  onClose: () => void;
+}
+
+interface PageProps {
+  number: string | number;
+  title: string;
+  isCover?: boolean;
+  isBackCover?: boolean;
+  fontSize?: string;
+  lineHeight?: string;
+  isMobile?: boolean;
+  children?: ReactNode;
+}
+
+interface BookSettings {
+  width: number;
+  height: number;
+  fontSize: string;
+  lineHeight: string;
+  charsPerPage: number;
+  isMobile: boolean;
+}
+
+// --- テキスト分割関数 ---
+const splitTextToPages = (text: string | undefined, charsPerPage: number): string[] => {
   if (!text) return [];
   const paragraphs = text.split('\n');
-  const pages = [];
+  const pages: string[] = [];
   let currentPage = "";
 
   paragraphs.forEach((para) => {
@@ -37,29 +64,28 @@ const splitTextToPages = (text, charsPerPage) => {
   return pages;
 };
 
-// 1ページ分のコンポーネント
-const Page = React.forwardRef((props, ref) => {
+// --- 2. Pageコンポーネント (forwardRefの型定義を追加) ---
+// 第1引数に ref の型 (HTMLDivElement)、第2引数に Props の型を指定します
+const Page = React.forwardRef<HTMLDivElement, PageProps>((props, ref) => {
   const { isMobile } = props;
 
-  let shadowStyle = {};
+  let shadowStyle: React.CSSProperties = {};
   if (props.isCover) {
      shadowStyle = { boxShadow: 'inset 15px 0 20px -10px rgba(0, 0, 0, 0.2)' };
   } else if (props.isBackCover) {
      shadowStyle = { boxShadow: 'inset -15px 0 20px -10px rgba(0, 0, 0, 0.2)' };
-  } else if (props.number) {
-     const pageNum = parseInt(props.number);
-     if (pageNum % 2 !== 0) {
+  } else if (typeof props.number === 'number') {
+     if (props.number % 2 !== 0) {
         shadowStyle = { boxShadow: 'inset -30px 0 40px -20px rgba(0, 0, 0, 0.15)' };
      } else {
         shadowStyle = { boxShadow: 'inset 30px 0 40px -20px rgba(0, 0, 0, 0.15)' };
      }
   }
 
-  const textStyle = {
+  const textStyle: React.CSSProperties = {
       ...styles.textArea,
       fontSize: props.fontSize || '16px',
       lineHeight: props.lineHeight || '2.0',
-      // スマホなら80px(安全マージン)、PCなら30px
       paddingBottom: isMobile ? '80px' : '30px', 
   };
 
@@ -79,11 +105,15 @@ const Page = React.forwardRef((props, ref) => {
     </div>
   );
 });
+Page.displayName = 'Page'; // React DevTools用の設定
 
-const BookReader3D = ({ title, bodyText, onClose }) => {
-  const bookRef = useRef();
+// --- 3. メインコンポーネント ---
+const BookReader3D: React.FC<BookReader3DProps> = ({ title, bodyText, onClose }) => {
+  // react-pageflipのrefは特殊なため、ここでは any で回避します
+  const bookRef = useRef<any>(null);
   
-  const [bookSettings, setBookSettings] = useState({
+  // BookSettingsの型を適用
+  const [bookSettings, setBookSettings] = useState<BookSettings>({
       width: 350,
       height: 500,
       fontSize: '16px',
@@ -98,7 +128,6 @@ const BookReader3D = ({ title, bodyText, onClose }) => {
         const winHeight = window.innerHeight;
         
         if (winWidth > 768) {
-            // PC設定
             const newHeight = Math.min(winHeight * 0.85, 800);
             const newWidth = Math.floor(newHeight * 0.70);
             
@@ -111,17 +140,13 @@ const BookReader3D = ({ title, bodyText, onClose }) => {
                 isMobile: false
             });
         } else {
-            // ★再調整: スマホ設定
             const safeMobileHeight = Math.floor(winHeight * 0.75);
-            
             setBookSettings({
                 width: 350,
                 height: safeMobileHeight,
-                // ▼ ここを調整して密度を上げました ▼
-                fontSize: '15px',   // 16px -> 15px (少し小さくして収まりよく)
-                lineHeight: '1.85', // 2.0 -> 1.85 (行間を少し詰める)
-                charsPerPage: 280,  // 180 -> 235 (文字数を増やしてスカスカ解消)
-                // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+                fontSize: '15px',
+                lineHeight: '1.85',
+                charsPerPage: 280,
                 isMobile: true
             });
         }
@@ -140,6 +165,8 @@ const BookReader3D = ({ title, bodyText, onClose }) => {
       <button onClick={onClose} style={styles.closeBtn}>× 閉じる</button>
       
       <div style={styles.bookContainer}>
+        {/* ↓ この1行を追加して、ライブラリの型定義の不備を無視します */}
+        {/* @ts-ignore: react-pageflipの型定義が古いため、不要なPropsの要求を無視 */}
         <HTMLFlipBook 
           width={bookSettings.width} 
           height={bookSettings.height} 
@@ -154,6 +181,7 @@ const BookReader3D = ({ title, bodyText, onClose }) => {
           className="flip-book"
           ref={bookRef}
           key={bookSettings.isMobile ? 'mobile' : 'pc'}
+          // ★ TSエラー回避のため、styleプロップスは不要な場合は省略するか正しい型を渡す
         >
           <Page number="" title="" isCover={true} fontSize={bookSettings.fontSize} isMobile={bookSettings.isMobile}>
              <div style={{...styles.pageInterior, ...styles.coverPage}}>
@@ -190,7 +218,8 @@ const BookReader3D = ({ title, bodyText, onClose }) => {
   );
 };
 
-const styles = {
+// --- 4. スタイル定義 (Record<string, React.CSSProperties> を適用) ---
+const styles: Record<string, React.CSSProperties> = {
   overlay: {
     position: 'fixed', top: 0, left: 0, width: '100vw',
     height: '100dvh', 
@@ -227,14 +256,11 @@ const styles = {
   textArea: { 
     flex: 1,
     minHeight: 0, 
-    
     fontFamily: '"Shippori Mincho", "Yu Mincho", serif', 
     textAlign: 'justify', 
     whiteSpace: 'pre-wrap', 
     overflowY: 'auto', 
     paddingTop: '10px',
-    
-    // paddingBottomは動的に設定
     paddingLeft: '5px',
     paddingRight: '5px',
     display: 'flex',

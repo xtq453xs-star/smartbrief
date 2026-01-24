@@ -5,7 +5,7 @@ import { theme } from '../theme';
 import { apiClient } from '../utils/apiClient';
 import { useToast } from '../contexts/ToastContext';
 
-const ResetPassword = () => {
+const ResetPassword: React.FC = () => {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
   const navigate = useNavigate();
@@ -17,7 +17,8 @@ const ResetPassword = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e) => {
+  // ★1. イベントの型を React.FormEvent に指定
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) {
         setError('トークンが無効です。もう一度メールからアクセスしてください。');
@@ -112,8 +113,8 @@ const ResetPassword = () => {
   );
 };
 
-// ForgotPasswordと同じスタイル定義
-const styles = {
+// ★2. スタイルに型定義を適用
+const styles: Record<string, React.CSSProperties> = {
   wrapper: {
     minHeight: '100vh', backgroundColor: theme.colors.background,
     color: theme.colors.textMain, fontFamily: theme.fonts.body,

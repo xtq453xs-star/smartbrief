@@ -2,7 +2,7 @@ import React from 'react';
 import Footer from './Footer';
 import { theme } from '../theme';
 
-const Terms = () => {
+const Terms: React.FC = () => {
   return (
     <div style={styles.wrapper}>
       <nav style={styles.navBar}>
@@ -114,7 +114,8 @@ const Terms = () => {
   );
 };
 
-const styles = {
+// ★ ここに Record<string, React.CSSProperties> を追加しただけです！
+const styles: Record<string, React.CSSProperties> = {
   wrapper: {
     minHeight: '100vh', backgroundColor: theme.colors.background,
     color: theme.colors.textMain, fontFamily: theme.fonts.body, paddingBottom: '20px'

@@ -2,7 +2,7 @@ import React from 'react';
 import Footer from './Footer';
 import { theme } from '../theme';
 
-const Legal = () => {
+const Legal: React.FC = () => {
   return (
     <div style={styles.wrapper}>
       <nav style={styles.navBar}>
@@ -78,15 +78,22 @@ const Legal = () => {
   );
 };
 
-// 行コンポーネント
-const Row = ({ title, content }) => (
+// ★ 【重要】RowコンポーネントのPropsに型定義を追加！
+// content は文字列だけでなくタグ（JSX）も受け取るので React.ReactNode にします
+interface RowProps {
+  title: string;
+  content: React.ReactNode; 
+}
+
+const Row: React.FC<RowProps> = ({ title, content }) => (
   <tr>
     <th style={styles.th}>{title}</th>
     <td style={styles.td}>{content}</td>
   </tr>
 );
 
-const styles = {
+// ★ ここに型を追加！
+const styles: Record<string, React.CSSProperties> = {
   wrapper: {
     minHeight: '100vh', backgroundColor: theme.colors.background,
     color: theme.colors.textMain, fontFamily: theme.fonts.body,
