@@ -4,7 +4,7 @@ import Footer from './Footer';
 import { theme } from '../theme';
 import { apiClient } from '../utils/apiClient';
 import { useToast } from '../contexts/ToastContext';
-import { useAuthStore } from '../store/authStore'; // ★1. Storeをインポート
+import { useAuthStore } from '../store/authStore';
 
 // --- 型定義 ---
 interface Book {
@@ -13,6 +13,11 @@ interface Book {
   authorName: string;
   image_url?: string;
   highQuality?: boolean;
+  catchphrase?: string;
+  summaryText?: string; 
+  // ★★★ これを追加（Go -> Javaから渡ってくるAIデータ）★★★
+  aiReason?: string;
+  matchScore?: number;
 }
 
 interface Author {
@@ -30,7 +35,6 @@ interface BookSearchProps {
   onBookSelect: (id: number) => void;
 }
 
-// サブコンポーネント用のProps型
 interface BookCardItemProps {
   book: Book;
   onClick: () => void;
@@ -43,9 +47,8 @@ interface AuthorCardItemProps {
   onClick: () => void;
 }
 
-// --- 作家リスト ---
 const POPULAR_AUTHORS: Author[] = [
-  // ... (中略：データは元のまま) ...
+  // グループA: 幻想・ロマン
   { name: '宮沢 賢治', file: 'miyazawa_kenji.png' },
   { name: '小川 未明', file: 'ogawa_mimei.png' },
   { name: '泉 鏡花', file: 'izumi_kyoka.png' },
@@ -54,6 +57,7 @@ const POPULAR_AUTHORS: Author[] = [
   { name: '中原 中也', file: 'nakahara_chuya.png' },
   { name: '牧野 信一', file: 'makino_shinichi.png' },
   { name: '豊島 与志雄', file: 'toyoshima_toshio.png' },
+  // グループB: 無頼・近代
   { name: '太宰 治', file: 'dazai_osamu.png' },
   { name: '坂口 安吾', file: 'sakaguchi_ango.png' },
   { name: '芥川 竜之介', file: 'akutagawa_ryunosuke.png' },
@@ -61,6 +65,7 @@ const POPULAR_AUTHORS: Author[] = [
   { name: '田山 録弥', file: 'tayama_rokuya.png' },
   { name: '菊池 寛', file: 'kikuchi_kan.png' },
   { name: '山本 周五郎', file: 'yamamoto_shugorou.png' },
+  // グループC: 科学・思想・芸術
   { name: '寺田 寅彦', file: 'terada_torahiko.png' },
   { name: '中谷 宇吉郎', file: 'nakaya_ukichiro.png' },
   { name: '北大路 魯山人', file: 'kitaooji_rosannzin.png' },
@@ -70,6 +75,7 @@ const POPULAR_AUTHORS: Author[] = [
   { name: '原 民喜', file: 'hara_tamiki.png' },
   { name: '岸田 國士', file: 'kishida_kunio.png' },
   { name: '折口 信夫', file: 'origuchi_nobuo.png' },
+  // グループD: エンタメ・ミステリー
   { name: '江戸川 乱歩', file: 'edogawa_ranpo.png' },
   { name: '夢野 久作', file: 'yumeno_kyusaku.png' },
   { name: '海野 十三', file: 'uno_juza.png' },
@@ -86,7 +92,12 @@ const POPULAR_AUTHORS: Author[] = [
   { name: '田中 貢太郎', file: 'tanaka_koutarou.png' },
 ];
 
-// --- 共通BookCardコンポーネント ---
+const getCoverColor = (id: number) => {
+  const colors = ['#FF9A9E', '#FECFEF', '#A18CD1', '#FBC2EB', '#8FD3F4', '#84FAB0', '#E0C3FC'];
+  return colors[(id || 0) % colors.length];
+};
+
+// --- 通常のカード ---
 const BookCardItem: React.FC<BookCardItemProps> = ({ book, onClick, index, isRanking = false }) => {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -94,11 +105,6 @@ const BookCardItem: React.FC<BookCardItemProps> = ({ book, onClick, index, isRan
     ...styles.bookCard,
     ...(isRanking ? { minWidth: '120px', maxWidth: '120px', flexShrink: 0, scrollSnapAlign: 'start', marginRight: '15px' } as React.CSSProperties : {}),
     ...(isHovered ? styles.bookCardHover : {}),
-  };
-
-  const getCoverColor = (id: number) => {
-    const colors = ['#FF9A9E', '#FECFEF', '#A18CD1', '#FBC2EB', '#8FD3F4', '#84FAB0', '#E0C3FC'];
-    return colors[(id || 0) % colors.length];
   };
 
   return (
@@ -130,7 +136,51 @@ const BookCardItem: React.FC<BookCardItemProps> = ({ book, onClick, index, isRan
   );
 };
 
-// --- 共通AuthorCardコンポーネント ---
+// ✅ 最終形態：AIの推薦理由を最優先で表示するリッチカード
+const RichBookCardItem: React.FC<BookCardItemProps> = ({ book, onClick }) => {
+  const [isHovered, setIsHovered] = useState(false);
+
+  // ★ AIの理由があればそれを採用。なければ既存のキャッチコピー等にフォールバック。
+  const description = book.aiReason 
+    || [book.catchphrase, book.summaryText].filter(Boolean).join(" / ") 
+    || "名作文学の世界へ。";
+    
+  // ★ マッチ度をパーセンテージ表示（スコアが0.85なら 85%）
+  const matchPercent = book.matchScore ? Math.round(book.matchScore * 100) : null;
+
+  return (
+    <div 
+      style={{ ...styles.richCard, ...(isHovered ? styles.richCardHover : {}) }}
+      onClick={onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <div style={styles.richCover}>
+         {book.image_url ? (
+           <img src={book.image_url} alt={book.title} style={styles.bookImage} />
+         ) : (
+           <div style={{...styles.noImageCover, background: `linear-gradient(135deg, ${getCoverColor(book.id)} 0%, #fff 150%)`}}>
+             <span style={{fontSize: '32px'}}>📖</span>
+           </div>
+         )}
+      </div>
+
+      <div style={styles.richInfo}>
+        <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px'}}>
+          <span style={styles.aiMatchBadge}>✨ AIマッチ</span>
+          {/* ★ マッチ度を表示 */}
+          {matchPercent && <span style={{fontSize: '11px', color: theme.colors.textSub, fontWeight: 'bold'}}>{matchPercent}% マッチ</span>}
+        </div>
+        
+        <h4 style={styles.richTitle}>{book.title}</h4>
+        <p style={styles.richAuthor}>{book.authorName}</p>
+        {/* 本物のAIデータがここで3行表示される */}
+        <p style={styles.richDesc}>{description}</p>
+      </div>
+    </div>
+  );
+};
+
 const AuthorCardItem: React.FC<AuthorCardItemProps> = ({ author, onClick }) => {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -164,7 +214,6 @@ const AuthorCardItem: React.FC<AuthorCardItemProps> = ({ author, onClick }) => {
 // --- メインコンポーネント ---
 const BookSearch: React.FC<BookSearchProps> = ({ onBookSelect }) => {
   const { showToast } = useToast();
-  // ★2. Propsから消した onLogout を Storeから取得
   const { logout } = useAuthStore(); 
   
   const [query, setQuery] = useState('');
@@ -187,7 +236,6 @@ const BookSearch: React.FC<BookSearchProps> = ({ onBookSelect }) => {
   const LIMIT = 50; 
   const [searchParams] = useSearchParams(); 
   
-  // ★3. useRef に型と初期値 null を指定
   const rankingScrollRef = useRef<HTMLDivElement | null>(null);
   const authorScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -317,7 +365,6 @@ const BookSearch: React.FC<BookSearchProps> = ({ onBookSelect }) => {
 
   return (
     <div style={styles.container}>
-      {/* ...JSXは変更なしのため省略せず全て記述... */}
       <div style={styles.headerArea}>
         <h2 style={styles.heading}>📚 蔵書検索</h2>
         <p style={styles.subText}>AIが要約した名作文学の世界へ</p>
@@ -404,8 +451,12 @@ const BookSearch: React.FC<BookSearchProps> = ({ onBookSelect }) => {
           <div style={styles.loadingContainer}>{searchMode === 'ai' ? 'AIが思考の海から本を探しています...' : '書架を探しています...'}</div>
         ) : books.length > 0 ? (
           <>
-            <div style={styles.grid}>
-              {books.map((book, i) => <BookCardItem key={`${book.id}-${i}`} book={book} index={i} onClick={() => onBookSelect(book.id)} />)}
+            <div style={searchMode === 'ai' ? styles.richGrid : styles.grid}>
+              {books.map((book, i) => (
+                searchMode === 'ai' 
+                  ? <RichBookCardItem key={`${book.id}-${i}`} book={book} onClick={() => onBookSelect(book.id)} index={i} />
+                  : <BookCardItem key={`${book.id}-${i}`} book={book} index={i} onClick={() => onBookSelect(book.id)} />
+              ))}
             </div>
             {hasMore && currentSearchType !== 'ai' && (
               <div style={{textAlign: 'center', marginTop: '40px'}}>
@@ -429,7 +480,7 @@ const BookSearch: React.FC<BookSearchProps> = ({ onBookSelect }) => {
 };
 
 // --- Styles ---
-const styles: { [key: string]: React.CSSProperties } = {
+const styles: Record<string, React.CSSProperties> = {
   container: { maxWidth: '1000px', margin: '0 auto', padding: '40px 20px', fontFamily: theme.fonts.body, color: theme.colors.textMain, backgroundColor: theme.colors.background },
   headerArea: { textAlign: 'center', marginBottom: '40px' },
   heading: { fontSize: '28px', color: theme.colors.primary, marginBottom: '10px', fontWeight: 'bold', fontFamily: theme.fonts.heading },
@@ -444,10 +495,42 @@ const styles: { [key: string]: React.CSSProperties } = {
   inputWrapper: { flex: 1, position: 'relative', minWidth: 0 },
   input: { width: '100%', padding: '14px 20px', fontSize: '16px', border: `1px solid ${theme.colors.border}`, borderRadius: '4px', outline: 'none', backgroundColor: '#fff', transition: 'border-color 0.2s', fontFamily: theme.fonts.body, boxSizing: 'border-box' },
   button: { ...theme.ui.buttonPrimary, borderRadius: '4px', fontWeight: 'bold', flexShrink: 0, whiteSpace: 'nowrap', minWidth: '80px', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  
+  // 通常グリッド
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '20px' },
+  // ★ AI検索用のリッチグリッド（1行に1〜2列）
+  richGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' },
+
   horizontalScroll: { display: 'flex', overflowX: 'auto', padding: '10px 5px 20px 5px', scrollSnapType: 'x mandatory', scrollBehavior: 'smooth', scrollbarWidth: 'none' },
+  
+  // 通常カード
   bookCard: { position: 'relative', backgroundColor: '#2b2222', borderRadius: '4px', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', cursor: 'pointer', transition: 'transform 0.3s ease', overflow: 'hidden', aspectRatio: '2 / 3' },
   bookCardHover: { transform: 'translateY(-5px)', boxShadow: '0 15px 30px rgba(0,0,0,0.2)' },
+  
+  // ★ AI検索用のリッチカードスタイル
+  richCard: { display: 'flex', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', cursor: 'pointer', transition: 'transform 0.3s ease', overflow: 'hidden', border: `1px solid ${theme.colors.border}` },
+  richCardHover: { transform: 'translateY(-3px)', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' },
+  richCover: { width: '100px', flexShrink: 0, position: 'relative' },
+  richInfo: { 
+  flex: 1, 
+  minWidth: 0, // ★重要: これがないとFlexbox内でテキストが折り返さない
+  padding: '15px', 
+  display: 'flex', 
+  flexDirection: 'column', 
+  justifyContent: 'center' 
+  },
+  aiMatchBadge: { fontSize: '10px', backgroundColor: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: '#764ba2', fontWeight: 'bold', padding: '2px 8px', borderRadius: '12px', border: '1px solid #764ba2', alignSelf: 'flex-start', marginBottom: '8px' },
+  richTitle: { margin: '0 0 5px 0', fontSize: '15px', fontWeight: 'bold', color: theme.colors.primary, fontFamily: theme.fonts.heading },
+  richAuthor: { margin: '0 0 8px 0', fontSize: '12px', color: theme.colors.textSub },
+  // ✅ 修正後：行数制限を解除し、自然な全文表示にする
+  richDesc: { 
+    margin: 0,
+    fontSize: '11px',
+    lineHeight: '1.6',
+    color: '#555',
+    whiteSpace: 'pre-wrap', // ★改行コードがある場合もそのまま表示する
+  },
+
   bookCover: { height: '100%', width: '100%', position: 'relative', overflow: 'hidden' },
   bookImage: { width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.5s ease' },
   bookImageHover: { transform: 'scale(1.05)' },

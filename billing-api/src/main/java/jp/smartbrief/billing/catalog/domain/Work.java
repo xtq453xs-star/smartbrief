@@ -1,6 +1,8 @@
 package jp.smartbrief.billing.catalog.domain;
 
 import org.springframework.data.annotation.Id;
+// ★追加: DBに保存しないフィールドを示すアノテーション
+import org.springframework.data.annotation.Transient; 
 import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
@@ -11,8 +13,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * 書籍エンティティ
- * 
- * 青空文庫および海外翻訳作品の書籍情報を表します。
+ * * 青空文庫および海外翻訳作品の書籍情報を表します。
  * タイトル、著者名、サマリー、ジャンル、画像 URL、
  * 本文、カテゴリなどの書籍の詳細情報を保持します。
  */
@@ -32,10 +33,8 @@ public class Work {
     @Column("author_name")
     private String authorName;
     
-    // ★★★ ここに追加してください！ ★★★
     @Column("image_url")
     private String imageUrl;
-    // ★★★★★★★★★★★★★★★★★★★★★★
 
     @Column("aozora_url")
     private String aozoraUrl;
@@ -73,4 +72,14 @@ public class Work {
 
     @Column("body_text")
     private String bodyText;
+
+    // ========================================================================
+    // ★★★ Step 2 追加：AI検索時のみ使用する一時フィールド ★★★
+    // @Transient をつけることで、DBの SELECT / INSERT の対象から除外される
+    // ========================================================================
+    @Transient
+    private String aiReason;
+
+    @Transient
+    private Float matchScore;
 }

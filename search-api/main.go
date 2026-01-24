@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -27,7 +29,34 @@ const (
 	MinTextLength  = 100
 )
 
-// ★修正1: 環境変数からOllamaのURLを取得する関数
+// ★追加1: レスポンス用の構造体を定義（Java側が受け取る型）
+type RichSearchHit struct {
+	ID       uint64  `json:"id"`
+	Score    float32 `json:"score"`
+	Title    string  `json:"title"`
+	Author   string  `json:"author"`
+	AIReason string  `json:"aiReason"` // Groqが生成する理由
+}
+
+// Groq APIの構造体
+type GroqRequest struct {
+	Model    string        `json:"model"`
+	Messages []GroqMessage `json:"messages"`
+}
+
+type GroqMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type GroqResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+}
+
 func getOllamaEndpoint() string {
 	host := os.Getenv("OLLAMA_HOST")
 	if host == "" {
@@ -54,8 +83,7 @@ func getEmbedding(ctx context.Context, text string) ([]float32, error) {
 	}
 
 	client := &http.Client{Timeout: 30 * time.Second}
-	// ★修正1: ハードコードを排除
-	resp, err := client.Post(getOllamaEndpoint(), "application/json", strings.NewReader(string(jsonPayload)))
+	resp, err := client.Post(getOllamaEndpoint(), "application/json", bytes.NewReader(jsonPayload))
 	if err != nil {
 		return nil, fmt.Errorf("Ollama connection failed: %v", err)
 	}
@@ -73,6 +101,57 @@ func getEmbedding(ctx context.Context, text string) ([]float32, error) {
 	}
 
 	return response.Embedding, nil
+}
+
+// ★追加2: Groqを使って推薦理由を生成する関数
+func generateReasonWithGroq(ctx context.Context, query, title, author, preview string) string {
+	groqKey := os.Getenv("GROQ_API_KEY")
+	if groqKey == "" {
+		log.Println("GROQ_API_KEY is not set")
+		return ""
+	}
+
+	// プロンプト設計: 極めて短く、感情に訴えかけるように指示する
+	systemPrompt := "あなたは優秀なブックアドバイザーです。ユーザーの検索意図に対して、なぜこの本がマッチするのかを「40文字以内」で、情景が浮かぶような魅力的な言葉で推薦してください。作品名や著者名は繰り返さなくて良いです。"
+	userPrompt := fmt.Sprintf("検索意図: %s\n作品名: %s\n著者: %s\nあらすじ: %s", query, title, author, preview)
+
+	reqBody := GroqRequest{
+		Model: "llama-3.1-8b-instant",
+		Messages: []GroqMessage{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: userPrompt},
+		},
+	}
+	jsonPayload, _ := json.Marshal(reqBody)
+
+	// APIリクエスト
+	req, _ := http.NewRequestWithContext(ctx, "POST", "https://api.groq.com/openai/v1/chat/completions", bytes.NewReader(jsonPayload))
+	req.Header.Set("Authorization", "Bearer "+groqKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	// タイムアウトを短く設定（Groqが遅い場合にUXを犠牲にしないため）
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Groq API error: %v", err)
+		return ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		log.Printf("Groq returned status: %d", resp.StatusCode)
+		return ""
+	}
+
+	var groqResp GroqResponse
+	if err := json.NewDecoder(resp.Body).Decode(&groqResp); err != nil {
+		return ""
+	}
+
+	if len(groqResp.Choices) > 0 {
+		return strings.TrimSpace(groqResp.Choices[0].Message.Content)
+	}
+	return ""
 }
 
 func cleanBody(body string) string {
@@ -111,6 +190,7 @@ func newQdrantClient() (pb.QdrantClient, *grpc.ClientConn, error) {
 
 func main() {
 	http.HandleFunc("/setup", func(w http.ResponseWriter, r *http.Request) {
+		// (変更なし、省略せずそのまま配置)
 		ctx := context.Background()
 		_, conn, err := newQdrantClient()
 		if err != nil {
@@ -135,6 +215,7 @@ func main() {
 	})
 
 	http.HandleFunc("/index", func(w http.ResponseWriter, r *http.Request) {
+		// (変更なし、省略せずそのまま配置)
 		go func() {
 			log.Println("🚀 Fast Indexing started...")
 			dsn := os.Getenv("MYSQL_DSN")
@@ -150,7 +231,6 @@ func main() {
 			defer conn.Close()
 			pClient := pb.NewPointsClient(conn)
 
-			// ★修正2: OFFSETを廃止し、lastIdを使った高速ページネーションに変更
 			lastId := 0
 			limit := 1000
 			for {
@@ -190,16 +270,12 @@ func main() {
 							}},
 						})
 						batchCount++
-						if id%100 == 0 {
-							log.Printf("Processing ID: %d", id)
-						}
 					}
 				}
 				rows.Close()
 				if batchCount == 0 {
 					break
 				}
-				// 次のループの開始位置を更新
 				lastId = maxIdInBatch
 			}
 			log.Println("🎉 Fast Indexing Complete!")
@@ -207,39 +283,83 @@ func main() {
 		fmt.Fprintln(w, "Fast indexing started.")
 	})
 
+	// ★修正3: /search の大幅アップデート（Goroutineの導入）
 	http.HandleFunc("/search", func(w http.ResponseWriter, r *http.Request) {
 		rawQuery := r.URL.Query().Get("q")
 		if rawQuery == "" {
+			http.Error(w, "Query parameter 'q' is required", http.StatusBadRequest)
 			return
 		}
 
 		log.Printf("🔍 Query: %s", rawQuery)
-		vec, err := getEmbedding(context.Background(), rawQuery)
+
+		// 1. クエリをベクトル化
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		vec, err := getEmbedding(ctx, rawQuery)
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			http.Error(w, "Vectorization failed: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
+		// 2. Qdrantを検索
 		_, conn, err := newQdrantClient()
 		if err != nil {
+			http.Error(w, "Qdrant connection failed", http.StatusInternalServerError)
 			return
 		}
 		defer conn.Close()
 		pClient := pb.NewPointsClient(conn)
 
-		res, err := pClient.Search(context.Background(), &pb.SearchPoints{
+		res, err := pClient.Search(ctx, &pb.SearchPoints{
 			CollectionName: CollectionName,
 			Vector:         vec,
 			Limit:          10,
 			WithPayload:    &pb.WithPayloadSelector{SelectorOptions: &pb.WithPayloadSelector_Enable{Enable: true}},
 		})
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			http.Error(w, "Qdrant search failed: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
+		// 3. 検索結果を整形し、Groqで理由を並列生成
+		results := make([]RichSearchHit, len(res.Result))
+		var wg sync.WaitGroup
+
+		for i, hit := range res.Result {
+			// Qdrantからのデータ抽出
+			id := hit.Id.GetNum()
+			payload := hit.Payload
+			title := payload["title"].GetStringValue()
+			author := payload["author"].GetStringValue()
+			preview := payload["preview"].GetStringValue()
+
+			results[i] = RichSearchHit{
+				ID:     id,
+				Score:  hit.Score,
+				Title:  title,
+				Author: author,
+			}
+
+			// Goroutineを使って並列でGroq APIを叩く
+			wg.Add(1)
+			go func(idx int, t, a, p string) {
+				defer wg.Done()
+				// 各リクエストごとに新しいコンテキスト（タイムアウト付）を作成
+				gCtx, gCancel := context.WithTimeout(context.Background(), 3*time.Second)
+				defer gCancel()
+
+				reason := generateReasonWithGroq(gCtx, rawQuery, t, a, p)
+				results[idx].AIReason = reason
+			}(i, title, author, preview)
+		}
+
+		// 全てのAI生成が完了するのを待つ（最大3秒）
+		wg.Wait()
+
+		// 4. JSONとして返却
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(res.Result)
+		json.NewEncoder(w).Encode(results)
 	})
 
 	log.Println("Local Search API running on :8081")
