@@ -4,7 +4,7 @@ import { theme } from './theme';
 import { ToastProvider } from './contexts/ToastContext';
 import { apiClient } from './utils/apiClient';
 import { useAuthStore } from './store/authStore';
-
+import { useToast } from './contexts/ToastContext';
 // コンポーネント
 import Dashboard from './components/Dashboard';
 import BookSearch from './components/BookSearch';
@@ -38,24 +38,48 @@ const AppWrapper: React.FC = () => {
   );
 };
 
+
 const AppContent: React.FC = () => {
   const navigate = useNavigate();
+  // すでに store から logout も取得しているので、そのまま使えます！
   const { token, setPremium, logout } = useAuthStore();
+  const { showToast } = useToast(); // ★通知を出すために、これの追加だけ必要です！
 
-  // ★ 追加: ダッシュボードから呼ばれる決済/管理用のダミー関数
-  const handleCheckout = () => {
-    console.log("アップグレード画面へ移動します (TODO: Stripe連携)");
-    // navigate('/payment/checkout'); // などの処理を後で追加
+  // --- 課金・契約管理（Stripe連携） ---
+  const handleCheckout = async () => {
+    try {
+      const res = await apiClient.post<{ url: string }>('/checkout/create-session', {});
+      
+      if (res.ok && res.data?.url) {
+        window.location.href = res.data.url; // Stripeの決済画面へジャンプ！
+      } else {
+        showToast(res.message || '決済画面の取得に失敗しました', 'error');
+        if (res.status === 401) logout(); // ★ログアウト処理
+      }
+    } catch (err) {
+      showToast('通信エラーが発生しました。', 'error');
+    }
   };
 
-  const handleManageSubscription = () => {
-    console.log("契約管理画面へ移動します (TODO: Stripeカスタマーポータル)");
+  const handleManageSubscription = async () => {
+    try {
+      // カスタマーポータルは GET リクエストなので get を使います
+      const res = await apiClient.get<{ url: string }>('/billing/portal');
+      
+      if (res.ok && res.data?.url) {
+        window.location.href = res.data.url; // Stripeの管理画面へジャンプ！
+      } else {
+        showToast(res.message || '管理画面の取得に失敗しました', 'error');
+      }
+    } catch (err) {
+      showToast('通信エラーが発生しました。', 'error');
+    }
   };
 
   useEffect(() => {
     const loadPlan = async () => {
+      // ... (これ以降は元のコードのまま) ...
       if (!token) return;
-
       const res = await apiClient.get<UserMeResponse>('/auth/me');
       
       if (res.ok && res.data) {
