@@ -146,3 +146,9 @@ Docker環境で複数コンテナを連携させる際、ネットワーク設�
 - **音声読み上げ機能**: Azure AI Speech等のAPIを用いたオーディオブック化。
 - **AI要約パーソナライズ**: ユーザーの好みに合わせた「要約のトーン」の変更機能。
 - **コミュニティ機能**: 感想を共有し、AIが似た感性のユーザーを繋ぐSNS機能。
+
+## 今後の改善予定 (Roadmap)
+
+- **Security**: JWT管理を localStorage から HttpOnly Secure Cookie へ移行予定。
+- **Stability**: Stripe Webhookの重複排除（Idempotency）ロジックの導入。
+- **Frontend:** React Context APIまたはZustandによるグローバルステート管理へのリファクタリング。

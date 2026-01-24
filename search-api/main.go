@@ -23,38 +23,39 @@ import (
 const (
 	CollectionName = "works_vector_local"
 	VectorSize     = 1024
-	OllamaEndpoint = "http://host.docker.internal:11434/api/embeddings"
-	MaxEmbedLength = 400 // Ollama用に短く制限
+	MaxEmbedLength = 400
 	MinTextLength  = 100
 )
 
-// getEmbedding: ローカルのOllamaを叩く
+// ★修正1: 環境変数からOllamaのURLを取得する関数
+func getOllamaEndpoint() string {
+	host := os.Getenv("OLLAMA_HOST")
+	if host == "" {
+		host = "host.docker.internal"
+	}
+	return fmt.Sprintf("http://%s:11434/api/embeddings", host)
+}
+
 func getEmbedding(ctx context.Context, text string) ([]float32, error) {
-	// 1. 文字数カット
 	runes := []rune(text)
 	if len(runes) > MaxEmbedLength {
 		text = string(runes[:MaxEmbedLength])
 	}
 
-	// 2. リクエストの作成
 	type OllamaRequest struct {
 		Model  string `json:"model"`
 		Prompt string `json:"prompt"`
 	}
 
-	reqBody := OllamaRequest{
-		Model:  "mxbai-embed-large",
-		Prompt: text,
-	}
-
+	reqBody := OllamaRequest{Model: "mxbai-embed-large", Prompt: text}
 	jsonPayload, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, err
 	}
 
-	// 3. Ollamaへ送信
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Post(OllamaEndpoint, "application/json", strings.NewReader(string(jsonPayload)))
+	// ★修正1: ハードコードを排除
+	resp, err := client.Post(getOllamaEndpoint(), "application/json", strings.NewReader(string(jsonPayload)))
 	if err != nil {
 		return nil, fmt.Errorf("Ollama connection failed: %v", err)
 	}
@@ -109,7 +110,6 @@ func newQdrantClient() (pb.QdrantClient, *grpc.ClientConn, error) {
 }
 
 func main() {
-	// ① Setup
 	http.HandleFunc("/setup", func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.Background()
 		_, conn, err := newQdrantClient()
@@ -130,14 +130,13 @@ func main() {
 		if err != nil {
 			fmt.Fprintf(w, "Setup log: %v\n", err)
 		} else {
-			fmt.Fprintln(w, "Collection created (Simple Mode)!")
+			fmt.Fprintln(w, "Collection created!")
 		}
 	})
 
-	// ② Indexing: シンプル化
 	http.HandleFunc("/index", func(w http.ResponseWriter, r *http.Request) {
 		go func() {
-			log.Println("🚀 Simple Indexing started...")
+			log.Println("🚀 Fast Indexing started...")
 			dsn := os.Getenv("MYSQL_DSN")
 			db, err := sql.Open("mysql", dsn)
 			if err != nil {
@@ -151,25 +150,25 @@ func main() {
 			defer conn.Close()
 			pClient := pb.NewPointsClient(conn)
 
-			offset := 0
+			// ★修正2: OFFSETを廃止し、lastIdを使った高速ページネーションに変更
+			lastId := 0
 			limit := 1000
 			for {
-				query := fmt.Sprintf("SELECT work_id, title, author_name, full_text FROM works WHERE full_text IS NOT NULL AND CHAR_LENGTH(full_text) > %d ORDER BY work_id ASC LIMIT %d OFFSET %d", MinTextLength, limit, offset)
+				query := fmt.Sprintf("SELECT work_id, title, author_name, full_text FROM works WHERE full_text IS NOT NULL AND CHAR_LENGTH(full_text) > %d AND work_id > %d ORDER BY work_id ASC LIMIT %d", MinTextLength, lastId, limit)
 				rows, err := db.Query(query)
 				if err != nil {
 					break
 				}
 
 				batchCount := 0
+				var maxIdInBatch int
+
 				for rows.Next() {
-					var id uint64
+					var id int
 					var title, author, body string
 					if err := rows.Scan(&id, &title, &author, &body); err == nil {
+						maxIdInBatch = id
 						cleaned := cleanBody(body)
-
-						// ★ここをシンプル化★
-						// タイトルと本文を改行でつなぐだけ。ラベル（作品名:など）は削除。
-						// これで「羅生門」と検索した時に、先頭のタイトルに強く反応するはず。
 						inputText := fmt.Sprintf("%s %s %s\n%s", title, title, title, cleaned)
 
 						vec, err := getEmbedding(context.Background(), inputText)
@@ -181,7 +180,7 @@ func main() {
 						_, _ = pClient.Upsert(context.Background(), &pb.UpsertPoints{
 							CollectionName: CollectionName,
 							Points: []*pb.PointStruct{{
-								Id:      &pb.PointId{PointIdOptions: &pb.PointId_Num{Num: id}},
+								Id:      &pb.PointId{PointIdOptions: &pb.PointId_Num{Num: uint64(id)}},
 								Vectors: &pb.Vectors{VectorsOptions: &pb.Vectors_Vector{Vector: &pb.Vector{Data: vec}}},
 								Payload: map[string]*pb.Value{
 									"title":   {Kind: &pb.Value_StringValue{StringValue: title}},
@@ -200,22 +199,20 @@ func main() {
 				if batchCount == 0 {
 					break
 				}
-				offset += limit
+				// 次のループの開始位置を更新
+				lastId = maxIdInBatch
 			}
-			log.Println("🎉 Simple Indexing Complete!")
+			log.Println("🎉 Fast Indexing Complete!")
 		}()
-		fmt.Fprintln(w, "Simple indexing started.")
+		fmt.Fprintln(w, "Fast indexing started.")
 	})
 
-	// ③ Search: シンプル化
 	http.HandleFunc("/search", func(w http.ResponseWriter, r *http.Request) {
 		rawQuery := r.URL.Query().Get("q")
 		if rawQuery == "" {
 			return
 		}
 
-		// ★ここもシンプル化★
-		// 検索クエリをそのまま投げる（タイトル検索も本文検索もよしなに拾わせる）
 		log.Printf("🔍 Query: %s", rawQuery)
 		vec, err := getEmbedding(context.Background(), rawQuery)
 		if err != nil {

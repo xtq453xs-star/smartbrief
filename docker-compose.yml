@@ -172,6 +172,7 @@ services:
       - QDRANT_HOST=qdrant
       - MYSQL_DSN=${MYSQL_USER}:${MYSQL_PASSWORD}@tcp(mysql_server:3306)/aozora_db?charset=utf8mb4
       - VECTOR_DIMENSION=1024 # ★重要: mxbai-embed-largeを使うなら1024に変更
+      - OLLAMA_HOST=host.docker.internal
     depends_on:
       - qdrant
     extra_hosts:
