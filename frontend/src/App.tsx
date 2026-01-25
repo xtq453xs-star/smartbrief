@@ -48,7 +48,7 @@ const AppContent: React.FC = () => {
   // --- 課金・契約管理（Stripe連携） ---
   const handleCheckout = async () => {
     try {
-      const res = await apiClient.post<{ url: string }>('/checkout/create-session', {});
+      const res = await apiClient.post<{ url: string }>('/checkout/create-session');
       
       if (res.ok && res.data?.url) {
         window.location.href = res.data.url; // Stripeの決済画面へジャンプ！
@@ -83,7 +83,8 @@ const AppContent: React.FC = () => {
       
       if (res.ok && res.data) {
         setLoggedIn(true);
-        setPremium(res.data.plan === 'PREMIUM');
+        // ✅ 修正後
+        setPremium(res.data.isPremium);
       } else {
         setLoggedIn(false);
       }

@@ -74,13 +74,13 @@ public class AuthController {
                 String safeUsername = Objects.requireNonNull(user.getUsername());
                 String token = jwtUtil.generateToken(safeUsername);
 
-                // ★HttpOnly Cookieの作成 (JavaScriptからのアクセスを禁止)
+                // ★本番環境(HTTPS)向けの正しいCookie設定
                 ResponseCookie cookie = ResponseCookie.from("authToken", Objects.requireNonNull(token))
                     .httpOnly(true)
-                    .secure(true) // HTTPS必須
-                    .sameSite("Strict") // CSRF対策
+                    .secure(true)    // ★HTTPSなので true でOK！
+                    .sameSite("Lax") // ★Strict から Lax に変更（Stripe等の外部リダイレクト対策）
                     .path("/")
-                    .maxAge(jwtUtil.getExpirationTime() / 1000) // 秒単位
+                    .maxAge(jwtUtil.getExpirationTime() / 1000)
                     .build();
 
                 // レスポンスヘッダにCookieを追加
@@ -288,8 +288,9 @@ public class AuthController {
     }
 
     // --- 自分のユーザー情報を取得するAPI ---
-    @org.springframework.web.bind.annotation.GetMapping("/me")
-    public Mono<ResponseEntity<Map<String, Object>>> getMyInfo(Principal principal) { 
+    // ★修正: ここにも produces を追加して文字化けを防止！
+    @org.springframework.web.bind.annotation.GetMapping(value = "/me", produces = MediaType.APPLICATION_JSON_VALUE)
+    public Mono<ResponseEntity<Map<String, Object>>> getMyInfo(Principal principal) {
         if (principal == null) {
             return Mono.just(new ResponseEntity<>(Objects.requireNonNull(HttpStatus.UNAUTHORIZED))); // ★ラップ
         }

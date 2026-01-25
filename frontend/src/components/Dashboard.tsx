@@ -175,7 +175,8 @@ const BookList: React.FC<BookListProps> = ({ books, onSelect, emptyMsg, isMobile
 const Dashboard: React.FC<DashboardProps> = ({ onBookSelect, onUpgrade, onManage }) => {
   const navigate = useNavigate();
   const { showToast } = useToast();
-  const { token, logout } = useAuthStore();
+  // ★ 1. token の代わりに isLoggedIn を取得
+  const { isLoggedIn, logout } = useAuthStore();
   
   const [activeView, setActiveView] = useState<'history' | 'ranking' | 'favorites' | 'authors'>('history');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -209,7 +210,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onBookSelect, onUpgrade, onManage
   }, [logout, showToast]);
 
   useEffect(() => {
-    if (!token) return;
+    // ★ 2. isLoggedIn で判定
+    if (!isLoggedIn) return;
     setLoading(true);
     
     Promise.all([
@@ -226,7 +228,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onBookSelect, onUpgrade, onManage
         setAllAuthors([...new Set(authors || [])]);
         setLoading(false);
     });
-  }, [fetchData, token]); 
+  // ★ 3. 依存配列も isLoggedIn に変更  
+  }, [fetchData, isLoggedIn]);
 
   const viewInfo = {
     history: { title: 'マイ・ライブラリ', desc: 'おかえりなさい。あなたが最近旅した物語です。' },

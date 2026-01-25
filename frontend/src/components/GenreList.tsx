@@ -13,7 +13,7 @@ interface GenreListProps {
 
 const GenreList: React.FC<GenreListProps> = ({ onBack }) => {
   // ★3. Propsから消した token と logout を Storeから取得
-  const { token, logout } = useAuthStore(); 
+  const { isLoggedIn, logout } = useAuthStore();
   const navigate = useNavigate();
   const { showToast } = useToast();
   
@@ -22,7 +22,8 @@ const GenreList: React.FC<GenreListProps> = ({ onBack }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!token) return;
+    // ★ 2. isLoggedIn で判定
+    if (!isLoggedIn) return;
 
     const loadGenres = async () => {
       setLoading(true);
@@ -40,7 +41,7 @@ const GenreList: React.FC<GenreListProps> = ({ onBack }) => {
     };
 
     loadGenres();
-  }, [logout, showToast, token]); // ★7. 依存配列を修正
+  }, [logout, showToast, isLoggedIn]);
 
   const handleGenreClick = (genre: string) => { // ★引数に型
     navigate(`/search?genre=${encodeURIComponent(genre)}`);

@@ -11,8 +11,8 @@ interface AuthorListProps {
 }
 
 const AuthorList: React.FC<AuthorListProps> = ({ onBack }) => {
-  // ★2. Propsから消した代わりに、Storeから token と logout を取得
-  const { token, logout } = useAuthStore(); 
+  // ★ 1. token の代わりに isLoggedIn を取得
+  const { isLoggedIn, logout } = useAuthStore();
   const navigate = useNavigate();
   const { showToast } = useToast();
   
@@ -21,7 +21,8 @@ const AuthorList: React.FC<AuthorListProps> = ({ onBack }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!token) return; // トークンがない場合は何もしない
+    // ★ 2. isLoggedIn で判定
+    if (!isLoggedIn) return;
 
     const loadAuthors = async () => {
       setLoading(true);
@@ -39,7 +40,8 @@ const AuthorList: React.FC<AuthorListProps> = ({ onBack }) => {
     };
 
     loadAuthors();
-  }, [logout, showToast, token]); // ★6. 依存配列を修正 (onLogout -> logout)
+  // ★ 3. 依存配列も isLoggedIn に変更
+  }, [logout, showToast, isLoggedIn]);
 
   const handleAuthorClick = (authorName: string) => { // ★引数に型
     navigate(`/search?q=${encodeURIComponent(authorName)}`);

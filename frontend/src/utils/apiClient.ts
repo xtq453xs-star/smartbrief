@@ -21,8 +21,11 @@ async function request<T>(endpoint: string, method: string, body: any = null): P
   try {
     const res = await fetch(`${BASE_URL}${endpoint}`, {
       method,
-      
-      // ★重要: これをつけることで、ブラウザがHttpOnly Cookieを勝手にバックエンドへ送ってくれる
+      // ★修正: JSONでデータを送ることをバックエンドに伝えるヘッダーを明示
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      // ★重要: HttpOnly Cookieをブラウザに自動送信させる
       credentials: 'include', 
       body: body ? JSON.stringify(body) : null,
     });
