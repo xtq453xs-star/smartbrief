@@ -1,6 +1,7 @@
 package jp.smartbrief.billing.catalog.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * Go検索APIからのレスポンスを受け取るDTO
@@ -8,9 +9,9 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record RichSearchHit(
-    Integer id,
-    Float score,
-    String title,
-    String author,
-    String aiReason // ★ ここにGroqの生成結果が入る
+    @JsonProperty("id") Long id,      // IntegerからLongへ変更
+    @JsonProperty("score") Float score,
+    @JsonProperty("title") String title,
+    @JsonProperty("author") String author,
+    @JsonProperty("aiReason") String aiReason // キャメルケースを明示
 ) {}

@@ -1,4 +1,4 @@
-# 📚 SmartBrief - AI要約 & 翻訳SaaSプラットフォーム (v2.0)
+# 📚 SmartBrief - AI要約 & 翻訳SaaSプラットフォーム (v3.0)
 
 ![Java](https://img.shields.io/badge/Java_21-Spring_Boot_3-green)
 ![Go](https://img.shields.io/badge/Go_1.24-Search_Service-00ADD8)
@@ -77,60 +77,49 @@ SaaSの生命線である「認証」と「決済」を極限まで堅牢化し�
 
 ```mermaid
 graph TD
-    User((User)) -->|HTTPS / Secure Cookie| CF[Cloudflare Tunnel]
-    CF --> FE[React / TS / Zustand]
-    FE -->|REST API| BE[Spring Boot API]
+    %% 既存のアクセス層
+    User((User)) -->|HTTPS| CF[Cloudflare] --> FE[React Frontend]
+    FE -->|REST API| BE[Spring Boot 3 / Java 21]
 
-    subgraph Core_Backend [Core Backend]
-        BE <-->|Idempotent Tx| MySQL[(MySQL DB)]
-        BE <-->|Webhook Validation| Stripe[Stripe API]
-    end
-
-    subgraph Hybrid_AI_Engine [Hybrid AI Engine]
-        direction TB
-        BE -->|HTTP Request| GO[Go Search Service]
-        GO <-->|Parallel Inference| Groq[Groq Cloud API]
-        
-        subgraph Local_GPU_Cluster [Local GPU Cluster]
-            GO <-->|Embedding| Ollama[Ollama]
-            GO <-->|Vector Search| Qdrant[(Qdrant DB)]
-        end
-    end
-
-    subgraph Content_Factory [Content Factory]
-        n8n[n8n Workflow] -->|Batch Fetch| Gutenberg[Project Gutenberg]
-        n8n -->|Store Content| MySQL
-    end
-
-    classDef container fill:#e1f5fe,stroke:#01579b,stroke-width:2px
-    classDef external fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    classDef local fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    %% マイクロサービス連携
+    BE -->|Async WebClient| SearchAPI[Go Search API]
     
-    class FE,BE,MySQL,n8n container
-    class CF,Stripe,Groq,Gutenberg external
-    class GO,Ollama,Qdrant local
+    subgraph "AI Search Engine (Local & Cloud Hybrid)"
+        SearchAPI -->|Local Inference| Ollama[Ollama / mxbai-embed-large]
+        SearchAPI -->|Vector Store| Qdrant[(Qdrant Vector DB)]
+        SearchAPI -->|Real-time Reasoning| Groq[Groq / Llama 3.1]
+    end
+
+    %% 既存のデータ層
+    BE -->|R2DBC| MySQL[("MySQL 8.0 (Catalog/User)")]
 ```
 
-## 🛠 Development Episodes (Behind the Scenes)
+## 🛠 Development Story: 挑戦とやりがい
 
-### 1. 異言語間通信における「型」の壁を突破
-Java (Spring Boot) と Go、二つの異なる言語をマイクロサービスとして連携させる際、JSONのデコードエラーという壁に直面しました。
+本プロジェクトのフェーズ2における大規模改修は、単なる機能追加ではなく、**「商用クオリティの堅牢性」**と**「持続可能なコードベース」**への昇華を目的とした、技術的な総力戦となりました。
 
-* **解決**: Go側のレスポンス仕様を再定義し、Spring WebClientの強力な型変換を活用して `RichSearchHit` DTOで直接受け取ることで、異言語間の不安定な通信を完全に克服しました。
+### 1. セキュリティの追求とTypeScriptへの完全移行
+当初は利便性を優先し LocalStorage + JWT で認証を実装していましたが、SaaSとしての信頼性を担保するため、XSS攻撃を物理的に遮断する **HttpOnly / Secure / SameSite=Lax Cookie** 管理への全面移行を決断しました。
 
-### 2. 10件のAI推論を1秒で終わらせるGoの並列処理
-AI検索結果10件に対して、それぞれ「おすすめ理由」をLLMに生成させる際、直列処理では10秒以上かかりUXを損なう問題がありました。
+- **型安全性の導入 (TS化):** 通信層の根本的な変更に伴い、データ構造の不整合を防ぐため、フロントエンドを全面的に TypeScript へ移行。数千行に及ぶプロパティ定義を厳密に管理しました。
+- **ミリ単位のデバッグ:** Docker ネットワーク内での CORS 設定、Java (Spring Security) での Cookie 抽出ロジック、TS の型定義など、フロントからバックまで連動する「疎通の壁」を一つずつ突破しました。
 
-* **解決**: Go言語の `sync.WaitGroup` と `Goroutine` を活用し、10件のAPIリクエストを完全に並列化。全体のリクエスト時間を「最も遅い1回分（約1秒）」に圧縮することに成功しました。
+### 2. 妥協なき「Null Safety」の追求
+実行時の予期せぬクラッシュを設計段階でゼロにするため、システム全体から **Null Pointer 関連の不確実性を徹底的に排除** しました。
 
-### 3. フロントエンドの破綻を防ぐ「型安全」と「状態管理」
-機能拡張に伴い、Propsのバケツリレー（Prop Drilling）が発生し、保守性が低下していました。
+- **Java (Spring WebFlux):** Java 21 の `Objects.requireNonNull` や `Collectors.collectingAndThen(..., List::copyOf)` を駆使。IDE の静的解析警告を一つ残らず解消し、バックエンドの堅牢性を極限まで高めました。
+- **TypeScript & Go:** フロントエンドでは厳格な型ガードを徹底。Go 側でも Qdrant ペイロードや外部 API 通信において徹底したエラーハンドリングと Null チェックを実装しました。
 
-* **解決**: TypeScriptへの完全移行により実行時エラーを撲滅。さらに、`Zustand` を導入して認証状態をグローバル化し、コンポーネントの再レンダリングを最小限に抑えるモダンなアーキテクチャを実現しました。
+**「動くのは当たり前、落ちないのは技術」** という信念のもと、膨大なコンパイル警告を論理的に解消していくプロセスは、エンジニアとして最大のやり甲斐となりました。
 
----
+### 3. マイクロサービス間の最適化と並列処理
+- **異言語間通信の壁を突破:** Java (Spring Boot) と Go の間で発生した JSON デコードの型不整合を、`RichSearchHit` DTO の再定義と WebClient の型変換ロジックにより解決。言語の垣根を超えた安定した通信を実現しました。
+- **10件のAI推論を1秒で完了:** 検索結果10件に対する「推薦理由」の生成を、Go の `Goroutine` と `sync.WaitGroup` により完全並列化。直列処理で 10秒以上かかっていたリクエスト時間を、**わずか 1秒前後（最も遅い1回分）に圧縮**し、圧倒的な UX を実現しました。
 
-## 🚀 今後の展望 (Roadmap)
+### 4. 状態管理のモダン化
+機能拡張に伴う Props Drilling（バケツリレー）によるコードの複雑化に対し、**Zustand** を導入。認証状態やユーザー権限をグローバルに管理し、再レンダリングを最小限に抑えるクリーンなフロントエンドアーキテクチャを確立しました。
+
+# 🚀 今後の展望 (Roadmap)
 
 SaaSとしての基盤は完成しましたが、技術的探求とユーザー体験の向上は続きます。
 

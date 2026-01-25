@@ -60,8 +60,11 @@ public class GlobalExceptionHandler extends AbstractErrorWebExceptionHandler {
             "path", request.path()
         );
 
+        // ★修正ポイント: contentType と body の引数を Objects.requireNonNull で包み、
+        // nullを許容しないメソッド定義（@NonNull）に適合させます
+        // 修正後の最終的な return 文
         return ServerResponse.status(status)
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(BodyInserters.fromValue(body));
+            .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
+            .body(BodyInserters.fromValue(Objects.requireNonNull(body)));
     }
 }
