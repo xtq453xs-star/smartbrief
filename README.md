@@ -9,7 +9,7 @@
 > **🚀 Project Status: v2.0 メジャーアップデート完了 (2026.01)**
 >
 > 本プロジェクトは、個人開発の枠を超え、**商用利用を前提としたSaaSプロダクト**として設計・開発・デプロイを完了しました。
-> 従来のキーワード検索を刷新し、**Gemini AIとベクトルデータベースを統合した「AI感情検索」**を実装。さらにTypeScript化によるフルスタックの型安全性と、Go言語（Goroutine）による超高速AI推論を実現し、モダンなアーキテクチャを完遂しています。
+> 従来のキーワード検索を刷新し、**Gemini AIとベクトルデータベースを統合した「AI感情検索」**を実装。さらに、HttpOnly Cookieによるセキュアな認証、Stripe Webhookの冪等性担保、Goroutineによる超高速AI推論を実現し、モダンかつ堅牢なアーキテクチャを完遂しています。
 
 ---
 
@@ -39,42 +39,30 @@ v2.0では、**「切なくて涙が出る物語」「仕事に疲れた時に�
 - **Local Embedding (Ollama)**: RTX 3070のGPUリソースを活用。`mxbai-embed-large`モデルを自前運用し、1.7万件の蔵書を**完全無料・プライバシー重視**でベクトル化。
 - **超高速並列推論 (Groq + Go)**: 検索結果に基づく「おすすめ理由」の生成には、世界最速級の推論エンジン「Groq (Llama 3)」を採用。Goの `Goroutine` による並列処理で10冊分のAI推論を同時に行い、**わずか1秒台でユーザーへ提示**します。
 
-### 2. 🏗️ マルチ言語マイクロサービス・アーキテクチャ
-システム負荷の最適化と保守性の向上のため、役割に応じた言語選択（Polyglot）を行っています。
-- **Go Search Microservice (Go 1.24)**: 計算資源の効率化と並列処理に長けたGo言語を採用。Qdrant（ベクトルDB）への検索とGroq APIへの並列リクエストを統括。
-- **Orchestration (Java 21 / Spring WebFlux)**: 認証・認可、MySQL連携、決済処理を統括。GoからのAIデータをR2DBCの `@Transient` を活用して既存ドメインに非侵襲でマージ（CQRSの準備）します。
-- **n8n Content Factory**: n8n、Vertex AI、GPT-5 Nanoを組み合わせ、手動更新ゼロでコンテンツが増え続けるパイプラインを構築。
+### 2. 🛡️ エンタープライズ品質のセキュリティ & 決済基盤
+SaaSの生命線である「認証」と「決済」を極限まで堅牢化しました。
+- **XSS完全防御 (HttpOnly Secure Cookie)**: JWTトークンを `localStorage` から排除。ブラウザのセキュリティ機構（SameSite=Lax/Strict）を活用し、悪意あるスクリプトからのトークン窃取を物理的に無効化。
+- **Stripeの冪等性 (Idempotency) 担保**: ネットワーク遅延等によるWebhookの重複送信に対し、DB側でイベントIDを記録して排他制御 (`@Transactional`) を実行。二重決済や不正な契約延長を100%防止。
+- **Zero Trust Network**: Cloudflare Tunnelによりインバウンドポートを全閉鎖。DDoS攻撃やポートスキャンを遮断し、Qualys SSL Labsにて最高評価「A+」を獲得。
 
-### 3. 🛡️ フルスタック型安全とセキュリティ
-- **TypeScript & Zustand**: フロントエンドをJSからTSへ完全移行。Zustandによる状態管理でProp Drillingを解消し、コンパイル時の厳格な型安全性を確保。
-- **Zero Trust Network**: Cloudflare Tunnelによりインバウンドポートを全閉鎖。DDoS攻撃やポートスキャンを物理的に無効化。
-- **最高評価「A+」**: Qualys SSL Labsにて最高評価を獲得。HSTS、TLS 1.3、CSP等の高度なWebセキュリティを完備。
+### 3. 🏗️ マルチ言語マイクロサービス・アーキテクチャ
+役割に応じた言語選択（Polyglot）により、システム全体のパフォーマンスと保守性を最大化。
+- **Go Search Microservice (Go 1.24)**: 計算資源の効率化と並列処理に長けたGo言語で、AI検索エンジンを独立。
+- **Orchestration (Java 21 / Spring WebFlux)**: 認証、トランザクション、R2DBC（非同期DB）によるドメインロジックを統括。
+- **Frontend (React 19 / TS / Zustand)**: コンパイル時の型安全性と、ZustandによるProp DrillingのないモダンなUI状態管理。
 
 ---
 
 ## ✨ 主要機能
 
 ### 📱 読書体験 (Core Features)
-- **✨ AI感情検索 & 推論表示**: 検索クエリに基づき、Qdrantが本を選定し、Groqが「マッチした理由」をリアルタイム生成。UIにリッチカードとして全文表示します。
+- **✨ AI感情検索 & 推論表示**: Qdrantが本を選定し、Groqが「マッチした理由」をリアルタイム生成。リッチカードとして全文表示します。
 - **📖 3Dイマーシブ読書モード**: 物理的な本をめくるようなUI（ページフリップ）を実装し、没入感の高い読書体験を提供。
 - **シームレス翻訳**: アプリ内でVertex AIによる翻訳全文を閲覧可能。
 
 ### 💳 サブスクリプション基盤 (SaaS Architecture)
 - **Stripe完全連携**: 決済（Checkout）から解約・カード変更（Portal）まで実装。
-- **Webhookによる即時反映**: 決済イベントを検知し、DB上の権限（Free ⇔ Premium）をリアルタイムに自動更新。
-
----
-
-## 🛠 技術スタック
-
-| カテゴリ | 技術・ツール | 選定理由 |
-| :--- | :--- | :--- |
-| **Backend** | **Java 21, Spring Boot 3** | WebFluxによるノンブロッキングI/Oと堅牢なセキュリティ統括。 |
-| **Search (AI)** | **Go 1.24**, Ollama, Groq | Goroutineによる並列処理と、超高速推論のハイブリッド構成。 |
-| **Frontend** | **React 19, TS, Zustand** | 型安全性と高度なグローバルステート管理。 |
-| **Database** | **MySQL 8.0 / Qdrant** | 構造化データとベクトルデータのハイブリッド管理。 |
-| **Infra** | **Docker, Cloudflare** | コンテナ化による可搬性とゼロトラストによる安全な公開。 |
-| **Payment** | **Stripe API** | 堅牢かつ拡張性の高い決済基盤。 |
+- **リアルタイム権限更新**: 処理済みのWebhookイベントをフィルタリングし、DB上の権限（Free ⇔ Premium）を安全かつ即時に更新。
 
 ---
 
@@ -82,13 +70,13 @@ v2.0では、**「切なくて涙が出る物語」「仕事に疲れた時に�
 
 ```mermaid
 graph TD
-    User((User)) -->|HTTPS / Zero Trust| CF[Cloudflare Tunnel]
+    User((User)) -->|HTTPS / Secure Cookie| CF[Cloudflare Tunnel]
     CF --> FE[React / TS / Zustand]
     FE -->|REST API| BE[Spring Boot API]
 
     subgraph Core_Backend [Core Backend]
-        BE <--> MySQL[(MySQL DB)]
-        BE <--> Stripe[Stripe API]
+        BE <-->|Idempotent Tx| MySQL[(MySQL DB)]
+        BE <-->|Webhook Validation| Stripe[Stripe API]
     end
 
     subgraph Hybrid_AI_Engine [Hybrid AI Engine]
@@ -135,11 +123,10 @@ AI検索結果10件に対して、それぞれ「おすすめ理由」をLLMに�
 
 ---
 
-## 🚀 今後の展望
-- **音声読み上げ機能**: Azure AI Speech等のAPIを用いたオーディオブック化。
-- **コミュニティ機能**: 感想を共有し、AIが似た感性のユーザーを繋ぐSNS機能。
+## 🚀 今後の展望 (Roadmap)
 
-## 今後の改善予定 (Roadmap)
-- **Security**: JWT管理を `localStorage` から `HttpOnly Secure Cookie` へ移行（XSS対策）。
-- **Stability**: Stripe Webhookの重複排除（Idempotency）ロジックの導入による二重決済防止。
-- **Performance**: `TanStack Query (React Query)` 導入によるサーバー状態のキャッシュ管理。
+SaaSとしての基盤は完成しましたが、技術的探求とユーザー体験の向上は続きます。
+
+- **🦀 Rust化への挑戦**: さらなるメモリフットプリントの削減と極限のI/O性能を追求するため、Goで実装されている検索マイクロサービスを **Rust (Tokio + Axum)** へリプレイス予定。
+- **🔊 音声読み上げ機能**: Azure AI Speech等のAPIを用いたオーディオブック化。
+- **⚡ Performance**: `TanStack Query (React Query)` 導入によるサーバー状態のキャッシュ管理。
