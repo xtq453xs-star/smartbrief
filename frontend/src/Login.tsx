@@ -55,10 +55,10 @@ const ActionButton: React.FC<ActionButtonProps> = ({ onClick, disabled, children
 // --- 3. メインコンポーネント ---
 const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { setToken } = useAuthStore();
+  // ★変更点: setToken から setLoggedIn に変更
+  const { setLoggedIn } = useAuthStore();
   const { success, error: showError } = useToast();
   
-  // viewModeに型リテラルを指定
   const [viewMode, setViewMode] = useState<'login' | 'register'>('login');
   
   const [username, setUsername] = useState('');
@@ -71,12 +71,13 @@ const Login: React.FC = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // res.data.token が存在することを保証するために型を指定（apiClient側で定義した形式に合わせる）
-    const res = await apiClient.post<{ token: string }>('/auth/login', { username, password });
+    // バックエンドからはトークンが返ってこなくなり、Cookieに直接セットされる
+    const res = await apiClient.post('/auth/login', { username, password });
 
-    if (res.ok && res.data) {
+    if (res.ok) {
       success('おかえりなさい！');
-      setToken(res.data.token);
+      // ★変更点: トークンを保存せず、ログイン状態だけをTrueにする
+      setLoggedIn(true);
       navigate('/');
     } else {
       showError(res.message || 'ログインに失敗しました');

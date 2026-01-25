@@ -26,8 +26,7 @@ import reactor.core.publisher.Mono;
 
 /**
  * Stripe ウェブフック コントローラー
- * 
- * Stripe からの webhook イベントを受信・処理します。
+ * * Stripe からの webhook イベントを受信・処理します。
  * 主にチェックアウトセッション完了イベントを処理し、
  * ユーザーの購読情報をデータベースに保存します。
  */
@@ -88,10 +87,10 @@ public class StripeWebhookController {
                                 return Mono.just(ResponseEntity.ok("User ID missing"));
                             }
 
-                            log.info("★ [Webhook] SUCCESS! UserID: {}, CustomerID: {}", userIdStr, customerId);
+                            log.info("★ [Webhook] SUCCESS! UserID: {}, CustomerID: {}, EventID: {}", userIdStr, customerId, event.getId());
 
-                            // BillingService に委譲して DB を更新
-                            return billingService.updateSubscriptionFromWebhook(userIdStr, User.Plan.PREMIUM, customerId)
+                            // ★★★ 修正箇所：第1引数に event.getId() を追加しました ★★★
+                            return billingService.updateSubscriptionFromWebhook(event.getId(), userIdStr, User.Plan.PREMIUM, customerId)
                                 .map(user -> {
                                     log.info("★ [Webhook] DB Updated for user: {}", user.getUsername());
                                     return ResponseEntity.ok("Success");

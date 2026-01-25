@@ -104,4 +104,8 @@ public class JwtUtil {
             return false;
         }
     }
+    // ★追加: 有効期限(ミリ秒)を外部から取得するためのGetter
+    public long getExpirationTime() {
+        return expirationTime;
+    }
 }

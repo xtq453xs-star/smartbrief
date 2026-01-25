@@ -18,19 +18,12 @@ export const apiClient = {
 };
 
 async function request<T>(endpoint: string, method: string, body: any = null): Promise<ApiResponse<T>> {
-  // ★ Zustand の Store から現在のトークンを直接取得する
-  const token = useAuthStore.getState().token;
-  
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
   try {
     const res = await fetch(`${BASE_URL}${endpoint}`, {
       method,
-      headers,
+      
+      // ★重要: これをつけることで、ブラウザがHttpOnly Cookieを勝手にバックエンドへ送ってくれる
+      credentials: 'include', 
       body: body ? JSON.stringify(body) : null,
     });
 

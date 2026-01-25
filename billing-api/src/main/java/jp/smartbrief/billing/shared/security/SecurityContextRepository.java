@@ -8,6 +8,7 @@ import org.springframework.security.core.context.SecurityContextImpl;
 import org.springframework.security.web.server.context.ServerSecurityContextRepository;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
+import org.springframework.http.HttpCookie;
 
 import reactor.core.publisher.Mono;
 
@@ -27,26 +28,32 @@ public class SecurityContextRepository implements ServerSecurityContextRepositor
         this.authenticationManager = authenticationManager;
     }
 
+    // ★ ここを追加！
     @Override
     public Mono<Void> save(ServerWebExchange swe, SecurityContext sc) {
-        // ★修正: 例外を投げずに、何もしない(empty)を返すのが正解
         return Mono.empty();
     }
 
     @Override
     public Mono<SecurityContext> load(ServerWebExchange swe) {
-        return Mono.justOrEmpty(swe.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION))
-            .filter(authHeader -> authHeader.startsWith("Bearer "))
-            .flatMap(authHeader -> {
-                String authToken = authHeader.substring(7);
-                
-                // ★デバッグ用ログ: ここでトークンが見えていればフロントは送れている
-                //System.out.println("🔍 [Repo] Checking Token: " + authToken.substring(0, Math.min(10, authToken.length())) + "...");
+        // 1. まずCookieからトークンを探す
+        HttpCookie cookie = swe.getRequest().getCookies().getFirst("authToken");
+        String authToken = (cookie != null) ? cookie.getValue() : null;
 
-                Authentication auth = new UsernamePasswordAuthenticationToken(authToken, authToken);
-                
-                return this.authenticationManager.authenticate(auth)
-                    .map(SecurityContextImpl::new);
-            });
+        // 2. Cookieになければ、従来のHeaderから探す (API経由など)
+        if (authToken == null) {
+            String authHeader = swe.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                authToken = authHeader.substring(7);
+            }
+        }
+
+        if (authToken != null) {
+            Authentication auth = new UsernamePasswordAuthenticationToken(authToken, authToken);
+            return this.authenticationManager.authenticate(auth)
+                .map(SecurityContextImpl::new);
+        } else {
+            return Mono.empty();
+        }
     }
 }

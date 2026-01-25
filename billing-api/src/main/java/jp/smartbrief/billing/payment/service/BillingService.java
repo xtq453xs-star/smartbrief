@@ -18,6 +18,8 @@ import com.stripe.param.checkout.SessionCreateParams.LineItem;
 import jp.smartbrief.billing.identity.domain.User;
 import jp.smartbrief.billing.identity.repository.UserRepository;
 import jp.smartbrief.billing.payment.dto.BillingStatusDto;
+import jp.smartbrief.billing.payment.domain.ProcessedStripeEvent;
+import jp.smartbrief.billing.payment.repository.ProcessedStripeEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
@@ -36,6 +38,7 @@ import reactor.core.scheduler.Schedulers;
 public class BillingService {
 
     private final UserRepository userRepository;
+    private final ProcessedStripeEventRepository eventRepository; // ★追加
 
     @Value("${stripe.api.key}")
     private String stripeApiKey;
@@ -114,30 +117,35 @@ public class BillingService {
 
     // --- 3. 更新系ロジック (Transactional) ---
 
-    /**
-     * Webhookからの通知を受けてプランを更新
+/**
+     * Webhookからの通知を受けてプランを更新 (★冪等性を担保)
      */
     @Transactional
-    public Mono<User> updateSubscriptionFromWebhook(String userIdStr, User.Plan newPlan, String stripeCustomerId) {
+    public Mono<User> updateSubscriptionFromWebhook(String eventId, String userIdStr, User.Plan newPlan, String stripeCustomerId) {
         long userId;
         try {
             userId = Long.parseLong(userIdStr);
         } catch (NumberFormatException e) {
-            log.warn("Webhook ignored: Invalid userId format '{}'", userIdStr);
-            return Mono.empty(); // エラーにせず無視（Stripeへの再送を防ぐため200OK扱いにすることが多い）
+            return Mono.empty();
         }
 
-        return userRepository.findById(userId)
-                .switchIfEmpty(Mono.defer(() -> {
-                    log.error("Webhook error: User not found ID={}", userId);
-                    return Mono.empty();
-                }))
-                .flatMap(user -> {
-                    // ドメインロジック: プラン変更に伴う有効期限の設定
-                    updateUserPlan(user, newPlan, stripeCustomerId);
-                    log.info("Subscription updated: UserID={}, Plan={}", user.getId(), newPlan);
-                    return userRepository.save(user);
-                });
+        // ★ 1. 既に処理済みのイベントIDかチェック
+        return eventRepository.existsById(java.util.Objects.requireNonNull(eventId))
+            .flatMap(exists -> {
+                if (exists) {
+                    log.info("Duplicate Stripe event ignored: {}", eventId);
+                    return Mono.empty(); // 既に処理済みなら何もしない (200 OKを返す)
+                }
+
+                // ★ 2. 未処理ならイベントIDを保存して、ユーザー情報を更新
+                return eventRepository.save(new ProcessedStripeEvent(eventId))
+                    .then(userRepository.findById(userId)
+                        .flatMap(user -> {
+                            updateUserPlan(user, newPlan, stripeCustomerId);
+                            log.info("Subscription updated: UserID={}, Plan={}", user.getId(), newPlan);
+                            return userRepository.save(user);
+                        }));
+            });
     }
 
     // --- Private Helper Methods ---

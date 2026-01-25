@@ -19,6 +19,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.http.ResponseCookie;
+import org.springframework.http.server.reactive.ServerHttpResponse;
 
 import jp.smartbrief.billing.identity.domain.User;
 import jp.smartbrief.billing.identity.repository.UserRepository;
@@ -58,23 +60,45 @@ public class AuthController {
         );
     }
 
-    // --- 1. ログイン処理 ---
+    // --- 1. ログイン処理 (Cookie対応) ---
     @PostMapping("/login")
-    public Mono<ResponseEntity<Map<String, String>>> login(@RequestBody @NonNull AuthRequest request) {
+    public Mono<ResponseEntity<Map<String, String>>> login(@RequestBody @NonNull AuthRequest request, ServerHttpResponse response) {
         return userRepository.findByUsernameOrEmail(request.getUsername()) 
             .filter(user -> passwordEncoder.matches(request.getPassword(), user.getPassword()))
             .flatMap(user -> {
                 if (!Boolean.TRUE.equals(user.getIsVerified())) {
-                    return Mono.just(createResponse("メールアドレスの認証が完了していません。受信トレイを確認してください。", HttpStatus.UNAUTHORIZED));
+                    return Mono.just(createResponse("メールアドレスの認証が完了していません。", HttpStatus.UNAUTHORIZED));
                 }
 
-                String token = jwtUtil.generateToken(user.getUsername());
-                return Mono.just(new ResponseEntity<>(
-                    Objects.requireNonNull(Map.of("token", token)),
-                    Objects.requireNonNull(HttpStatus.OK)
-                ));
+                // ユーザー名も念のためnullチェック対応
+                String safeUsername = Objects.requireNonNull(user.getUsername());
+                String token = jwtUtil.generateToken(safeUsername);
+
+                // ★HttpOnly Cookieの作成 (JavaScriptからのアクセスを禁止)
+                ResponseCookie cookie = ResponseCookie.from("authToken", Objects.requireNonNull(token))
+                    .httpOnly(true)
+                    .secure(true) // HTTPS必須
+                    .sameSite("Strict") // CSRF対策
+                    .path("/")
+                    .maxAge(jwtUtil.getExpirationTime() / 1000) // 秒単位
+                    .build();
+
+                // レスポンスヘッダにCookieを追加
+                response.addCookie(cookie);
+
+                return Mono.just(createResponse("ログイン成功", HttpStatus.OK));
             })
             .defaultIfEmpty(createResponse("ユーザー名またはパスワードが正しくありません。", HttpStatus.UNAUTHORIZED));
+    }
+
+    // --- ★NEW: ログアウト処理 ---
+    @PostMapping("/logout")
+    public Mono<ResponseEntity<Map<String, String>>> logout(ServerHttpResponse response) {
+        // 有効期限0のCookieを上書きして削除させる
+        ResponseCookie cookie = ResponseCookie.from("authToken", "")
+            .httpOnly(true).secure(true).sameSite("Strict").path("/").maxAge(0).build();
+        response.addCookie(cookie);
+        return Mono.just(createResponse("ログアウトしました", HttpStatus.OK));
     }
 
     // --- 2. 新規会員登録処理 ---

@@ -41,9 +41,9 @@ const AppWrapper: React.FC = () => {
 
 const AppContent: React.FC = () => {
   const navigate = useNavigate();
-  // すでに store から logout も取得しているので、そのまま使えます！
-  const { token, setPremium, logout } = useAuthStore();
-  const { showToast } = useToast(); // ★通知を出すために、これの追加だけ必要です！
+  // ★変更点: token の代わりに isLoggedIn と setLoggedIn を取得
+  const { isLoggedIn, setLoggedIn, setPremium, logout } = useAuthStore();
+  const { showToast } = useToast(); 
 
   // --- 課金・契約管理（Stripe連携） ---
   const handleCheckout = async () => {
@@ -54,7 +54,7 @@ const AppContent: React.FC = () => {
         window.location.href = res.data.url; // Stripeの決済画面へジャンプ！
       } else {
         showToast(res.message || '決済画面の取得に失敗しました', 'error');
-        if (res.status === 401) logout(); // ★ログアウト処理
+        if (res.status === 401) logout();
       }
     } catch (err) {
       showToast('通信エラーが発生しました。', 'error');
@@ -63,7 +63,6 @@ const AppContent: React.FC = () => {
 
   const handleManageSubscription = async () => {
     try {
-      // カスタマーポータルは GET リクエストなので get を使います
       const res = await apiClient.get<{ url: string }>('/billing/portal');
       
       if (res.ok && res.data?.url) {
@@ -76,26 +75,27 @@ const AppContent: React.FC = () => {
     }
   };
 
+  // ★変更点: 起動時にCookieが有効かチェックし、自動でログイン状態を復元する
   useEffect(() => {
-    const loadPlan = async () => {
-      // ... (これ以降は元のコードのまま) ...
-      if (!token) return;
+    const checkSession = async () => {
+      // apiClientが自動でCookieを送ってくれるので、そのまま /auth/me を叩く
       const res = await apiClient.get<UserMeResponse>('/auth/me');
       
       if (res.ok && res.data) {
+        setLoggedIn(true);
         setPremium(res.data.plan === 'PREMIUM');
-      } else if (res.status === 401) {
-        logout();
-        navigate('/login');
+      } else {
+        setLoggedIn(false);
       }
     };
-    loadPlan();
-  }, [token, setPremium, logout, navigate]);
+    checkSession();
+  }, [setLoggedIn, setPremium]);
 
   return (
     <div style={styles.appRoot}>
       <Routes>
-        <Route path="/login" element={ !token ? <Login /> : <Navigate to="/" /> } />
+        {/* ★変更点: ルーティングの判定を !isLoggedIn と isLoggedIn に変更 */}
+        <Route path="/login" element={ !isLoggedIn ? <Login /> : <Navigate to="/" /> } />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/verify" element={<VerifyEmail />} />
@@ -105,8 +105,7 @@ const AppContent: React.FC = () => {
 
         {/* 認証必須ページ */}
         <Route path="/" element={ 
-          token ? (
-            // ★ 修正: Dashboard が要求する Props を正しく渡す
+          isLoggedIn ? (
             <Dashboard 
               onBookSelect={(id: number) => navigate(`/book/${id}`)}
               onUpgrade={handleCheckout}
@@ -114,10 +113,10 @@ const AppContent: React.FC = () => {
             />
           ) : <Navigate to="/login" /> 
         } />
-        <Route path="/search" element={ token ? <BookSearchPage /> : <Navigate to="/login" /> } />
-        <Route path="/authors" element={ token ? <AuthorList onBack={() => navigate('/')} /> : <Navigate to="/login" /> } />
-        <Route path="/genres" element={ token ? <GenreList onBack={() => navigate('/')} /> : <Navigate to="/login" /> } />
-        <Route path="/book/:bookId" element={ token ? <BookDetailPage /> : <Navigate to="/login" /> } />
+        <Route path="/search" element={ isLoggedIn ? <BookSearchPage /> : <Navigate to="/login" /> } />
+        <Route path="/authors" element={ isLoggedIn ? <AuthorList onBack={() => navigate('/')} /> : <Navigate to="/login" /> } />
+        <Route path="/genres" element={ isLoggedIn ? <GenreList onBack={() => navigate('/')} /> : <Navigate to="/login" /> } />
+        <Route path="/book/:bookId" element={ isLoggedIn ? <BookDetailPage /> : <Navigate to="/login" /> } />
         <Route path="/payment/success" element={<PaymentSuccess />} />
         
         <Route path="*" element={<Navigate to="/" />} />
@@ -132,7 +131,6 @@ const BookSearchPage: React.FC = () => {
   return (
     <div style={styles.pageContainer}>
       <button onClick={() => navigate('/')} style={styles.backLink}>← ダッシュボードへ</button>
-      {/* ★ ここはすでに正しくPropsが渡されています */}
       <BookSearch onBookSelect={(id: number) => navigate(`/book/${id}`)} />
     </div>
   );
