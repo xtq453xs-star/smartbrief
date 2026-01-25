@@ -1,24 +1,17 @@
-# 1. ベースイメージ（軽量なNode.js）
-FROM node:22-alpine
-
-# 2. 作業ディレクトリ
+# --- Stage 1: Build ---
+FROM node:22-alpine AS builder
 WORKDIR /app
-
-# 3. 依存関係ファイルと設定ファイルを先にコピー（キャッシュ効率のため）
 COPY package*.json ./
-COPY vite.config.js ./
-
-# 4. 依存関係をインストール
 RUN npm install
-
-# 5. ソースコードを全コピー
 COPY . .
+RUN npm run build
 
-# 6. Viteのデフォルトポート
-EXPOSE 5173
+# --- Stage 2: Production ---
+FROM nginx:stable-alpine
+# ビルド済みファイルのコピー
+COPY --from=builder /app/dist /usr/share/nginx/html
+# 外部化した本番用Nginx設定のコピー
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# 7. HMRを安定させる環境変数を設定
-ENV CHOKIDAR_USEPOLLING=true
-
-# 8. 起動コマンド
-CMD ["npm", "run", "dev", "--", "--host"]
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

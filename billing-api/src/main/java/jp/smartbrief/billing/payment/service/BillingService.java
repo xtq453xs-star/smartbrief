@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.r2dbc.core.DatabaseClient;
 
 import com.stripe.Stripe;
 import com.stripe.model.billingportal.Session;
@@ -18,7 +19,6 @@ import com.stripe.param.checkout.SessionCreateParams.LineItem;
 import jp.smartbrief.billing.identity.domain.User;
 import jp.smartbrief.billing.identity.repository.UserRepository;
 import jp.smartbrief.billing.payment.dto.BillingStatusDto;
-import jp.smartbrief.billing.payment.domain.ProcessedStripeEvent;
 import jp.smartbrief.billing.payment.repository.ProcessedStripeEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +39,7 @@ public class BillingService {
 
     private final UserRepository userRepository;
     private final ProcessedStripeEventRepository eventRepository; // ★追加
+    private final DatabaseClient databaseClient; // ★ これを追加！
 
     @Value("${stripe.api.key}")
     private String stripeApiKey;
@@ -46,9 +47,9 @@ public class BillingService {
     @Value("${app.frontend.url:http://localhost:3000}")
     private String frontendUrl;
 
-    @Value("${stripe.price.id:price_H5ggYJDqBoLV53}") 
+    // デフォルト値を削除。環境変数 STRIPE_PRICE_ID がなければ起動時にクラッシュさせる。
+    @Value("${STRIPE_PRICE_ID}") 
     private String premiumPriceId;
-
     /**
      * アプリ起動時にStripe APIキーを初期化
      */
@@ -74,27 +75,29 @@ public class BillingService {
      * 決済セッション作成 (Checkout)
      * Stripe SDKはブロッキングI/Oを行うため、専用スレッドで実行してイベントループを守る
      */
-    public Mono<String> createCheckoutSession(Long userId, String email) {
-        return Mono.fromCallable(() -> {
-            com.stripe.param.checkout.SessionCreateParams params = com.stripe.param.checkout.SessionCreateParams.builder()
-                .setMode(com.stripe.param.checkout.SessionCreateParams.Mode.SUBSCRIPTION)
-                .setCustomerEmail(email)
-                .setSuccessUrl(frontendUrl + "/settings?session_id={CHECKOUT_SESSION_ID}")
-                .setCancelUrl(frontendUrl + "/pricing")
-                .addLineItem(
-                    LineItem.builder()
-                        .setQuantity(1L)
-                        .setPrice(premiumPriceId)
-                        .build()
+public Mono<String> createCheckoutSession(Long userId, String email) {
+    return Mono.fromCallable(() -> {
+        com.stripe.param.checkout.SessionCreateParams params = com.stripe.param.checkout.SessionCreateParams.builder()
+            .setMode(com.stripe.param.checkout.SessionCreateParams.Mode.SUBSCRIPTION)
+            .setCustomerEmail(email)
+            .setSuccessUrl(frontendUrl + "/payment/success?session_id={CHECKOUT_SESSION_ID}")
+            .setCancelUrl(frontendUrl + "/")
+            .addLineItem(
+                LineItem.builder()
+                    .setQuantity(1L)
+                    .setPrice(premiumPriceId)
+                    .build()
                 )
-                .putMetadata("userId", String.valueOf(userId)) // Webhookでの突き合わせ用
+                // ★【追加】Stripeが公式に推奨する、外部システムとの紐付け用フィールド
+                .setClientReferenceId(String.valueOf(userId)) 
+                // ★【確認】Webhookで取り出すためのメタデータ
+                .putMetadata("userId", String.valueOf(userId)) 
                 .build();
 
             return com.stripe.model.checkout.Session.create(params).getUrl();
         })
-        .subscribeOn(Schedulers.boundedElastic()); // ★重要: ノンブロッキングを維持
+        .subscribeOn(Schedulers.boundedElastic());
     }
-
     /**
      * カスタマーポータルURL発行 (Portal)
      */
@@ -117,10 +120,10 @@ public class BillingService {
 
     // --- 3. 更新系ロジック (Transactional) ---
 
-/**
+    /**
      * Webhookからの通知を受けてプランを更新 (★冪等性を担保)
      */
-    @Transactional
+@Transactional
     public Mono<User> updateSubscriptionFromWebhook(String eventId, String userIdStr, User.Plan newPlan, String stripeCustomerId) {
         long userId;
         try {
@@ -137,9 +140,12 @@ public class BillingService {
                     return Mono.empty(); // 既に処理済みなら何もしない (200 OKを返す)
                 }
 
-                // ★ 2. 未処理ならイベントIDを保存して、ユーザー情報を更新
-                return eventRepository.save(new ProcessedStripeEvent(eventId))
+                // ★ 2. DatabaseClientを使って明示的にINSERT文を発行する (R2DBCの罠を回避)
+                return databaseClient.sql("INSERT INTO processed_stripe_events (event_id) VALUES (:eventId)")
+                    .bind("eventId", eventId)
+                    .fetch().rowsUpdated()
                     .then(userRepository.findById(userId)
+                        // ★ここが抜けていた。ユーザーを取得した後、更新して保存するフロー。
                         .flatMap(user -> {
                             updateUserPlan(user, newPlan, stripeCustomerId);
                             log.info("Subscription updated: UserID={}, Plan={}", user.getId(), newPlan);
@@ -147,7 +153,6 @@ public class BillingService {
                         }));
             });
     }
-
     // --- Private Helper Methods ---
 
     private BillingStatusDto mapToStatusDto(User user) {

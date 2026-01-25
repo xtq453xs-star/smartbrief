@@ -21,7 +21,7 @@ const VerifyEmail: React.FC = () => {
 
     const verify = async () => {
       // apiClient.get の戻り値に型がない場合は適宜追加してください
-      const res = await apiClient.get(`/auth/verify?token=${encodeURIComponent(token)}`);
+      const res = await apiClient.post(`/auth/verify-email?token=${encodeURIComponent(token)}`);
       if (res.ok) {
         setStatus('success');
         return;

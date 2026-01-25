@@ -68,6 +68,12 @@ CREATE TABLE IF NOT EXISTS user_favorites (
     UNIQUE KEY uk_user_book (user_id, book_id)
 );
 
+-- Stripe Webhookの重複処理防止用テーブル
+CREATE TABLE IF NOT EXISTS processed_stripe_events (
+    event_id VARCHAR(255) PRIMARY KEY,
+    processed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ==========================================
 -- 3. 青空文庫DB (aozora_db) のテーブル作成
 -- ==========================================
@@ -97,4 +103,5 @@ CREATE TABLE IF NOT EXISTS works (
     body_text LONGTEXT,
     
     full_text LONGTEXT
+    
 );

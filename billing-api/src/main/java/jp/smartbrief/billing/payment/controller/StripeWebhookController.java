@@ -32,7 +32,7 @@ import reactor.core.publisher.Mono;
  */
 @Slf4j
 @RestController
-@RequestMapping("/api/v1/webhook")
+@RequestMapping("/api/v1/stripe") // ★ クラスはここまで
 @RequiredArgsConstructor
 public class StripeWebhookController {
 
@@ -41,7 +41,7 @@ public class StripeWebhookController {
 
     private final BillingService billingService;
 
-    @PostMapping
+    @PostMapping("/webhook") // ★ メソッドで /webhook を指定。これで合計 /api/v1/stripe/webhook
     public Mono<ResponseEntity<String>> handleStripeWebhook(ServerHttpRequest request) {
         
         return DataBufferUtils.join(request.getBody())

@@ -64,3 +64,8 @@ search-api/main.exe
 
 # Goのモジュールキャッシュなど（もしローカルに生成された場合）
 search-api/vendor/
+
+# モデルデータのため除外
+ollama_data/
+qdrant_data/
+mysql_data/

@@ -51,7 +51,7 @@ public class CheckoutController {
         // UserContextから取得するID/Usernameは、認証済みであればnullでない前提だが、requireNonNullで堅牢にする
         return billingService.createCheckoutSession(
                 Objects.requireNonNull(context.userId()), 
-                Objects.requireNonNull(context.username())
+                Objects.requireNonNull(context.rawUser().getEmail()) // ★ 修正：確実にEmailを渡す
             )
             .map(url -> ResponseEntity.ok(Map.of("url", Objects.requireNonNull(url))));
     }
