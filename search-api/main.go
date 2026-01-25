@@ -102,7 +102,7 @@ func cleanBody(body string) string {
 // 4. 外部API連携 (AI処理)
 // ==========================================
 
-// [修正版] タイムアウトを120秒に延長し、最新エンドポイントに対応
+// Ollamaのベクトル化処理
 func getEmbedding(ctx context.Context, text string) ([]float32, error) {
 	runes := []rune(text)
 	if len(runes) > MaxEmbedLength {
@@ -119,7 +119,6 @@ func getEmbedding(ctx context.Context, text string) ([]float32, error) {
 		return nil, fmt.Errorf("JSON marshal failed: %w", err)
 	}
 
-	// エンドポイントは最新の /api/embed
 	endpoint := fmt.Sprintf("http://%s:11434/api/embed", getOllamaHost())
 
 	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(jsonPayload))
@@ -128,7 +127,6 @@ func getEmbedding(ctx context.Context, text string) ([]float32, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	// ★ 重要: タイムアウトを 120秒に延長 (モデルのロード待ち対策)
 	client := &http.Client{Timeout: 120 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -152,9 +150,11 @@ func getEmbedding(ctx context.Context, text string) ([]float32, error) {
 	return response.Embeddings[0], nil
 }
 
+// ★ 大幅修正: Groqのデバッグ用ログとエラーステータス判定を追加
 func generateReasonWithGroq(ctx context.Context, query, title, author, preview string) string {
 	groqKey := os.Getenv("GROQ_API_KEY")
 	if groqKey == "" {
+		log.Println("⚠️ Groq API Key is empty. Skipping reason generation.")
 		return ""
 	}
 
@@ -171,21 +171,36 @@ func generateReasonWithGroq(ctx context.Context, query, title, author, preview s
 	req.Header.Set("Authorization", "Bearer "+groqKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	// ... generateReasonWithGroq 関数内 ...
-	client := &http.Client{Timeout: 10 * time.Second} // 3秒だとGroqが混んでいる時に切れるので10秒に
+	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("❌ Groq API Error: %v", err) // エラーをログに出す
+		log.Printf("❌ Groq API Connection Error: %v", err)
 		return ""
 	}
 	defer resp.Body.Close()
 
+	// ★ 修正ポイント: 429 (Too Many Requests) や 401 (Unauthorized) を正確にログに出力する
+	if resp.StatusCode != http.StatusOK {
+		var errBody bytes.Buffer
+		errBody.ReadFrom(resp.Body)
+		log.Printf("❌ Groq API returned error %d: %s", resp.StatusCode, errBody.String())
+		return ""
+	}
+
 	var groqResp GroqResponse
-	json.NewDecoder(resp.Body).Decode(&groqResp)
+	if err := json.NewDecoder(resp.Body).Decode(&groqResp); err != nil {
+		log.Printf("❌ Groq JSON Decode Error: %v", err)
+		return ""
+	}
 
 	if len(groqResp.Choices) > 0 {
-		return strings.TrimSpace(groqResp.Choices[0].Message.Content)
+		reason := strings.TrimSpace(groqResp.Choices[0].Message.Content)
+		// 成功ログ (大量に出るので、確認できたらコメントアウトしてもよい)
+		// log.Printf("✅ Success: %s -> %s", title, reason)
+		return reason
 	}
+
+	log.Println("⚠️ Groq returned no choices.")
 	return ""
 }
 
@@ -246,7 +261,7 @@ func main() {
 		}
 	})
 
-	// 2. Indexing (修正箇所: 各ループのタイムアウトを大幅延長)
+	// 2. Indexing
 	http.HandleFunc("/index", func(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			log.Println("🚀 Fast Indexing started...")
@@ -276,7 +291,6 @@ func main() {
 						maxIdInBatch = id
 						cleaned := cleanBody(body)
 
-						// ★ 修正: 5秒制限だとGPU/VRAMロード中に落ちるため、120秒に変更
 						eCtx, eCancel := context.WithTimeout(context.Background(), 120*time.Second)
 						vec, err := getEmbedding(eCtx, title+" "+cleaned)
 						eCancel()
@@ -320,7 +334,6 @@ func main() {
 			return
 		}
 
-		// ★ 検索時のベクトル化も120秒に延長 (安全のため)
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
@@ -345,7 +358,7 @@ func main() {
 		var wg sync.WaitGroup
 		var mu sync.Mutex
 
-		for _, hit := range res.Result {
+		for i, hit := range res.Result {
 			payload := hit.Payload
 			title, tOk := safeGetString(payload, "title")
 			author, aOk := safeGetString(payload, "author")
@@ -363,15 +376,23 @@ func main() {
 			results = append(results, hitData)
 
 			wg.Add(1)
-			go func(idx int, t, a, p string) {
+
+			// ★ 修正ポイント: ループのインデックス(i)を使って、リクエストの発行タイミングを僅かにずらす (Rate Limit対策)
+			go func(indexToUpdate int, reqIndex int, t, a, p string) {
 				defer wg.Done()
-				gCtx, gCancel := context.WithTimeout(context.Background(), 5*time.Second)
+
+				// 1リクエストごとに 100ms 待機 (10件なら最大1秒ずれる)
+				time.Sleep(time.Duration(reqIndex*100) * time.Millisecond)
+
+				gCtx, gCancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer gCancel()
+
 				reason := generateReasonWithGroq(gCtx, rawQuery, t, a, p)
+
 				mu.Lock()
-				results[idx].AIReason = reason
+				results[indexToUpdate].AIReason = reason
 				mu.Unlock()
-			}(idx, title, author, preview)
+			}(idx, i, title, author, preview)
 		}
 		wg.Wait()
 
