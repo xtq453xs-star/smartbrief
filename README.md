@@ -45,6 +45,13 @@ SaaSの生命線である「認証」と「決済」を極限まで堅牢化し�
 - **Stripeの冪等性 (Idempotency) 担保**: ネットワーク遅延等によるWebhookの重複送信に対し、DB側でイベントIDを記録して排他制御 (`@Transactional`) を実行。二重決済や不正な契約延長を100%防止。
 - **Zero Trust Network**: Cloudflare Tunnelによりインバウンドポートを全閉鎖。DDoS攻撃やポートスキャンを遮断し、Qualys SSL Labsにて最高評価「A+」を獲得。
 
+<p align="center">
+  <img width="48%" alt="SSL Labs A+ Rating" src="https://github.com/user-attachments/assets/4d0dbc3c-9cce-471b-949a-8ff2fd38f26b" />
+  <img width="48%" alt="Security Headers" src="https://github.com/user-attachments/assets/66809a53-ccf5-4dda-8d67-9acf965ef6ad" />
+  <br>
+  <em>▲ 第三者機関（Qualys SSL Labs）による最高評価「A+」および、TLS 1.3 / HSTSの強制適用証明</em>
+</p>
+
 ### 3. 🏗️ マルチ言語マイクロサービス・アーキテクチャ
 役割に応じた言語選択（Polyglot）により、システム全体のパフォーマンスと保守性を最大化。
 - **Go Search Microservice (Go 1.24)**: 計算資源の効率化と並列処理に長けたGo言語で、AI検索エンジンを独立。
