@@ -35,28 +35,31 @@ async function request<T>(endpoint: string, method: string, body: any = null): P
       useAuthStore.getState().logout();
     }
 
-    const text = await res.text();
+    // ★ 修正後：Content-Typeを見て、JSONかテキストかをスマートに判別
     let data: any = null;
-    let errorMessage: string | null = null;
+    const isJson = res.headers.get('content-type')?.includes('application/json');
 
     try {
-      data = JSON.parse(text);
+      data = isJson ? await res.json() : await res.text();
     } catch {
-      errorMessage = text;
+      data = {}; // パース失敗時の安全策
     }
 
+    // --- エラー時のハンドリング ---
     if (!res.ok) {
-      if (!errorMessage) {
-        if (typeof data === 'string') {
-          errorMessage = data;
-        } else if (data && typeof data === 'object') {
-          errorMessage = data.message || data.error || data.detail;
-        }
+      let finalMsg = `Error: ${res.status} (${res.statusText})`;
+      
+      // バックエンドから返されたエラーメッセージを抽出
+      if (typeof data === 'string' && data.trim().length > 0) {
+        finalMsg = data;
+      } else if (data && typeof data === 'object') {
+        finalMsg = data.message || data.error || data.detail || finalMsg;
       }
-      const finalMsg = errorMessage || `Error: ${res.status} (${res.statusText})`;
+
       return { ok: false, status: res.status, message: finalMsg, data };
     }
 
+    // --- 成功時 ---
     return { ok: true, status: res.status, data: data as T };
 
   } catch (err) {
