@@ -112,20 +112,48 @@ public class BookResponse {
         return cleanText(work.getSummary300());
     }
 
-    /**
+/**
      * 作品に鍵（ロック）をかけるべきかを決定する
+     * * <p>判定ルール:</p>
+     * <ol>
+     * <li>プレミアム会員は、いかなる場合もロックされない (最優先)</li>
+     * <li>海外翻訳作品は、無料会員でもロックされない (現状の仕様)</li>
+     * <li>青空文庫作品で、高品質データ(HQ)があり、かつ無料会員の場合はロックする</li>
+     * </ol>
      */
     private static boolean determineLockStatus(boolean isTranslation, boolean isPremium, boolean hasHq) {
-        if (isTranslation) return false; // 翻訳作品は一覧ではロックしない
-        return hasHq && !isPremium;      // HQあり＋無料ユーザー ならロック
+        // Rule 1: プレミアム会員なら無条件で閲覧可能 (ロックなし)
+        // ここで true を返さないようにすることで、有料会員の閲覧不可バグを根絶します。
+        if (isPremium) {
+            return false;
+        }
+
+        // --- 以下、無料会員向けの判定 ---
+
+        // Rule 2: 翻訳作品は基本的に無料開放する
+        if (isTranslation) {
+            return false;
+        }
+
+        // Rule 3: 青空文庫でHQデータ（付加価値データ）がある場合はロックする
+        if (hasHq) {
+            return true;
+        }
+
+        // それ以外（通常の青空文庫など）はロックしない
+        return false;
     }
 
     /**
      * Pro（高品質）バッジを表示すべきかを決定する
      */
     private static boolean determineHqStatus(boolean isTranslation, boolean isPremium, boolean hasHq) {
-        if (isTranslation) return hasHq; // 翻訳はデータがあればバッジ表示
-        return hasHq && isPremium;       // 青空文庫はプレミアムのみバッジ表示
+        // 翻訳作品は、データがあれば誰にでもバッジを表示（誘引のため）
+        if (isTranslation) {
+            return hasHq; 
+        }
+        // 青空文庫は、プレミアム会員かつデータがある場合のみバッジを表示
+        return hasHq && isPremium;       
     }
 
     // =========================================================================
